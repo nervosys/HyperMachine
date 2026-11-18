@@ -116,6 +116,102 @@
     },
     {
       "component": "hv2-cluster",
+      "id": "list_sandboxes",
+      "method": "GET",
+      "path": "/sandboxes"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "create_sandbox",
+      "method": "POST",
+      "path": "/sandboxes"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "delete_sandbox",
+      "method": "DELETE",
+      "path": "/sandboxes/{id}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_sandbox",
+      "method": "GET",
+      "path": "/sandboxes/{id}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_sandbox_commands",
+      "method": "GET",
+      "path": "/sandboxes/{id}/commands"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_sandbox_command",
+      "method": "GET",
+      "path": "/sandboxes/{id}/commands/{n}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "connect_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{id}/connect"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "exec_in_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{id}/exec"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "adopt_sandbox_owner",
+      "method": "POST",
+      "path": "/sandboxes/{id}/owner"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "pause_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{id}/pause"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_sandbox_processes",
+      "method": "GET",
+      "path": "/sandboxes/{id}/processes"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "resize_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{id}/resize"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "resume_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{id}/resume"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_sandbox_standby",
+      "method": "GET",
+      "path": "/sandboxes/{id}/standby"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "standby_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{id}/standby"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "set_sandbox_timeout",
+      "method": "POST",
+      "path": "/sandboxes/{id}/timeout"
+    },
+    {
+      "component": "hv2-cluster",
       "id": "list_team_members",
       "method": "GET",
       "path": "/teams/{team}/members"
@@ -137,6 +233,144 @@
       "id": "share_template_snapshot",
       "method": "PUT",
       "path": "/templates/{id}/shares/{team}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_sandboxes_v2",
+      "method": "GET",
+      "path": "/v2/sandboxes"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "create_sandbox_v2",
+      "method": "POST",
+      "path": "/v2/sandboxes"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "connect_sandbox_v2",
+      "method": "POST",
+      "path": "/v2/sandboxes/{id}/connect"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_sandboxes",
+      "method": "GET",
+      "path": "/sandboxes"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_create_sandbox",
+      "method": "POST",
+      "path": "/sandboxes"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_delete_sandbox",
+      "method": "DELETE",
+      "path": "/sandboxes/{sandboxID}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_sandbox",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_sandbox_commands",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/commands"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_sandbox_command",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/commands/{n}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_connect_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/connect"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_exec_in_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/exec"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_adopt_sandbox_owner",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/owner"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_pause_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/pause"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_sandbox_processes",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/processes"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_reboot_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/reboot"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_resize_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/resize"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_resume_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/resume"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_sandbox_standby",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/standby"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_standby_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/standby"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_set_sandbox_timeout",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/timeout"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_sandboxes_v2",
+      "method": "GET",
+      "path": "/v2/sandboxes"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_create_sandbox_v2",
+      "method": "POST",
+      "path": "/v2/sandboxes"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_connect_sandbox_v2",
+      "method": "POST",
+      "path": "/v2/sandboxes/{sandboxID}/connect"
     }
   ]
 }

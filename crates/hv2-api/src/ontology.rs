@@ -1536,6 +1536,120 @@ impl HyperMachineOntology {
                 ],
                 permissions_required: vec!["templates".to_string()],
             },
+            Capability {
+                id: "sandbox_lifecycle".to_string(),
+                name: "Sandbox Lifecycle (cluster control plane)".to_string(),
+                description: "Create, list, inspect, connect to, pause, resume, resize and \
+                    delete microVM sandboxes through the cluster control plane \
+                    (`hv2-control-plane`), which picks a node, records who owns the sandbox \
+                    and forwards to the node that runs it. The routes keep E2B's shapes \
+                    (`/sandboxes`, `/v2/sandboxes`), so the E2B SDK works against them. They \
+                    authenticate with `X-API-Key` or a signed-in session that has the \
+                    `sandboxes` scope; a team key sees and acts on its own team's sandboxes \
+                    only, and an observer or viewer may read the listings alone. The node \
+                    serves the same paths on its own API as the `node_*` operations of \
+                    `node_sandbox_lifecycle`. See docs/SANDBOXES.md and docs/TEAMS.md."
+                    .to_string(),
+                category: CapabilityCategory::VirtualMachine,
+                operations: vec![
+                    "create_sandbox".to_string(),
+                    "create_sandbox_v2".to_string(),
+                    "list_sandboxes".to_string(),
+                    "list_sandboxes_v2".to_string(),
+                    "get_sandbox".to_string(),
+                    "delete_sandbox".to_string(),
+                    "connect_sandbox".to_string(),
+                    "connect_sandbox_v2".to_string(),
+                    "set_sandbox_timeout".to_string(),
+                    "pause_sandbox".to_string(),
+                    "resume_sandbox".to_string(),
+                    "standby_sandbox".to_string(),
+                    "get_sandbox_standby".to_string(),
+                    "resize_sandbox".to_string(),
+                    "adopt_sandbox_owner".to_string(),
+                ],
+                prerequisites: vec![
+                    "a control plane with at least one live node that offers the template"
+                        .to_string(),
+                    "a key or session with the `sandboxes` scope".to_string(),
+                ],
+                permissions_required: vec!["sandboxes".to_string()],
+            },
+            Capability {
+                id: "sandbox_commands".to_string(),
+                name: "Sandbox Commands And Processes (cluster control plane)".to_string(),
+                description: "Run a command in a running sandbox's guest, read the history of \
+                    the commands run in it with their output, and list the guest's processes, \
+                    through the cluster control plane, which forwards to the sandbox's node. \
+                    Same authentication and team rules as `sandbox_lifecycle`. A command \
+                    runs as root in the guest unless a user is named."
+                    .to_string(),
+                category: CapabilityCategory::VirtualMachine,
+                operations: vec![
+                    "exec_in_sandbox".to_string(),
+                    "list_sandbox_commands".to_string(),
+                    "get_sandbox_command".to_string(),
+                    "list_sandbox_processes".to_string(),
+                ],
+                prerequisites: vec!["a running sandbox".to_string()],
+                permissions_required: vec!["sandboxes".to_string()],
+            },
+            Capability {
+                id: "node_sandbox_lifecycle".to_string(),
+                name: "Sandbox Lifecycle (node daemon)".to_string(),
+                description: "The node daemon's own sandbox API (`hv2-sandboxd`, port 3980), \
+                    which boots and runs the microVMs. The control plane forwards to it; a \
+                    standalone node serves it directly. It has no users or teams: it checks \
+                    only the cluster token (`x-hv2-cluster-token`) when it has one, and \
+                    otherwise answers every caller that can reach it, which is why it \
+                    listens on loopback unless it has a token or mTLS. It lists and acts on \
+                    its own sandboxes only. Also serves `reboot`, which the control plane \
+                    does not route. See docs/SANDBOXES.md, \"Where a node listens\"."
+                    .to_string(),
+                category: CapabilityCategory::VirtualMachine,
+                operations: vec![
+                    "node_create_sandbox".to_string(),
+                    "node_create_sandbox_v2".to_string(),
+                    "node_list_sandboxes".to_string(),
+                    "node_list_sandboxes_v2".to_string(),
+                    "node_get_sandbox".to_string(),
+                    "node_delete_sandbox".to_string(),
+                    "node_connect_sandbox".to_string(),
+                    "node_connect_sandbox_v2".to_string(),
+                    "node_set_sandbox_timeout".to_string(),
+                    "node_pause_sandbox".to_string(),
+                    "node_resume_sandbox".to_string(),
+                    "node_standby_sandbox".to_string(),
+                    "node_get_sandbox_standby".to_string(),
+                    "node_resize_sandbox".to_string(),
+                    "node_adopt_sandbox_owner".to_string(),
+                    "node_reboot_sandbox".to_string(),
+                ],
+                prerequisites: vec![
+                    "a node (`hv2-sandboxd`) with a kernel and initramfs".to_string(),
+                    "the node's cluster token, if it has one".to_string(),
+                ],
+                permissions_required: vec!["cluster token".to_string()],
+            },
+            Capability {
+                id: "node_sandbox_commands".to_string(),
+                name: "Sandbox Commands And Processes (node daemon)".to_string(),
+                description: "The node daemon's routes for running a command in a sandbox, \
+                    reading its command history and listing its processes. Same \
+                    authentication as `node_sandbox_lifecycle`: the cluster token when the \
+                    node has one, nothing otherwise. A command runs as root in the guest \
+                    unless a user is named."
+                    .to_string(),
+                category: CapabilityCategory::VirtualMachine,
+                operations: vec![
+                    "node_exec_in_sandbox".to_string(),
+                    "node_list_sandbox_commands".to_string(),
+                    "node_get_sandbox_command".to_string(),
+                    "node_list_sandbox_processes".to_string(),
+                ],
+                prerequisites: vec!["a running sandbox on the node".to_string()],
+                permissions_required: vec!["cluster token".to_string()],
+            },
         ]
     }
 
@@ -2084,18 +2198,33 @@ impl HyperMachineOntology {
         .chain(Self::build_key_operations())
         .chain(Self::build_auth_operations())
         .chain(Self::build_template_share_operations())
+        .chain(Self::build_sandbox_control_plane_operations())
+        .chain(Self::build_sandbox_exec_control_plane_operations())
+        .chain(Self::build_sandbox_node_operations())
+        .chain(Self::build_sandbox_exec_node_operations())
         .collect()
     }
 
     /// The component that serves the operation `id`: `hv2-cluster` for the
-    /// control plane operations that are modelled here as data, `hv2-api`
-    /// for every other one. `tools/check-ontology-coverage.py` compares the
-    /// operations against the routes of each component through this.
+    /// control plane operations that are modelled here as data,
+    /// `hv2-sandboxd` for the node daemon's, `hv2-api` for every other one.
+    /// An operation lives on one component; a path both the control plane
+    /// and a node serve is two operations (the node's ids start `node_`).
+    /// `tools/check-ontology-coverage.py` compares the operations against the
+    /// routes of each component through this.
     pub fn operation_component(id: &str) -> &'static str {
+        let on = |ops: Vec<Operation>| ops.into_iter().any(|op| op.id == id);
+        if on(Self::build_sandbox_node_operations())
+            || on(Self::build_sandbox_exec_node_operations())
+        {
+            return "hv2-sandboxd";
+        }
         let control_plane = Self::build_key_operations()
             .into_iter()
             .chain(Self::build_auth_operations())
             .chain(Self::build_template_share_operations())
+            .chain(Self::build_sandbox_control_plane_operations())
+            .chain(Self::build_sandbox_exec_control_plane_operations())
             .any(|op| op.id == id);
         if control_plane {
             "hv2-cluster"
@@ -2855,6 +2984,1361 @@ impl HyperMachineOntology {
         ]
     }
 
+    /// The control plane's sandbox lifecycle routes (`hv2-cluster`
+    /// `control.rs`: `create_v1`, `create_v2`, `list_v1`, `list_v2`,
+    /// `detail`, `forward`, `adopt_owner`). Modelled as data; `hv2-api` does
+    /// not depend on `hv2-cluster`. The ids are the same as the node's
+    /// without the `node_` prefix.
+    fn build_sandbox_control_plane_operations() -> Vec<Operation> {
+        Self::sandbox_lifecycle_operations(false)
+    }
+
+    /// The node daemon's sandbox lifecycle routes (`hv2-sandboxd`
+    /// `main.rs` and `reboot.rs`). Served by `hv2-sandboxd`, one per node;
+    /// the control plane forwards most of them.
+    fn build_sandbox_node_operations() -> Vec<Operation> {
+        Self::sandbox_lifecycle_operations(true)
+    }
+
+    /// The control plane's sandbox command routes (`forward`, to the node's
+    /// `exec`, `history::list`, `history::get`, `sandbox_processes`).
+    fn build_sandbox_exec_control_plane_operations() -> Vec<Operation> {
+        Self::sandbox_exec_operations(false)
+    }
+
+    /// The node daemon's sandbox command routes (`hv2-sandboxd` `main.rs`,
+    /// `history.rs`, `processes.rs`).
+    fn build_sandbox_exec_node_operations() -> Vec<Operation> {
+        Self::sandbox_exec_operations(true)
+    }
+
+    /// One response of the `{"code", "message"}` shape both components use
+    /// for an error they raise themselves.
+    fn sandbox_json_error(status_code: u16, description: &str) -> OperationResponse {
+        OperationResponse {
+            status_code,
+            description: description.to_string(),
+            schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "code": { "type": "integer" },
+                    "message": { "type": "string" }
+                }
+            })),
+        }
+    }
+
+    /// A response with a body the framework (axum) wrote, or none.
+    fn sandbox_plain(status_code: u16, description: &str) -> OperationResponse {
+        OperationResponse {
+            status_code,
+            description: description.to_string(),
+            schema: None,
+        }
+    }
+
+    /// What can refuse a request before the handler runs. On the control
+    /// plane that is the API key or session check and, for a route that
+    /// names a sandbox, the ownership check and the forward to its node; on
+    /// a node, the cluster token.
+    fn sandbox_access_responses(node: bool, names_sandbox: bool) -> Vec<OperationResponse> {
+        let json_error = Self::sandbox_json_error;
+        if node {
+            return vec![json_error(
+                401,
+                "the node was started with a cluster token (or mTLS) and the request does not \
+                 carry it in `x-hv2-cluster-token` (`this node answers its cluster's control \
+                 plane only`); a node with no token answers everyone",
+            )];
+        }
+        let mut responses = vec![
+            json_error(
+                401,
+                "missing, expired or wrong X-API-Key or session; with single sign-on \
+                 configured an anonymous request is refused too",
+            ),
+            json_error(
+                403,
+                "the key or member lacks the `sandboxes` scope, is an observer or viewer \
+                 (those may read the inventory routes only), or a session-cookie change did \
+                 not come from the control plane's own pages",
+            ),
+        ];
+        if names_sandbox {
+            responses.push(json_error(
+                403,
+                "`sandbox owner required`: the sandbox belongs to another team, or to \
+                 another principal when the key has no team",
+            ));
+            responses.push(json_error(
+                400,
+                "`invalid sandbox ID` (for a caller limited to a team or an owner), or a \
+                 path with `.` or `..` segments",
+            ));
+            responses.push(json_error(
+                404,
+                "no such sandbox in the cluster store, or its node stopped heartbeating and \
+                 the record was removed (the first request to find it says so)",
+            ));
+            responses.push(json_error(
+                502,
+                "no node answered: the sandbox's node (or, for a sandbox paused into shared \
+                 storage, every node tried) was unreachable",
+            ));
+        }
+        responses.push(json_error(
+            503,
+            "the cluster store is unavailable, the ownership lookup timed out, or the node \
+             answered 503 and no other node could take the request",
+        ));
+        responses
+    }
+
+    fn sandbox_id_parameter(node: bool) -> Parameter {
+        Parameter {
+            name: if node { "sandboxID" } else { "id" }.to_string(),
+            location: ParameterLocation::Path,
+            required: true,
+            description: "The sandbox's ID, as returned when it was created".to_string(),
+            schema: serde_json::json!({ "type": "string" }),
+            default: None,
+        }
+    }
+
+    fn sandbox_query(name: &str, description: &str, schema: serde_json::Value) -> Parameter {
+        Parameter {
+            name: name.to_string(),
+            location: ParameterLocation::Query,
+            required: false,
+            description: description.to_string(),
+            schema,
+            default: None,
+        }
+    }
+
+    /// The descriptor `POST /sandboxes` answers with, which `connect` and
+    /// `resume` answer with again.
+    fn sandbox_descriptor_schema(node: bool) -> serde_json::Value {
+        let mut properties = serde_json::json!({
+            "templateID": { "type": "string", "description": "the template or snapshot asked for" },
+            "sandboxID": { "type": "string" },
+            "clientID": { "type": "string", "description": "equal to sandboxID" },
+            "envdVersion": { "type": "string" },
+            "processPort": { "type": "integer", "description": "the port of the sandbox's envd process.Process gRPC listener on its node" },
+            "envdHost": { "type": "string", "description": "the authority to ask the proxy for: `{envd port}-{sandboxID}`" },
+            "proxyPort": { "type": "integer", "description": "the port of the sandbox proxy that serves envdHost: the control plane's through the control plane, the node's on the node" },
+            "envdAccessToken": { "type": "string", "description": "sent as `X-Access-Token` to this sandbox's envd; a credential" }
+        });
+        if !node {
+            properties["nodeID"] = serde_json::json!({
+                "type": "string",
+                "description": "the node that runs the sandbox"
+            });
+        }
+        serde_json::json!({ "type": "object", "properties": properties })
+    }
+
+    /// E2B's `ListedSandbox`, as the control plane and the node list it.
+    fn sandbox_listed_schema() -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "templateID": { "type": "string" },
+                "sandboxID": { "type": "string" },
+                "clientID": { "type": "string" },
+                "startedAt": { "type": "string", "format": "date-time" },
+                "endAt": { "type": "string", "format": "date-time" },
+                "cpuCount": { "type": "integer" },
+                "memoryMB": { "type": "integer" },
+                "diskSizeMB": { "type": "integer", "description": "always 0: the root filesystem is memory" },
+                "metadata": { "type": "object", "additionalProperties": { "type": "string" } },
+                "state": { "type": "string", "enum": ["running", "paused"] },
+                "envdVersion": { "type": "string" },
+                "nodeID": { "type": "string", "description": "the node that runs it" }
+            }
+        })
+    }
+
+    fn sandbox_lifecycle_operations(node: bool) -> Vec<Operation> {
+        let id = |base: &str| {
+            if node {
+                format!("node_{base}")
+            } else {
+                base.to_string()
+            }
+        };
+        let id_path = |rest: &str| {
+            let name = if node { "sandboxID" } else { "id" };
+            format!("/sandboxes/{{{name}}}{rest}")
+        };
+        let json_error = Self::sandbox_json_error;
+        let plain = Self::sandbox_plain;
+        let who = if node { "This node's" } else { "The cluster's" };
+        let state_param = || {
+            Self::sandbox_query(
+                "state",
+                "Comma-separated states to keep: `running`, `paused`",
+                serde_json::json!({ "type": "string", "example": "running,paused" }),
+            )
+        };
+        let metadata_param = || {
+            Self::sandbox_query(
+                "metadata",
+                "URL-encoded `key=value&key=value`: keep the sandboxes that carry every pair \
+                 in their metadata",
+                serde_json::json!({ "type": "string" }),
+            )
+        };
+        let rewritten = if node {
+            ""
+        } else {
+            " The control plane points `proxyPort` at its own sandbox proxy and adds `nodeID`."
+        };
+        let body_rejection = || {
+            plain(
+                400,
+                "the body is not the JSON this route reads: the framework's own rejection \
+                 (400, 415 or 422, plain text)",
+            )
+        };
+
+        // The request body of a create, from `NewSandbox` in main.rs.
+        let new_sandbox = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "templateID": { "type": "string", "default": "base",
+                    "description": "a template, or a snapshot of the caller's team (or shared with it); an optional `team/` prefix and `:tag` are ignored" },
+                "timeout": { "type": "integer", "minimum": 0, "maximum": 86400,
+                    "description": "seconds to live; 15 on /sandboxes and 300 on /v2/sandboxes by default, capped at 24 hours" },
+                "metadata": { "type": "object", "additionalProperties": { "type": "string" },
+                    "description": "labels, listable with `metadata=`. `hm.name` names the sandbox (see assign names)" },
+                "allow_internet_access": { "type": "boolean", "description": "snake case, as in E2B's spec" },
+                "network": { "type": "object",
+                    "properties": {
+                        "allowOut": { "type": "array", "items": { "type": "string" } },
+                        "denyOut": { "type": "array", "items": { "type": "string" } },
+                        "rules": { "type": "object" },
+                        "egressProxy": { "type": "object",
+                            "required": ["address"],
+                            "properties": {
+                                "address": { "type": "string" },
+                                "username": { "type": "string" },
+                                "password": { "type": "string" }
+                            } }
+                    },
+                    "description": "egress policy; needs a node started with --network" },
+                "autoPause": { "type": "boolean", "description": "pause at the timeout instead of ending" },
+                "autoPauseMemory": { "type": "boolean", "description": "false is refused (400): a pause always keeps memory" },
+                "autoResume": { "type": "object", "properties": { "enabled": { "type": "boolean" } },
+                    "description": "a request through the proxy resumes it when paused" },
+                "iam": { "type": "object",
+                    "properties": { "tokens": { "type": "object",
+                        "additionalProperties": { "type": "object",
+                            "required": ["audience", "tokenType"],
+                            "properties": { "audience": { "type": "string" }, "tokenType": { "type": "string" } } } } },
+                    "description": "workload identity tokens the egress gateway mints; needs --network" },
+                "volumeMounts": { "type": "array",
+                    "items": { "type": "object", "required": ["name", "path"],
+                        "properties": { "name": { "type": "string" }, "path": { "type": "string" } } } },
+                "diskMount": { "type": "object", "required": ["name", "path"],
+                    "properties": { "name": { "type": "string" }, "path": { "type": "string" } },
+                    "description": "a disk held by this sandbox alone; cannot start from a snapshot" },
+                "envVars": { "type": "object", "additionalProperties": { "type": "string" },
+                    "description": "set for every command the sandbox runs; never returned" },
+                "cpuCount": { "type": "integer" },
+                "memoryMB": { "type": "integer" },
+                "environment": { "type": "string", "description": "a named environment of the caller's team: variables, files and repositories to start with" },
+                "commandHistory": { "type": "boolean", "description": "false keeps no history of its commands" },
+                "idleTimeout": { "type": "integer", "description": "seconds without use after which it pauses; 0 turns off the node's default" },
+                "autoCheckpoint": { "type": "integer", "description": "seconds between checkpoints the node takes by itself; 0 turns off the node's default" }
+            }
+        });
+
+        let create_description = |v2: bool| {
+            let (path, default_timeout) = if v2 {
+                ("/v2/sandboxes", 300)
+            } else {
+                ("/sandboxes", 15)
+            };
+            if node {
+                format!(
+                    "Boot a microVM sandbox on this node from a template (default `base`) or \
+                     from a snapshot, and answer with its descriptor: its ID, the port of its \
+                     envd gRPC listener, the proxy authority to ask for and the \
+                     `envdAccessToken` to send as `X-Access-Token`. `POST {path}` is the \
+                     {} route of E2B's API; its default lifetime is {default_timeout} \
+                     seconds, at most 24 hours. The body is checked before a slot is taken: \
+                     an unknown template, snapshot, volume or environment, a bad variable, \
+                     size or egress policy, `autoPause` or `idleTimeout` or \
+                     `autoCheckpoint` on a node with no template, `network` or `iam` on a \
+                     node started without `--network`, and `diskMount` with a snapshot are \
+                     400 or 404, not a boot. A full node answers 503 at once so a control plane can \
+                     try another. On a clustered node, owner and team come from headers \
+                     only an authenticated control plane sends (a request carrying them \
+                     without a cluster token is 503), and a sandbox named with \
+                     `metadata[\"hm.name\"]` needs the control plane's reserved operation \
+                     header (409 without it). Not idempotent: each call boots a new sandbox.",
+                    if v2 { "current (secure-only)" } else { "older" }
+                )
+            } else {
+                format!(
+                    "Boot a microVM sandbox somewhere in the cluster and answer with its \
+                     descriptor (see the node's `node_create_sandbox{}`). The control plane \
+                     keeps only the nodes that offer the template (`templateID`, default \
+                     `base`; the caller team's own snapshot, or one shared with it, wins over \
+                     an operator template of the same name) and tries them in turn: a node \
+                     that is unreachable, full (503) or overloaded (429) is skipped, any \
+                     other answer from a node is final. The caller's principal and team, taken \
+                     from its credential and never from the request, are recorded as the \
+                     sandbox's owner and team; that needs the control plane to have a \
+                     `--cluster-token` (503 otherwise). Naming the sandbox with \
+                     `metadata[\"hm.name\"]` reserves the name first and then tries one node \
+                     only; a name that is taken (or that a legacy sandbox carries) is 409. \
+                     `POST {path}` has a default lifetime of {default_timeout} seconds.{rewritten} \
+                     Not idempotent: each call boots a new sandbox.",
+                    if v2 { "_v2" } else { "" }
+                )
+            }
+        };
+        let create_responses = || {
+            let mut responses = vec![
+                OperationResponse {
+                    status_code: 201,
+                    description: format!("The sandbox is running.{rewritten}"),
+                    schema: Some(Self::sandbox_descriptor_schema(node)),
+                },
+                json_error(
+                    400,
+                    "the body is refused: an invalid field or value (the message names it), \
+                     or, on the control plane, a node's 4xx relayed as it came",
+                ),
+                body_rejection(),
+                json_error(
+                    404,
+                    if node {
+                        "the template, snapshot (also one of another team) or environment is not \
+                         known to this node"
+                    } else {
+                        "no live node offers the template (or it is another team's snapshot)"
+                    },
+                ),
+            ];
+            if node {
+                responses.push(json_error(
+                    409,
+                    "`hm.name` without the control plane's reserved operation, or that \
+                     operation is not pending for this owner",
+                ));
+                responses.push(json_error(
+                    500,
+                    "the guest could not be brought up; the message says why",
+                ));
+                responses.push(json_error(
+                    503,
+                    "no free slot on this node, or owner or team headers arrived without a \
+                     cluster token",
+                ));
+            } else {
+                responses.push(json_error(
+                    409,
+                    "the `hm.name` is already reserved or a legacy sandbox carries it",
+                ));
+                responses.push(json_error(
+                    500,
+                    "a node could not bring the guest up (relayed from the node)",
+                ));
+                responses.push(json_error(
+                    502,
+                    "named creation: the node's outcome cannot be established and must be \
+                     reconciled, or its answer was unusable",
+                ));
+                responses.push(json_error(
+                    503,
+                    "no node has room, every node refused, the name inventory or reservation is \
+                     unavailable, or owner attribution is requested without a `--cluster-token`",
+                ));
+            }
+            responses.extend(Self::sandbox_access_responses(node, false));
+            responses
+        };
+
+        let list_description = |v2: bool| {
+            let path = if v2 { "/v2/sandboxes" } else { "/sandboxes" };
+            if node {
+                format!(
+                    "List the sandboxes of this node alone, running and paused, oldest \
+                     start first. `GET {path}` is the same route as the other list path. \
+                     Keep some with `state` and `metadata`. Not paged. Every sandbox the node \
+                     runs is listed, whoever owns it: ownership is the control plane's check."
+                )
+            } else if v2 {
+                "List the sandboxes the caller may see, from the cluster store: all of them for \
+                 an administrator, the caller's team's for a team key or member, and its own \
+                 for a key with a principal and no team. Running and paused, in the store's \
+                 order (`order=desc` reverses it). Paged: `limit` (default 100, from 1 to \
+                 1000) and `nextToken`, which is the `x-next-token` response header of the \
+                 previous page (the last sandbox ID of it); a token naming no sandbox starts \
+                 from the first page. An inventory route: an observer or viewer, or a key \
+                 with the `inventory` scope, may read it."
+                    .to_string()
+            } else {
+                "List the sandboxes the caller may see, from the cluster store: all of them for \
+                 an administrator, the caller's team's for a team key or member, and its own \
+                 for a key with a principal and no team. Running and paused, in the store's \
+                 order (`order=desc` reverses it). `limit` and `nextToken` are accepted and \
+                 ignored here; use /v2/sandboxes to page. An inventory route: an observer \
+                 or viewer, or a key with the `inventory` scope, may read it."
+                    .to_string()
+            }
+        };
+        let list_params = |v2: bool| {
+            let mut parameters = vec![metadata_param(), state_param()];
+            if !node {
+                parameters.push(Self::sandbox_query(
+                    "order",
+                    "`desc` reverses the order",
+                    serde_json::json!({ "type": "string", "enum": ["desc"] }),
+                ));
+                if v2 {
+                    parameters.push(Self::sandbox_query(
+                        "limit",
+                        "Page size, clamped to 1..=1000",
+                        serde_json::json!({ "type": "integer", "default": 100 }),
+                    ));
+                    parameters.push(Self::sandbox_query(
+                        "nextToken",
+                        "The previous page's `x-next-token`",
+                        serde_json::json!({ "type": "string" }),
+                    ));
+                }
+            }
+            parameters
+        };
+        let list_responses = |v2: bool| {
+            let mut responses = vec![OperationResponse {
+                status_code: 200,
+                description: if v2 && !node {
+                    "A page of sandboxes. `x-next-token` is set when more follow.".to_string()
+                } else {
+                    "The sandboxes.".to_string()
+                },
+                schema: Some(serde_json::json!({
+                    "type": "array",
+                    "items": Self::sandbox_listed_schema()
+                })),
+            }];
+            responses.extend(Self::sandbox_access_responses(node, false));
+            responses
+        };
+
+        let connect_description = |v2: bool| {
+            format!(
+                "Attach to a sandbox that exists and get its descriptor again (what the E2B \
+                 SDK's `Sandbox.connect()` calls; `{}` is the same route). A running sandbox \
+                 answers 200; a paused one is resumed first, with a lifetime of `timeout` \
+                 seconds (300 by default), and answers 201. For a running sandbox `timeout` \
+                 only extends the end time, never shortens it, at most 24 hours from now. \
+                 `memory: false` (resume from disk alone) is refused: a sandbox's filesystem \
+                 lives in its memory. The body is optional.{rewritten} Not idempotent for a paused \
+                 sandbox, which it brings back.",
+                if v2 {
+                    "/sandboxes/{id}/connect"
+                } else {
+                    "/v2/sandboxes/{id}/connect"
+                }
+            )
+        };
+        let connect_responses = || {
+            let mut responses = vec![
+                OperationResponse {
+                    status_code: 200,
+                    description: format!("It was running. Its descriptor.{rewritten}"),
+                    schema: Some(Self::sandbox_descriptor_schema(node)),
+                },
+                OperationResponse {
+                    status_code: 201,
+                    description: format!("It was paused and is running again.{rewritten}"),
+                    schema: Some(Self::sandbox_descriptor_schema(node)),
+                },
+                json_error(400, "`memory: false` was asked for"),
+                body_rejection(),
+                json_error(404, "no such sandbox"),
+                json_error(
+                    409,
+                    "its registration is unsettled: reconcile it before changing the timeout",
+                ),
+                json_error(
+                    503,
+                    "a paused sandbox found no free slot on the node (or the snapshot store is \
+                     unavailable)",
+                ),
+            ];
+            responses.extend(Self::sandbox_access_responses(node, true));
+            responses
+        };
+        let connect_body = RequestBody {
+            content_type: "application/json".to_string(),
+            required: false,
+            schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "timeout": { "type": "integer", "description": "seconds from now" },
+                    "memory": { "type": "boolean", "description": "false is refused (400)" }
+                }
+            }),
+        };
+
+        let mut operations = vec![
+            Operation {
+                id: id("create_sandbox"),
+                name: "Create A Sandbox".to_string(),
+                description: create_description(false),
+                http_method: "POST".to_string(),
+                path: "/sandboxes".to_string(),
+                parameters: vec![],
+                request_body: Some(RequestBody {
+                    content_type: "application/json".to_string(),
+                    required: true,
+                    schema: new_sandbox.clone(),
+                }),
+                responses: create_responses(),
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("create_sandbox_v2"),
+                name: "Create A Sandbox (v2)".to_string(),
+                description: create_description(true),
+                http_method: "POST".to_string(),
+                path: "/v2/sandboxes".to_string(),
+                parameters: vec![],
+                request_body: Some(RequestBody {
+                    content_type: "application/json".to_string(),
+                    required: true,
+                    schema: new_sandbox,
+                }),
+                responses: create_responses(),
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("list_sandboxes"),
+                name: "List Sandboxes".to_string(),
+                description: list_description(false),
+                http_method: "GET".to_string(),
+                path: "/sandboxes".to_string(),
+                parameters: list_params(false),
+                request_body: None,
+                responses: list_responses(false),
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("list_sandboxes_v2"),
+                name: "List Sandboxes (v2)".to_string(),
+                description: list_description(true),
+                http_method: "GET".to_string(),
+                path: "/v2/sandboxes".to_string(),
+                parameters: list_params(true),
+                request_body: None,
+                responses: list_responses(true),
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("get_sandbox"),
+                name: "Get A Sandbox".to_string(),
+                description: format!(
+                    "{who} record of one sandbox: the listing fields plus its \
+                     `envdAccessToken` (a credential for its envd) and, when it has one, its \
+                     `domain`. Running or paused. {}",
+                    if node {
+                        "Read from this node's memory: a sandbox another node runs is 404."
+                    } else {
+                        "Read from the cluster store, not asked of the node, so it answers for \
+                         a paused sandbox too. An observer or viewer is refused (docs/TEAMS.md)."
+                    }
+                ),
+                http_method: "GET".to_string(),
+                path: id_path(""),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: None,
+                responses: {
+                    let mut responses = vec![
+                        OperationResponse {
+                            status_code: 200,
+                            description: "The sandbox.".to_string(),
+                            schema: Some(Self::sandbox_listed_schema()),
+                        },
+                        json_error(404, "no such sandbox"),
+                    ];
+                    responses.extend(Self::sandbox_access_responses(node, !node));
+                    // Answered from the store: no node is asked.
+                    responses.retain(|r| r.status_code != 502);
+                    responses
+                },
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("delete_sandbox"),
+                name: "Delete A Sandbox".to_string(),
+                description: format!(
+                    "End a sandbox and everything it had: stop its VM and envd listener, \
+                     release its slot, address and network membership, and, if it was paused, \
+                     remove its snapshot. Not idempotent: once it is gone the second call is \
+                     404. {}",
+                    if node {
+                        "A paused sandbox held in a shared snapshot store is deleted only if \
+                         this node can claim it (404 when another node has resumed it)."
+                    } else {
+                        "The control plane forwards the delete to the sandbox's node and then \
+                         removes the sandbox from the cluster store (503 if that cleanup \
+                         fails). When the node is gone, the sandbox went with it: the record is \
+                         removed and the answer is 204."
+                    }
+                ),
+                http_method: "DELETE".to_string(),
+                path: id_path(""),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: None,
+                responses: {
+                    let mut responses = vec![
+                        Self::sandbox_plain(204, "The sandbox is gone."),
+                        json_error(404, "no such sandbox"),
+                    ];
+                    responses.extend(Self::sandbox_access_responses(node, true));
+                    responses
+                },
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("connect_sandbox"),
+                name: "Connect To A Sandbox".to_string(),
+                description: connect_description(false),
+                http_method: "POST".to_string(),
+                path: id_path("/connect"),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: Some(connect_body.clone()),
+                responses: connect_responses(),
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("connect_sandbox_v2"),
+                name: "Connect To A Sandbox (v2)".to_string(),
+                description: connect_description(true),
+                http_method: "POST".to_string(),
+                path: format!("/v2{}", id_path("/connect")),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: Some(connect_body),
+                responses: connect_responses(),
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("set_sandbox_timeout"),
+                name: "Set A Sandbox's Timeout".to_string(),
+                description: "Make a running sandbox end `timeout` seconds from this request, \
+                    sooner or later than before (at most 24 hours). Unlike `connect`, this can \
+                    shorten it. A paused sandbox is 404: resume or connect to it first."
+                    .to_string(),
+                http_method: "POST".to_string(),
+                path: id_path("/timeout"),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: Some(RequestBody {
+                    content_type: "application/json".to_string(),
+                    required: true,
+                    schema: serde_json::json!({
+                        "type": "object",
+                        "required": ["timeout"],
+                        "properties": { "timeout": { "type": "integer", "minimum": 0,
+                            "description": "seconds from now" } }
+                    }),
+                }),
+                responses: {
+                    let mut responses = vec![
+                        Self::sandbox_plain(204, "The new end time is set."),
+                        body_rejection(),
+                        json_error(404, "no running sandbox of that ID"),
+                        json_error(
+                            409,
+                            "its registration is unsettled: reconcile it before changing the \
+                             timeout",
+                        ),
+                    ];
+                    responses.extend(Self::sandbox_access_responses(node, true));
+                    responses
+                },
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("pause_sandbox"),
+                name: "Pause A Sandbox".to_string(),
+                description: "Suspend a running sandbox to disk and release its VM and its \
+                    slot. Its memory and filesystem are kept: `connect` or `resume` brings it \
+                    back under the same ID and token, and with `autoResume` so does a request \
+                    through the proxy. `memory: false` (a filesystem-only pause) is refused, \
+                    because a sandbox's filesystem is its memory. Needs a node whose sandboxes \
+                    are restored from a template (409 on one that boots them). Commands \
+                    running at the pause are recorded as lost in the command history; the \
+                    guest's processes go on after the resume."
+                    .to_string(),
+                http_method: "POST".to_string(),
+                path: id_path("/pause"),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: Some(RequestBody {
+                    content_type: "application/json".to_string(),
+                    required: false,
+                    schema: serde_json::json!({
+                        "type": "object",
+                        "properties": { "memory": { "type": "boolean",
+                            "description": "false is refused (400)" } }
+                    }),
+                }),
+                responses: {
+                    let mut responses = vec![
+                        Self::sandbox_plain(204, "It is paused."),
+                        json_error(400, "`memory: false` was asked for"),
+                        body_rejection(),
+                        json_error(404, "no running sandbox of that ID"),
+                        json_error(
+                            409,
+                            "it is already paused, the node boots its sandboxes instead of \
+                             restoring a template, or its registration is unsettled",
+                        ),
+                        json_error(500, "the pause failed; the message says why"),
+                    ];
+                    responses.extend(Self::sandbox_access_responses(node, true));
+                    responses
+                },
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("resume_sandbox"),
+                name: "Resume A Paused Sandbox".to_string(),
+                description: format!(
+                    "Bring a paused sandbox back (E2B's deprecated route; `connect` does the \
+                     same and also answers for a running one). It runs for `timeout` seconds \
+                     (15 by default). With `cpuCount` or `memoryMB` it comes back at another \
+                     size, booted rather than restored, so its memory is not kept. A running \
+                     sandbox is 409. {}{rewritten}",
+                    if node {
+                        "With a shared snapshot store a sandbox paused by another node is claimed \
+                         from the store."
+                    } else {
+                        "When the sandbox was paused into shared storage and its node is gone, \
+                         any node with room resumes it."
+                    }
+                ),
+                http_method: "POST".to_string(),
+                path: id_path("/resume"),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: Some(RequestBody {
+                    content_type: "application/json".to_string(),
+                    required: false,
+                    schema: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "timeout": { "type": "integer", "default": 15 },
+                            "memory": { "type": "boolean", "description": "false is refused (400)" },
+                            "cpuCount": { "type": "integer" },
+                            "memoryMB": { "type": "integer" }
+                        }
+                    }),
+                }),
+                responses: {
+                    let mut responses = vec![
+                        OperationResponse {
+                            status_code: 201,
+                            description: format!("It is running again.{rewritten}"),
+                            schema: Some(Self::sandbox_descriptor_schema(node)),
+                        },
+                        json_error(
+                            400,
+                            "`memory: false`, or a size this host cannot give",
+                        ),
+                        body_rejection(),
+                        json_error(404, "no such paused sandbox"),
+                        json_error(409, "it is already running, or it has a network and this node gives sandboxes none"),
+                        json_error(500, "the guest could not be brought back; the message says why"),
+                        json_error(503, "no free slot on the node"),
+                    ];
+                    responses.extend(Self::sandbox_access_responses(node, true));
+                    responses
+                },
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("standby_sandbox"),
+                name: "Put A Sandbox In Standby".to_string(),
+                description: "Stop a running sandbox's vCPUs and keep its memory. \
+                    The next request to it (a command, a file, a connection to one of its \
+                    ports) wakes it, so no route resumes a standby by name. Answers with the \
+                    standby status; asking again for a sandbox already in standby answers 200 \
+                    with it."
+                    .to_string(),
+                http_method: "POST".to_string(),
+                path: id_path("/standby"),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: None,
+                responses: {
+                    let mut responses = vec![
+                        OperationResponse {
+                            status_code: 200,
+                            description: "It is in standby.".to_string(),
+                            schema: Some(Self::sandbox_standby_schema()),
+                        },
+                        json_error(404, "no running sandbox of that ID"),
+                        json_error(409, "the guest could not be put in standby"),
+                    ];
+                    responses.extend(Self::sandbox_access_responses(node, true));
+                    responses
+                },
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("get_sandbox_standby"),
+                name: "Get A Sandbox's Standby Status".to_string(),
+                description: "Say whether a running sandbox is in standby, how many times \
+                    traffic has woken it, the vCPU exits it has taken (none while in standby) \
+                    and how long the last wake took."
+                    .to_string(),
+                http_method: "GET".to_string(),
+                path: id_path("/standby"),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: None,
+                responses: {
+                    let mut responses = vec![
+                        OperationResponse {
+                            status_code: 200,
+                            description: "The standby status.".to_string(),
+                            schema: Some(Self::sandbox_standby_schema()),
+                        },
+                        json_error(404, "no running sandbox of that ID"),
+                    ];
+                    responses.extend(Self::sandbox_access_responses(node, true));
+                    responses
+                },
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("resize_sandbox"),
+                name: "Resize A Sandbox".to_string(),
+                description: "Reboot a running sandbox at another number of vCPUs or amount of \
+                    memory. A guest's memory cannot be carried to another size, so what is \
+                    kept is what a reboot keeps (ID, token, URL, ports, network, volumes, \
+                    disk and `envVars`); what the guest wrote to its own root filesystem, \
+                    which is memory, is lost. Asking for the size it already has changes \
+                    nothing (`resized: false`). A paused sandbox is 409: resume it with \
+                    `cpuCount` and `memoryMB` instead."
+                    .to_string(),
+                http_method: "POST".to_string(),
+                path: id_path("/resize"),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: Some(RequestBody {
+                    content_type: "application/json".to_string(),
+                    required: true,
+                    schema: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "cpuCount": { "type": "integer" },
+                            "memoryMB": { "type": "integer" }
+                        },
+                        "description": "at least one of the two"
+                    }),
+                }),
+                responses: {
+                    let mut responses = vec![
+                        OperationResponse {
+                            status_code: 200,
+                            description: "The size it has now.".to_string(),
+                            schema: Some(serde_json::json!({
+                                "type": "object",
+                                "properties": {
+                                    "sandboxID": { "type": "string" },
+                                    "cpuCount": { "type": "integer" },
+                                    "memoryMB": { "type": "integer" },
+                                    "resized": { "type": "boolean" }
+                                }
+                            })),
+                        },
+                        json_error(400, "neither `cpuCount` nor `memoryMB` was given, or the size is not one this host can give"),
+                        body_rejection(),
+                        json_error(404, "no such sandbox"),
+                        json_error(
+                            409,
+                            "it is paused, its registration is unsettled, or it had already \
+                             rebooted five times within a minute and was ended",
+                        ),
+                        json_error(500, "the new guest did not come up; the message says why"),
+                    ];
+                    responses.extend(Self::sandbox_access_responses(node, true));
+                    responses
+                },
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("adopt_sandbox_owner"),
+                name: "Assign A Sandbox's Owner".to_string(),
+                description: format!(
+                    "Give a sandbox that has no owner the principal `principalId`, or accept \
+                     the same owner again. It never transfers an existing owner (409), and \
+                     never changes the sandbox's team. {}",
+                    if node {
+                        "Needs a clustered node with a cluster token (503 otherwise); a \
+                         sandbox with legacy public-port reservations must have them removed \
+                         first (409)."
+                    } else {
+                        "Only an administrator, or a team administrator for a sandbox of its \
+                         own team (with the `sandboxes` scope), may call it; with no keys \
+                         configured at all it is still refused, so an open control plane does \
+                         not offer it. Needs the control plane to have a `--cluster-token` \
+                         (503 otherwise). See docs/TEAMS.md."
+                    }
+                ),
+                http_method: "POST".to_string(),
+                path: id_path("/owner"),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: Some(RequestBody {
+                    content_type: "application/json".to_string(),
+                    required: true,
+                    schema: serde_json::json!({
+                        "type": "object",
+                        "required": ["principalId"],
+                        "additionalProperties": false,
+                        "properties": { "principalId": { "type": "string" } }
+                    }),
+                }),
+                responses: {
+                    let mut responses = vec![
+                        Self::sandbox_plain(204, "It is owned by the principal."),
+                        json_error(
+                            400,
+                            "a valid `principalId` is required and unknown fields are refused, \
+                             or the sandbox ID is invalid",
+                        ),
+                        json_error(
+                            404,
+                            "no such sandbox (on a node: not present, or no record of it)",
+                        ),
+                        json_error(
+                            409,
+                            "it already has a different owner, it has legacy public-port \
+                             reservations, its registration is unsettled, or (paused) it is not \
+                             available for adoption",
+                        ),
+                    ];
+                    if !node {
+                        responses.push(json_error(
+                            403,
+                            "`administrator credential required`: the caller is not an \
+                             administrator or a team administrator of the sandbox's team",
+                        ));
+                    }
+                    responses.extend(Self::sandbox_access_responses(node, true));
+                    responses
+                },
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+        ];
+        if node {
+            operations.push(Operation {
+                id: "node_reboot_sandbox".to_string(),
+                name: "Reboot A Sandbox".to_string(),
+                description: "Reboot a running sandbox in place: the same sandbox ID, token, \
+                    URL, ports and network policy, with a fresh guest booted from its \
+                    template. Volumes and the disk are mounted again and `envVars` put back; \
+                    what the guest wrote to its root filesystem, which is memory, is lost. The \
+                    old VM is stopped before the new one starts. A guest that stops by \
+                    itself is rebooted by the node without being asked, and one that keeps \
+                    dying (five reboots within a minute) is ended as lost. Only the node \
+                    serves this; the control plane has no route for it."
+                    .to_string(),
+                http_method: "POST".to_string(),
+                path: "/sandboxes/{sandboxID}/reboot".to_string(),
+                parameters: vec![Self::sandbox_id_parameter(true)],
+                request_body: None,
+                responses: {
+                    let mut responses = vec![
+                        OperationResponse {
+                            status_code: 200,
+                            description: "It was rebooted.".to_string(),
+                            schema: Some(serde_json::json!({
+                                "type": "object",
+                                "properties": { "sandboxID": { "type": "string" } }
+                            })),
+                        },
+                        json_error(404, "no such running sandbox"),
+                        json_error(
+                            409,
+                            "its registration is unsettled, or it has rebooted five times \
+                             within a minute and was ended",
+                        ),
+                        json_error(
+                            500,
+                            "the new guest did not come up; the node retries a stopped VM",
+                        ),
+                    ];
+                    responses.extend(Self::sandbox_access_responses(true, true));
+                    responses
+                },
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            });
+        }
+        operations
+    }
+
+    fn sandbox_standby_schema() -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "properties": {
+                "standby": { "type": "boolean" },
+                "wakes": { "type": "integer", "description": "times traffic woke it" },
+                "vcpuExits": { "type": "integer", "description": "every exit its vCPUs have taken; a guest in standby takes none" },
+                "lastWakeMicros": { "type": "number", "description": "the vCPUs being told to run again, not the guest answering" }
+            }
+        })
+    }
+
+    fn sandbox_exec_operations(node: bool) -> Vec<Operation> {
+        let id = |base: &str| {
+            if node {
+                format!("node_{base}")
+            } else {
+                base.to_string()
+            }
+        };
+        let id_path = |rest: &str| {
+            let name = if node { "sandboxID" } else { "id" };
+            format!("/sandboxes/{{{name}}}{rest}")
+        };
+        let json_error = Self::sandbox_json_error;
+        let n_param = Parameter {
+            name: "n".to_string(),
+            location: ParameterLocation::Path,
+            required: true,
+            description: "The command's number in this sandbox's history".to_string(),
+            schema: serde_json::json!({ "type": "integer", "minimum": 0 }),
+            default: None,
+        };
+        let history_off = || {
+            json_error(
+                409,
+                "the node keeps no command history (`--no-command-history`), or the sandbox \
+                 was created with `commandHistory: false`",
+            )
+        };
+        let command_schema = |with_output: bool| {
+            let mut properties = serde_json::json!({
+                "n": { "type": "integer" },
+                "source": { "type": "string", "description": "`exec`, or `process` for one started through envd" },
+                "cmd": { "type": "string", "description": "the command line, with secret-shaped values masked" },
+                "cwd": { "type": ["string", "null"] },
+                "user": { "type": ["string", "null"] },
+                "tag": { "type": ["string", "null"] },
+                "pid": { "type": ["integer", "null"] },
+                "pty": { "type": "boolean" },
+                "state": { "type": "string", "enum": ["running", "exited", "signalled", "lost"] },
+                "exitCode": { "type": ["integer", "null"] },
+                "signal": { "type": ["integer", "null"] },
+                "error": { "type": ["string", "null"] },
+                "startedAt": { "type": "integer", "description": "unix milliseconds" },
+                "endedAt": { "type": ["integer", "null"], "description": "unix milliseconds" },
+                "stdoutBytes": { "type": "integer" },
+                "stderrBytes": { "type": "integer" }
+            });
+            if with_output {
+                let stream = serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "offset": { "type": "integer" },
+                        "text": { "type": "string" },
+                        "next": { "type": "integer", "description": "the offset to ask for next" },
+                        "dropped": { "type": "integer", "description": "bytes before the kept tail that were discarded" }
+                    }
+                });
+                properties["stdout"] = stream.clone();
+                properties["stderr"] = stream;
+            }
+            serde_json::json!({ "type": "object", "properties": properties })
+        };
+        let exec_not_found = || OperationResponse {
+            status_code: 404,
+            description: "no running sandbox of that ID (a paused one too). The body is \
+                `{\"error\": \"no sandbox ...\"}`, not the `{code, message}` shape"
+                .to_string(),
+            schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": { "error": { "type": "string" } }
+            })),
+        };
+
+        vec![
+            Operation {
+                id: id("exec_in_sandbox"),
+                name: "Run A Command In A Sandbox".to_string(),
+                description: "Run one command in a running sandbox's guest and wait for it. \
+                    Give either `cmd`, a shell line run as `/bin/sh -c` (with `args` as `$0`, \
+                    `$1`, ...), or `argv`, a program run directly with no shell anywhere \
+                    (`argv[0]` an absolute path, at most 64 elements of at most 8192 bytes, no \
+                    NUL; `args` is refused beside it), for a guest image that has no shell. \
+                    Exactly one of the two. It runs as root unless `user` names another (by \
+                    name or number), and is killed after `timeout_secs` (30 by default), \
+                    answering `timed_out: true`. The answer carries the exit code and \
+                    both output streams, within the guest agent's output caps; use envd's `process.Process` gRPC for a \
+                    streaming or interactive command. This is arbitrary code execution as \
+                    that user in the guest. A sandbox in standby is woken by it. It is \
+                    recorded in the command history unless that is off. Not idempotent: it \
+                    runs again on every call."
+                    .to_string(),
+                http_method: "POST".to_string(),
+                path: id_path("/exec"),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: Some(RequestBody {
+                    content_type: "application/json".to_string(),
+                    required: true,
+                    schema: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "cmd": { "type": "string", "description": "a shell line; exactly one of cmd and argv" },
+                            "args": { "type": "array", "items": { "type": "string" }, "description": "only with cmd" },
+                            "argv": { "type": "array", "items": { "type": "string" }, "minItems": 1, "maxItems": 64,
+                                "description": "a program and its arguments, run directly; exactly one of cmd and argv" },
+                            "timeout_secs": { "type": "integer", "default": 30 },
+                            "user": { "type": "string", "description": "run as this user, by name or number; root if absent" }
+                        }
+                    }),
+                }),
+                responses: {
+                    let mut responses = vec![
+                        OperationResponse {
+                            status_code: 200,
+                            description: "The command ended, or timed out.".to_string(),
+                            schema: Some(serde_json::json!({
+                                "type": "object",
+                                "properties": {
+                                    "exit_code": { "type": ["integer", "null"], "description": "null when there is no exit status, for example when it was killed by a signal" },
+                                    "stdout": { "type": "string" },
+                                    "stderr": { "type": "string" },
+                                    "timed_out": { "type": "boolean" }
+                                }
+                            })),
+                        },
+                        json_error(
+                            400,
+                            "neither or both of `cmd` and `argv`, `args` beside `argv`, an \
+                             `argv` that is empty, too long, has a NUL or whose first element \
+                             is not an absolute path, or a `cmd` on an image with no shell",
+                        ),
+                        Self::sandbox_plain(
+                            400,
+                            "the body is not JSON of this shape: the framework's own rejection \
+                             (400, 415 or 422, plain text)",
+                        ),
+                        exec_not_found(),
+                        OperationResponse {
+                            status_code: 500,
+                            description: "the guest agent could not run it (for example the \
+                                program is not in the image). The body is \
+                                `{\"error\": \"exec_in_guest: ...\"}`"
+                                .to_string(),
+                            schema: Some(serde_json::json!({
+                                "type": "object",
+                                "properties": { "error": { "type": "string" } }
+                            })),
+                        },
+                    ];
+                    responses.extend(Self::sandbox_access_responses(node, true));
+                    responses
+                },
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("list_sandbox_commands"),
+                name: "List A Sandbox's Commands".to_string(),
+                description: "List the commands run in a sandbox, oldest first, without their \
+                    output: every `exec` and every process started through envd. The newest 64 \
+                    are kept; a command running when the sandbox paused is recorded as `lost`. \
+                    Kept through a pause, reboot, resize and restored checkpoint, gone when \
+                    the sandbox ends. Command lines have secret-shaped values masked, but \
+                    see the guardrails."
+                    .to_string(),
+                http_method: "GET".to_string(),
+                path: id_path("/commands"),
+                parameters: vec![Self::sandbox_id_parameter(node)],
+                request_body: None,
+                responses: {
+                    let mut responses = vec![
+                        OperationResponse {
+                            status_code: 200,
+                            description: "The commands.".to_string(),
+                            schema: Some(serde_json::json!({
+                                "type": "array",
+                                "items": command_schema(false)
+                            })),
+                        },
+                        json_error(404, "no such sandbox (running or paused)"),
+                        history_off(),
+                    ];
+                    responses.extend(Self::sandbox_access_responses(node, true));
+                    responses
+                },
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("get_sandbox_command"),
+                name: "Get One Of A Sandbox's Commands".to_string(),
+                description: "One command from the history, with what it printed from the \
+                    offsets asked for. Each stream keeps its newest 64 KiB; `dropped` counts \
+                    what went before. An `exec` command's output exists only once it has \
+                    ended. Output is kept as printed and is not scanned for secrets."
+                    .to_string(),
+                http_method: "GET".to_string(),
+                path: id_path("/commands/{n}"),
+                parameters: vec![
+                    Self::sandbox_id_parameter(node),
+                    n_param,
+                    Self::sandbox_query(
+                        "stdout",
+                        "Offset into stdout to read from (default 0)",
+                        serde_json::json!({ "type": "integer", "minimum": 0 }),
+                    ),
+                    Self::sandbox_query(
+                        "stderr",
+                        "Offset into stderr to read from (default 0)",
+                        serde_json::json!({ "type": "integer", "minimum": 0 }),
+                    ),
+                ],
+                request_body: None,
+                responses: {
+                    let mut responses = vec![
+                        OperationResponse {
+                            status_code: 200,
+                            description: "The command and its output.".to_string(),
+                            schema: Some(command_schema(true)),
+                        },
+                        json_error(404, "no such sandbox, or it has no such command number"),
+                        history_off(),
+                        Self::sandbox_plain(
+                            400,
+                            "`n` or an offset is not a number: the framework's own rejection",
+                        ),
+                    ];
+                    responses.extend(Self::sandbox_access_responses(node, true));
+                    responses
+                },
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: id("list_sandbox_processes"),
+                name: "List A Sandbox's Processes".to_string(),
+                description: "Every process in a running sandbox's guest, as `ps` lists them \
+                    and not only those started through the API, read from the guest's \
+                    `/proc` through the guest agent (so a guest with no shell lists too). \
+                    Kernel threads are left out unless `all=true`. A paused sandbox runs \
+                    nothing and is 409."
+                    .to_string(),
+                http_method: "GET".to_string(),
+                path: id_path("/processes"),
+                parameters: vec![
+                    Self::sandbox_id_parameter(node),
+                    Self::sandbox_query(
+                        "all",
+                        "Include kernel threads",
+                        serde_json::json!({ "type": "boolean", "default": false }),
+                    ),
+                ],
+                request_body: None,
+                responses: {
+                    let mut responses = vec![
+                        OperationResponse {
+                            status_code: 200,
+                            description: "The processes.".to_string(),
+                            schema: Some(serde_json::json!({
+                                "type": "object",
+                                "properties": { "processes": { "type": "array", "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "pid": { "type": "integer" },
+                                        "ppid": { "type": "integer" },
+                                        "uid": { "type": ["integer", "null"] },
+                                        "state": { "type": "string", "description": "R, S, D, Z, T ... as ps shows" },
+                                        "command": { "type": "string" },
+                                        "args": { "type": "string" },
+                                        "threads": { "type": "integer" },
+                                        "rssKiB": { "type": "integer" },
+                                        "cpuSeconds": { "type": "number" },
+                                        "startedSecondsAgo": { "type": "number" }
+                                    }
+                                } } }
+                            })),
+                        },
+                        json_error(404, "no such sandbox"),
+                        json_error(409, "the sandbox is paused, and runs nothing"),
+                        json_error(502, "the guest's processes could not be listed"),
+                    ];
+                    responses.extend(Self::sandbox_access_responses(node, true));
+                    responses
+                },
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+        ]
+    }
+
     /// Warnings attached to interfaces. Exposures only: each entry is a
     /// documented residual, not a general caution.
     fn build_guardrails() -> Vec<Guardrail> {
@@ -2924,16 +4408,30 @@ impl HyperMachineOntology {
                     snapshot sharing that means any caller can read the share list of any \
                     team's snapshot and share it with any team, which gives that team the \
                     sandbox's memory, files and environment variables. The control plane \
-                    logs a warning each time it starts this way. (The key routes still \
-                    want an administrator or team-admin credential, so an anonymous caller \
-                    does not get them.)"
+                    logs a warning each time it starts this way. For the sandbox routes \
+                    that means any caller can create sandboxes, run commands as root in any \
+                    sandbox and read its command history and output. (The key routes and \
+                    owner adoption still want an administrator or team-admin credential, so \
+                    an anonymous caller does not get them.)"
                     .to_string(),
-                applies_to: vec![
-                    "team_template_sharing".to_string(),
-                    "share_template_snapshot".to_string(),
-                    "unshare_template_snapshot".to_string(),
-                    "list_template_shares".to_string(),
-                ],
+                applies_to: [
+                    "team_template_sharing",
+                    "share_template_snapshot",
+                    "unshare_template_snapshot",
+                    "list_template_shares",
+                    "sandbox_lifecycle",
+                    "sandbox_commands",
+                ]
+                .into_iter()
+                .map(str::to_string)
+                .chain(
+                    Self::build_sandbox_control_plane_operations()
+                        .into_iter()
+                        .chain(Self::build_sandbox_exec_control_plane_operations())
+                        .map(|op| op.id)
+                        .filter(|id| id != "adopt_sandbox_owner"),
+                )
+                .collect(),
                 condition: "The control plane was started with --allow-unauthenticated. Without \
                     it, a control plane with no key source and no --sso-issuer refuses to \
                     start."
@@ -3019,6 +4517,100 @@ impl HyperMachineOntology {
                     --git-credential) is not in the guest and so not in the snapshot."
                     .to_string(),
                 reference: "docs/TEAMS.md#sharing-a-snapshot-with-another-team".to_string(),
+            },
+            Guardrail {
+                id: "node-unauthenticated-mode".to_string(),
+                severity: GuardrailSeverity::Critical,
+                title: "A node started with --allow-unauthenticated is open".to_string(),
+                description: "A node's API runs commands in guests, reads and writes their \
+                    files, creates machines and boots sandboxes, and its proxy reaches \
+                    whatever a guest or a machine publishes, desktops included. With \
+                    --allow-unauthenticated the node listens beyond loopback with no cluster \
+                    token and no mTLS, so every host that can reach its API port (3980) or \
+                    proxy port (3981) can do all of that to every sandbox on it: the node has \
+                    no users, teams or ownership of its own, the control plane's checks are \
+                    not in front of it. The node prints a warning naming both ports every \
+                    time it starts this way."
+                    .to_string(),
+                applies_to: ["node_sandbox_lifecycle", "node_sandbox_commands"]
+                    .into_iter()
+                    .map(str::to_string)
+                    .chain(
+                        Self::build_sandbox_node_operations()
+                            .into_iter()
+                            .chain(Self::build_sandbox_exec_node_operations())
+                            .map(|op| op.id),
+                    )
+                    .collect(),
+                condition: "The node was started with --bind ADDR beyond loopback and \
+                    --allow-unauthenticated, with no --cluster-token (HV2_CLUSTER_TOKEN) and \
+                    no mTLS. Without the flag a non-loopback --bind with neither is refused \
+                    at start, and with no --bind a node with neither listens on 127.0.0.1."
+                    .to_string(),
+                mitigation: "Give the node a --cluster-token (or HV2_CLUSTER_TOKEN) or mTLS, \
+                    which the control plane then presents; or leave it on loopback; or, where \
+                    the flag is really intended, keep the ports on a network that does the \
+                    authenticating."
+                    .to_string(),
+                reference: "docs/SANDBOXES.md#where-a-node-listens".to_string(),
+            },
+            Guardrail {
+                id: "node-proxy-open".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "A node started with --proxy-open does not check the cluster token on \
+                    its proxy"
+                    .to_string(),
+                description: "A node with a cluster token normally accepts a proxy connection \
+                    (port 3981) only if it opens with an `HV2-PROXY` line that only a holder \
+                    of the token, the control plane, can make. With --proxy-open the node \
+                    keeps the old behaviour and does not check, so any host that can reach \
+                    the proxy port can reach every port a machine publishes and every \
+                    sandbox's envd, which `connect` and `get_sandbox` describe. The node \
+                    logs a warning each time it starts this way. Even with the check, the \
+                    line proves the token and does not encrypt, and a line seen on the wire \
+                    can be replayed within 60 seconds before the genuine one arrives."
+                    .to_string(),
+                applies_to: vec![
+                    "node_sandbox_lifecycle".to_string(),
+                    "node_connect_sandbox".to_string(),
+                    "node_connect_sandbox_v2".to_string(),
+                ],
+                condition: "The node has a cluster token and was started with --proxy-open."
+                    .to_string(),
+                mitigation: "Do not pass --proxy-open; if you must, keep the proxy port \
+                    reachable only from the control plane. Use mTLS or a private network \
+                    against an attacker on the path."
+                    .to_string(),
+                reference: "docs/security/SECURITY_AUDIT_2026-11-16.md".to_string(),
+            },
+            Guardrail {
+                id: "command-history-keeps-output".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "A sandbox keeps the commands it ran, and what they printed".to_string(),
+                description: "Every `exec`, and every process started through envd, is kept \
+                    in the sandbox's command history (the newest 64), with its command line, \
+                    user and, from the newest 64 KiB of each stream, what it printed. Before \
+                    a command line is kept the node masks the common shapes of a secret \
+                    (`NAME=VALUE` for names like TOKEN, SECRET, PASSWORD or KEY, the value \
+                    after `--password` or `--token`, what follows `Bearer` or `Basic`, \
+                    credentials in a URL), but it cannot know every secret, and output is \
+                    kept as printed and not scanned. Anyone who may read the sandbox's history \
+                    can read both."
+                    .to_string(),
+                applies_to: vec![
+                    "list_sandbox_commands".to_string(),
+                    "get_sandbox_command".to_string(),
+                    "node_list_sandbox_commands".to_string(),
+                    "node_get_sandbox_command".to_string(),
+                ],
+                condition: "A secret was in a command line in a shape the masking does not \
+                    know, or was printed by a command, in a sandbox whose history is on."
+                    .to_string(),
+                mitigation: "Create the sandbox with `\"commandHistory\": false`, or start the \
+                    node with --no-command-history, to keep none; and pass secrets through \
+                    `envVars`, which are never returned, rather than on a command line."
+                    .to_string(),
+                reference: "crates/hv2-sandboxd/src/history.rs".to_string(),
             },
         ]
     }
@@ -6382,6 +7974,9 @@ mod tests {
             "sso-session-not-revocable",
             "sso-guest-urls-need-guest-domain",
             "shared-snapshot-contains-memory-and-secrets",
+            "node-unauthenticated-mode",
+            "node-proxy-open",
+            "command-history-keeps-output",
         ];
         let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         for id in ids {

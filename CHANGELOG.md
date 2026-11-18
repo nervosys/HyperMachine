@@ -209,6 +209,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seventh, Gitleaks, is now a real gate; see Security.)
 
 ### Added
+- **The agentic ontology describes the sandbox routes of the control plane
+  and the node.** `sandbox_lifecycle` and `sandbox_commands` (control plane,
+  19 operations) and `node_sandbox_lifecycle` and `node_sandbox_commands`
+  (`hv2-sandboxd`, 20, ids prefixed `node_`) cover create, list, detail,
+  delete, connect, timeout, pause, resume, standby, resize, owner adoption,
+  node reboot, exec, command history and processes, with request and response
+  shapes and status codes read from the handlers. Operations now belong to
+  `hv2-api`, `hv2-cluster` or `hv2-sandboxd` through `operation_component`.
+  Three guardrails: open nodes (`--allow-unauthenticated`), `--proxy-open`,
+  and the command history keeping output; the open control plane guardrail
+  now names the sandbox routes. The coverage allowlist shrinks from 361 to 322
+  routes; fork, checkpoints, networking, ports, logs and `/machines` remain.
 - **The agentic ontology describes the control plane's sign-in and snapshot
   sharing routes, and a CI gate keeps it complete.** `sso_sign_in`
   (`/auth/login`, `/callback`, `/session`, `/guest`, `/logout`, `/cli-token`)

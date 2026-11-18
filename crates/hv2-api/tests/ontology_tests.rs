@@ -534,7 +534,7 @@ async fn test_served_ontology_carries_guardrails_and_key_interface() {
     };
     let (operations, capabilities) = (ids("operations"), ids("capabilities"));
     let guardrails = json["guardrails"].as_array().expect("guardrails list");
-    assert_eq!(guardrails.len(), 6);
+    assert_eq!(guardrails.len(), 9);
     for id in ["redis-shared-user-revocation", "pre-tombstone-revocations"] {
         let g = guardrails
             .iter()
@@ -710,4 +710,90 @@ fn control_plane_sign_in_and_sharing_operations_are_described() {
     for op in &onto.operations {
         assert!(op.path.starts_with('/'), "{} has path {:?}", op.id, op.path);
     }
+}
+
+/// The sandbox routes are modelled once for the control plane and once for the
+/// node, with the node's ids prefixed `node_`; each operation belongs to one
+/// component, and the routes both serve do not collapse into one.
+#[test]
+fn sandbox_operations_are_described_for_both_components() {
+    use hv2_api::ontology::HyperMachineOntology;
+
+    let onto = HyperMachineOntology::build();
+    let base = [
+        ("create_sandbox", "POST", "/sandboxes"),
+        ("create_sandbox_v2", "POST", "/v2/sandboxes"),
+        ("list_sandboxes", "GET", "/sandboxes"),
+        ("list_sandboxes_v2", "GET", "/v2/sandboxes"),
+        ("get_sandbox", "GET", "/sandboxes/{id}"),
+        ("delete_sandbox", "DELETE", "/sandboxes/{id}"),
+        ("connect_sandbox", "POST", "/sandboxes/{id}/connect"),
+        ("connect_sandbox_v2", "POST", "/v2/sandboxes/{id}/connect"),
+        ("set_sandbox_timeout", "POST", "/sandboxes/{id}/timeout"),
+        ("pause_sandbox", "POST", "/sandboxes/{id}/pause"),
+        ("resume_sandbox", "POST", "/sandboxes/{id}/resume"),
+        ("standby_sandbox", "POST", "/sandboxes/{id}/standby"),
+        ("get_sandbox_standby", "GET", "/sandboxes/{id}/standby"),
+        ("resize_sandbox", "POST", "/sandboxes/{id}/resize"),
+        ("adopt_sandbox_owner", "POST", "/sandboxes/{id}/owner"),
+        ("exec_in_sandbox", "POST", "/sandboxes/{id}/exec"),
+        ("list_sandbox_commands", "GET", "/sandboxes/{id}/commands"),
+        ("get_sandbox_command", "GET", "/sandboxes/{id}/commands/{n}"),
+        ("list_sandbox_processes", "GET", "/sandboxes/{id}/processes"),
+    ];
+    for (id, method, path) in base {
+        for (id, component, path) in [
+            (id.to_string(), "hv2-cluster", path.to_string()),
+            (
+                format!("node_{id}"),
+                "hv2-sandboxd",
+                path.replace("{id}", "{sandboxID}"),
+            ),
+        ] {
+            let op = onto
+                .operations
+                .iter()
+                .find(|o| o.id == id)
+                .unwrap_or_else(|| panic!("missing operation {id}"));
+            assert_eq!(
+                (op.http_method.as_str(), op.path.as_str()),
+                (method, path.as_str())
+            );
+            assert_eq!(HyperMachineOntology::operation_component(&id), component);
+            assert!(op.description.len() > 150, "{id} needs a full description");
+            assert!(!op.responses.is_empty(), "{id} lists no responses");
+            assert!(
+                onto.capabilities.iter().any(|c| c.operations.contains(&id)),
+                "{id} belongs to no capability"
+            );
+        }
+    }
+    // Only the node serves a reboot.
+    assert_eq!(
+        HyperMachineOntology::operation_component("node_reboot_sandbox"),
+        "hv2-sandboxd"
+    );
+    assert!(onto.operations.iter().all(|o| o.id != "reboot_sandbox"));
+    // The control plane's responses name its own access failures; the node's,
+    // the cluster token.
+    let status = |id: &str, code: u16| {
+        onto.operations
+            .iter()
+            .find(|o| o.id == id)
+            .unwrap()
+            .responses
+            .iter()
+            .any(|r| r.status_code == code)
+    };
+    assert!(status("pause_sandbox", 403) && status("pause_sandbox", 502));
+    assert!(status("node_pause_sandbox", 401) && !status("node_pause_sandbox", 502));
+    // A paused sandbox is a 404 for exec on a node, with its own body shape.
+    assert!(status("node_exec_in_sandbox", 404));
+    // The guardrails that name them.
+    assert!(!onto.guardrails_for("node_exec_in_sandbox").is_empty());
+    assert!(!onto.guardrails_for("exec_in_sandbox").is_empty());
+    assert!(!onto.guardrails_for("get_sandbox_command").is_empty());
+    assert!(!onto.guardrails_for("node_connect_sandbox").is_empty());
+    // Owner adoption is refused on an open control plane, so it is not named.
+    assert!(onto.guardrails_for("adopt_sandbox_owner").is_empty());
 }

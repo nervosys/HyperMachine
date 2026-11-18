@@ -221,6 +221,49 @@ Handlers: `template_shares` and `share_template` in
 
 **Permissions Required:** `templates` scope, as the snapshot's team or an administrator.
 
+### Sandboxes (`sandbox_lifecycle`, `sandbox_commands`, `node_sandbox_lifecycle`, `node_sandbox_commands`)
+
+The microVM sandbox API, E2B-shaped, described once for each component that
+serves it. The **control plane** (`hv2-control-plane`) takes `X-API-Key` (or a
+signed-in session) with the `sandboxes` scope, picks a node, records the
+owner and team from the credential and forwards to the sandbox's node; a team
+key sees its own team's sandboxes only and an observer or viewer may read the
+two listings alone ([TEAMS.md](TEAMS.md)). The **node** (`hv2-sandboxd`, port
+3980) serves the same paths itself; its ids start `node_`. It has no users or
+teams: it checks the cluster token (`x-hv2-cluster-token`) when it has one
+and otherwise answers whoever can reach it ([SANDBOXES.md](SANDBOXES.md#where-a-node-listens)).
+Handlers: `crates/hv2-cluster/src/control.rs` (`create`, `list_v1`, `list_v2`,
+`detail`, `forward`, `adopt_owner`), `crates/hv2-sandboxd/src/main.rs`,
+`reboot.rs`, `history.rs`, `processes.rs`. Most control plane routes forward
+verbatim to the node, so their success bodies are the node's; the control plane
+adds 401/403 (key, scope, ownership), 400 for a bad ID, 404 for an unknown
+sandbox, 502 when no node answered and 503 when the store is down, and
+rewrites `proxyPort` and adds `nodeID` in the descriptor `connect`, `resume`
+and `create` answer with.
+
+| Operation (`id`, control plane / node) | Method and path | Notes |
+| -------------------------------------- | --------------- | ----- |
+| `create_sandbox`, `create_sandbox_v2` | `POST /sandboxes`, `/v2/sandboxes` | 201 descriptor; default lifetime 15 s (v1) or 300 s (v2), at most 24 h. Control plane: 404 no node offers the template, 409 name taken, 503 no node has room. Node: 503 when full |
+| `list_sandboxes`, `list_sandboxes_v2` | `GET /sandboxes`, `/v2/sandboxes` | Control plane: from the store, filtered by caller, `state`, `metadata`, `order`; v2 pages with `limit` and `nextToken` (`x-next-token`). Node: its own sandboxes |
+| `get_sandbox` | `GET /sandboxes/{id}` | Includes `envdAccessToken`; observers are refused |
+| `delete_sandbox` | `DELETE /sandboxes/{id}` | 204; 404 the second time |
+| `connect_sandbox`, `connect_sandbox_v2` | `POST /sandboxes/{id}/connect`, `/v2/...` | 200 running, 201 if it was paused and was resumed; `timeout` only extends |
+| `set_sandbox_timeout` | `POST /sandboxes/{id}/timeout` | `{timeout}` seconds from now; 204; running sandboxes only |
+| `pause_sandbox`, `resume_sandbox` | `POST /sandboxes/{id}/pause`, `/resume` | `memory: false` is 400; 409 already paused / already running |
+| `standby_sandbox`, `get_sandbox_standby` | `POST`, `GET /sandboxes/{id}/standby` | Stops vCPUs, keeps memory; the next request wakes it |
+| `resize_sandbox` | `POST /sandboxes/{id}/resize` | `{cpuCount, memoryMB}`; a reboot at another size, memory not kept |
+| `adopt_sandbox_owner` | `POST /sandboxes/{id}/owner` | `{principalId}`; administrator or team-admin of the sandbox's team; never transfers (409) |
+| `node_reboot_sandbox` | `POST /sandboxes/{sandboxID}/reboot` | Node only: same ID and token, fresh guest |
+| `exec_in_sandbox` | `POST /sandboxes/{id}/exec` | `cmd` (shell line) or `argv` (no shell), `timeout_secs`, `user`; 200 `{exit_code, stdout, stderr, timed_out}`; runs as root unless `user` is given |
+| `list_sandbox_commands`, `get_sandbox_command` | `GET /sandboxes/{id}/commands[/{n}]` | The newest 64 commands; 409 when history is off |
+| `list_sandbox_processes` | `GET /sandboxes/{id}/processes` | `?all=true` adds kernel threads; 409 if paused |
+
+**Permissions Required:** `sandboxes` scope (control plane); the cluster token
+(node).
+**Not yet described:** fork, checkpoints, snapshots, networking, ports,
+domains, web sharing, logs and metrics, `/sandboxes/{id}/names`, and all of
+`/machines`; these stay in the coverage allowlist.
+
 ### Cluster Store Configuration (`cluster_store_configuration`)
 
 Where control planes, nodes and the native gateway keep shared state,
@@ -271,12 +314,14 @@ its source; the first two are finding O12 in
   written); only the key's expiry bounds it. Changing the managed-key secret
   is a blunt revoke-all.
 - **`control-plane-unauthenticated-mode`** (critical; applies to
-  `team_template_sharing` and its three operations). A control plane started
+  `team_template_sharing`, `sandbox_lifecycle`, `sandbox_commands` and their
+  operations, except owner adoption). A control plane started
   with `--allow-unauthenticated` has no key and no sign-on, so every caller who
   can reach it is an administrator with no team: any caller can read and change
   any team's snapshot shares, which hands that team the sandbox's memory, files
-  and environment variables. (The key routes still want an administrator or
-  team-admin credential.) Mitigation: do not use the flag on a reachable
+  and environment variables, and can create sandboxes and run commands as root
+  in any of them. (The key routes and owner adoption still want an
+  administrator or team-admin credential.) Mitigation: do not use the flag on a reachable
   control plane. Finding O4 in
   [the audit](security/SECURITY_AUDIT_2026-11-16.md).
 - **`sso-session-not-revocable`** (warning; applies to `sso_logout`,
@@ -290,6 +335,25 @@ its source; the first two are finding O12 in
   `{port}-{sandbox}.{domain}` under a configured `--guest-domain` (or a bound
   custom domain); any other URL is 400, so a link to an attacker's domain gets
   no credential ([SSO.md](SSO.md#private-guest-urls)).
+- **`node-unauthenticated-mode`** (critical; applies to the node capabilities
+  and every `node_*` operation). A node started with `--bind ADDR` beyond
+  loopback and `--allow-unauthenticated`, with no cluster token and no mTLS,
+  lets every host that can reach ports 3980 and 3981 run commands in its
+  sandboxes and machines, read and write their files and reach what they
+  publish. Mitigation: give it a token or mTLS, or keep it on loopback
+  ([SANDBOXES.md](SANDBOXES.md#where-a-node-listens)).
+- **`node-proxy-open`** (warning; applies to `node_sandbox_lifecycle` and the
+  node's `connect` operations). `--proxy-open` turns off the check of the
+  cluster token on the node's proxy port, so any host that reaches it reaches
+  every sandbox's envd and every port a machine publishes; even with the check
+  a captured line can be replayed for 60 s. Finding O3 in
+  [the audit](security/SECURITY_AUDIT_2026-11-16.md).
+- **`command-history-keeps-output`** (warning; applies to the control
+  plane's and the node's command list and read operations). A sandbox keeps
+  its newest 64 commands, their command lines (common secret shapes masked,
+  not all) and the newest 64 KiB of each output stream, unscanned. Mitigation:
+  `commandHistory: false`, `--no-command-history`, and `envVars` for secrets
+  (`crates/hv2-sandboxd/src/history.rs`).
 - **`shared-snapshot-contains-memory-and-secrets`** (warning; applies to
   `share_template_snapshot`, `team_template_sharing`). A shared snapshot is
   the source sandbox as it was, memory included, and revoking cannot recall
