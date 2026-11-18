@@ -1481,6 +1481,61 @@ impl HyperMachineOntology {
                 prerequisites: vec![],
                 permissions_required: vec!["operator".to_string()],
             },
+            Capability {
+                id: "sso_sign_in".to_string(),
+                name: "Single Sign-On (cluster control plane)".to_string(),
+                description: "Sign people in to the cluster control plane \
+                    (`hv2-control-plane`) through an OpenID Connect provider, in a browser \
+                    or from the CLI, and look up or end that session. A signed-in member \
+                    gets a session that the control plane accepts in place of an \
+                    `X-API-Key`, with the scopes, role, principal and team of their entry \
+                    in the members file. These routes need no API key (they are how a \
+                    person without one gets a session); when single sign-on is not \
+                    configured every one of them answers 404. `GET /auth/guest` extends \
+                    the sign-in to private guest URLs. See docs/SSO.md."
+                    .to_string(),
+                category: CapabilityCategory::Security,
+                operations: vec![
+                    "sso_login".to_string(),
+                    "sso_callback".to_string(),
+                    "sso_session".to_string(),
+                    "sso_guest_handoff".to_string(),
+                    "sso_logout".to_string(),
+                    "sso_cli_token".to_string(),
+                ],
+                prerequisites: vec![
+                    "control plane started with --sso-issuer, --sso-client-id, \
+                     --sso-redirect-url, --sso-members-file and --sso-session-key-file"
+                        .to_string(),
+                    "private guest URLs also need --sso-guest-urls, proxy TLS and at least \
+                     one --guest-domain"
+                        .to_string(),
+                ],
+                permissions_required: vec!["listed member".to_string()],
+            },
+            Capability {
+                id: "team_template_sharing".to_string(),
+                name: "Snapshot Sharing Between Teams (cluster control plane)".to_string(),
+                description: "Let another team start sandboxes from a team's snapshot, list \
+                    who a snapshot is shared with, and stop sharing, through the cluster \
+                    control plane. Only the snapshot's own team (or an administrator) may \
+                    use these; the team shared with cannot read the list, share it on, \
+                    revoke it or delete the snapshot (404 each). A shared snapshot is the \
+                    source sandbox as it was, memory included: read the guardrails first. \
+                    See docs/TEAMS.md."
+                    .to_string(),
+                category: CapabilityCategory::Security,
+                operations: vec![
+                    "list_template_shares".to_string(),
+                    "share_template_snapshot".to_string(),
+                    "unshare_template_snapshot".to_string(),
+                ],
+                prerequisites: vec![
+                    "a snapshot owned by a team".to_string(),
+                    "a key or session with the `templates` scope".to_string(),
+                ],
+                permissions_required: vec!["templates".to_string()],
+            },
         ]
     }
 
@@ -2027,7 +2082,26 @@ impl HyperMachineOntology {
         ]
         .into_iter()
         .chain(Self::build_key_operations())
+        .chain(Self::build_auth_operations())
+        .chain(Self::build_template_share_operations())
         .collect()
+    }
+
+    /// The component that serves the operation `id`: `hv2-cluster` for the
+    /// control plane operations that are modelled here as data, `hv2-api`
+    /// for every other one. `tools/check-ontology-coverage.py` compares the
+    /// operations against the routes of each component through this.
+    pub fn operation_component(id: &str) -> &'static str {
+        let control_plane = Self::build_key_operations()
+            .into_iter()
+            .chain(Self::build_auth_operations())
+            .chain(Self::build_template_share_operations())
+            .any(|op| op.id == id);
+        if control_plane {
+            "hv2-cluster"
+        } else {
+            "hv2-api"
+        }
     }
 
     /// The control plane's managed API key routes (`hv2-cluster`
@@ -2246,6 +2320,541 @@ impl HyperMachineOntology {
         ]
     }
 
+    /// The control plane's single sign-on routes (`hv2-cluster`
+    /// `sso_login.rs` and `sso_guest.rs`, routed in `control.rs`). Served by
+    /// the control plane outside its API key check: a person without a key
+    /// gets a session here. Answers 404 unless single sign-on is configured.
+    fn build_auth_operations() -> Vec<Operation> {
+        let error = |status_code: u16, description: &str| OperationResponse {
+            status_code,
+            description: description.to_string(),
+            schema: None,
+        };
+        let json_error = |status_code: u16, description: &str| OperationResponse {
+            status_code,
+            description: description.to_string(),
+            schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "code": { "type": "integer" },
+                    "message": { "type": "string" }
+                }
+            })),
+        };
+        let not_configured = || {
+            json_error(
+                404,
+                "single sign-on is not configured on this control plane (no --sso-issuer)",
+            )
+        };
+        let query = |name: &str, description: &str, schema: serde_json::Value| Parameter {
+            name: name.to_string(),
+            location: ParameterLocation::Query,
+            required: false,
+            description: description.to_string(),
+            schema,
+            default: None,
+        };
+        let sign_in_failures = || {
+            vec![
+                json_error(
+                    500,
+                    "the control plane could not make randomness or seal the sign-in cookie, \
+                     code or session",
+                ),
+                json_error(
+                    502,
+                    "the provider's authorization URL, token endpoint or token answer was unusable",
+                ),
+            ]
+        };
+        let mut login_responses = vec![
+            OperationResponse {
+                status_code: 303,
+                description: "Redirect to the provider's authorization endpoint (code flow, \
+                    S256 PKCE, `openid email profile`). `Set-Cookie: __Host-hm_login` holds \
+                    the sealed state, nonce and PKCE verifier for 600 seconds \
+                    (Secure, HttpOnly, SameSite=Lax); `Cache-Control: no-store`."
+                    .to_string(),
+                schema: None,
+            },
+            json_error(
+                400,
+                "cliState is not 16 to 128 base64url characters, or cliPort and cliChallenge \
+                 are not given together as a port from 1024 and a 43-character S256 challenge. \
+                 A cliPort that is not a number is refused by the framework with a plain-text 400",
+            ),
+            not_configured(),
+        ];
+        login_responses.extend(sign_in_failures());
+        let mut callback_responses = vec![
+            OperationResponse {
+                status_code: 303,
+                description: "Signed in. Browser sign-in: redirect to the `returnTo` the login \
+                    carried, with `__Host-hm_session` set (Secure, HttpOnly, SameSite=Lax, \
+                    host-only; lifetime `--sso-session-hours`, 12 by default) and the login \
+                    cookie cleared. CLI sign-in (the login carried cliPort): redirect to \
+                    `http://127.0.0.1:{cliPort}/callback?code=<one-time code>&state=<cliState>`, \
+                    no session cookie; the code lasts 60 seconds and is useless without the \
+                    PKCE verifier (see sso_cli_token)."
+                    .to_string(),
+                schema: None,
+            },
+            json_error(
+                400,
+                "no sign-in in progress (missing, tampered or expired login cookie), the \
+                 provider sent no code or state, or state does not match this sign-in",
+            ),
+            json_error(
+                401,
+                "the provider refused the sign-in (`error` was sent), refused the code, or its \
+                 ID token failed verification",
+            ),
+            json_error(
+                403,
+                "signed in with the provider, but the email is not in the members file",
+            ),
+            not_configured(),
+        ];
+        callback_responses.extend(sign_in_failures());
+        let mut cli_token_responses = vec![
+            OperationResponse {
+                status_code: 200,
+                description: "A session token for the member, to send as \
+                    `Authorization: Bearer hms1.…`."
+                    .to_string(),
+                schema: Some(serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "token": { "type": "string", "description": "hms1. session token" },
+                        "email": { "type": "string" },
+                        "expiresAt": { "type": "integer", "description": "unix seconds" }
+                    }
+                })),
+            },
+            json_error(
+                401,
+                "the code is not valid or has expired, or the verifier does not answer it",
+            ),
+            json_error(
+                403,
+                "the member was removed from the members file since signing in",
+            ),
+            error(
+                400,
+                "the body is not JSON with string `code` and `verifier` (the framework's own \
+                 rejection: 400, 415 or 422, plain text)",
+            ),
+            not_configured(),
+            json_error(500, "the session could not be minted"),
+        ];
+        cli_token_responses.sort_by_key(|r| r.status_code);
+        vec![
+            Operation {
+                id: "sso_login".to_string(),
+                name: "Start Single Sign-On".to_string(),
+                description: "Start a sign-in with the configured OpenID Connect provider. The \
+                    browser is redirected to the provider and comes back to \
+                    `/auth/callback`. No API key is needed. `returnTo` is where the \
+                    callback sends the browser afterwards: only a path on this control \
+                    plane is honoured (anything else, including `//host` and `/\\host`, \
+                    becomes `/ui`). For the CLI (`hm sandbox vm login`) pass `cliPort`, \
+                    `cliChallenge` and `cliState`: the sign-in then ends at a listener on \
+                    127.0.0.1 with a one-time code instead of a cookie. Nothing is stored \
+                    server-side; state, nonce and verifier travel in a signed cookie. \
+                    Not idempotent: each call makes a new sign-in."
+                    .to_string(),
+                http_method: "GET".to_string(),
+                path: "/auth/login".to_string(),
+                parameters: vec![
+                    query(
+                        "returnTo",
+                        "Path on this control plane to return to after sign-in; default /ui",
+                        serde_json::json!({ "type": "string", "maxLength": 1024, "default": "/ui" }),
+                    ),
+                    query(
+                        "cliPort",
+                        "CLI sign-in only: the unprivileged loopback port the CLI listens on",
+                        serde_json::json!({ "type": "integer", "minimum": 1024, "maximum": 65535 }),
+                    ),
+                    query(
+                        "cliChallenge",
+                        "CLI sign-in only: base64url SHA-256 of the CLI's secret PKCE verifier",
+                        serde_json::json!({ "type": "string", "minLength": 43, "maxLength": 43,
+                            "pattern": "^[A-Za-z0-9_-]{43}$" }),
+                    ),
+                    query(
+                        "cliState",
+                        "CLI sign-in only: the CLI's random state, echoed on the callback",
+                        serde_json::json!({ "type": "string", "pattern": "^[A-Za-z0-9_-]{16,128}$" }),
+                    ),
+                ],
+                request_body: None,
+                responses: login_responses,
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: "sso_callback".to_string(),
+                name: "Complete Single Sign-On".to_string(),
+                description: "The redirect URI the provider sends the browser back to (register \
+                    `https://<control-plane>/auth/callback` with the provider). Requires the \
+                    login cookie from `/auth/login`; checks `state` in constant time, \
+                    exchanges the code with the PKCE verifier, verifies the ID token (RS256 \
+                    or ES256, exact issuer, audience, expiry and nonce) and looks the email \
+                    up in the members file. It is called by the browser, not by an agent. \
+                    Not idempotent: a code works once."
+                    .to_string(),
+                http_method: "GET".to_string(),
+                path: "/auth/callback".to_string(),
+                parameters: vec![
+                    query("code", "Authorization code from the provider", serde_json::json!({ "type": "string" })),
+                    query("state", "The state this sign-in started with", serde_json::json!({ "type": "string" })),
+                    query("error", "Set by the provider when it refused the sign-in", serde_json::json!({ "type": "string" })),
+                ],
+                request_body: None,
+                responses: callback_responses,
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: "sso_session".to_string(),
+                name: "Get Signed-In Member".to_string(),
+                description: "Say who the session is. Send the session as \
+                    `Authorization: Bearer hms1.…` (checked first) or by its \
+                    `__Host-hm_session` cookie. Returns the member's email, principal, team \
+                    and the session's expiry. An API key is not a session: it answers 401."
+                    .to_string(),
+                http_method: "GET".to_string(),
+                path: "/auth/session".to_string(),
+                parameters: vec![],
+                request_body: None,
+                responses: vec![
+                    OperationResponse {
+                        status_code: 200,
+                        description: "The signed-in member.".to_string(),
+                        schema: Some(serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "email": { "type": "string" },
+                                "principalID": { "type": "string" },
+                                "teamID": { "type": ["string", "null"] },
+                                "expiresAt": { "type": "integer", "description": "unix seconds" }
+                            }
+                        })),
+                    },
+                    json_error(
+                        401,
+                        "not signed in: no session, a bad or expired one, or a member since removed from the members file",
+                    ),
+                    not_configured(),
+                ],
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: "sso_guest_handoff".to_string(),
+                name: "Sign In To A Private Guest URL".to_string(),
+                description: "Send a signed-in member who may view a sandbox to its private \
+                    guest URL (`https://{port}-{sandbox}.{guest-domain}/…`, or a bound custom \
+                    domain) with a one-minute handoff sealed to that one host; the host's \
+                    proxy turns it into its own `__Host-hm_guest` cookie at `/__hm/auth`. The \
+                    API session cookie never goes to a guest host. Needs the session \
+                    *cookie* (a bearer token is not accepted here); a browser without one \
+                    is redirected to `/auth/login` and back. Only hosts under a configured \
+                    `--guest-domain` (or a bound custom domain) are served; anything else \
+                    is 400. May view: an administrator, a member of the sandbox's team (or \
+                    its creator where there are no teams), or an email its owner granted \
+                    through web sharing. It is called by the browser, not by an agent."
+                    .to_string(),
+                http_method: "GET".to_string(),
+                path: "/auth/guest".to_string(),
+                parameters: vec![Parameter {
+                    name: "url".to_string(),
+                    location: ParameterLocation::Query,
+                    required: true,
+                    description: "The guest URL to be signed in to; https only, no credentials \
+                        in it"
+                        .to_string(),
+                    schema: serde_json::json!({ "type": "string", "format": "uri" }),
+                    default: None,
+                }],
+                request_body: None,
+                responses: vec![
+                    OperationResponse {
+                        status_code: 303,
+                        description: "Redirect: to `https://{host}/__hm/auth?token=<handoff>&path=…` \
+                            when the member may view the sandbox, or to `/auth/login?returnTo=…` \
+                            when there is no session cookie. `Cache-Control: no-store`."
+                            .to_string(),
+                        schema: None,
+                    },
+                    error(400, "not a guest URL of this control plane (plain text); a missing `url` is the framework's own 400"),
+                    error(403, "the member may not view this sandbox (plain text)"),
+                    error(404, "single sign-on is not configured (plain text)"),
+                    error(500, "the handoff could not be sealed"),
+                ],
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: "sso_logout".to_string(),
+                name: "Sign Out".to_string(),
+                description: "Clear the `__Host-hm_session` cookie. The request must carry an \
+                    `Origin` header equal to the control plane's own origin (the redirect \
+                    URL's), so only its own pages can sign a browser out; a script that \
+                    sends none gets 403. It ends nothing server-side: a session token is \
+                    stateless, and one already copied (a bearer token, a stolen cookie) \
+                    stays valid until it expires. See the guardrails."
+                    .to_string(),
+                http_method: "POST".to_string(),
+                path: "/auth/logout".to_string(),
+                parameters: vec![],
+                request_body: None,
+                responses: vec![
+                    error(204, "the session cookie is cleared (Max-Age=0)"),
+                    json_error(403, "the request did not come from this control plane's own pages (no matching Origin)"),
+                    not_configured(),
+                ],
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: "sso_cli_token".to_string(),
+                name: "Trade A CLI Sign-In Code For A Session Token".to_string(),
+                description: "Finish a CLI sign-in: trade the one-time code the CLI's loopback \
+                    listener received, together with the PKCE verifier that never left the \
+                    CLI, for a session token (`hm sandbox vm login` does this). Needs no \
+                    API key. A code seen in transit is useless without the verifier and \
+                    expires after 60 seconds. The member is looked up again, so one removed \
+                    since signing in gets 403. The token is sent as \
+                    `Authorization: Bearer hms1.…` and lasts `--sso-session-hours` (12 by \
+                    default). Not idempotent: each call mints a new token."
+                    .to_string(),
+                http_method: "POST".to_string(),
+                path: "/auth/cli-token".to_string(),
+                parameters: vec![],
+                request_body: Some(RequestBody {
+                    content_type: "application/json".to_string(),
+                    required: true,
+                    schema: serde_json::json!({
+                        "type": "object",
+                        "required": ["code", "verifier"],
+                        "properties": {
+                            "code": { "type": "string", "description": "the hmc1. code from the loopback callback" },
+                            "verifier": { "type": "string", "description": "the PKCE verifier whose SHA-256 was the login's cliChallenge" }
+                        }
+                    }),
+                }),
+                responses: cli_token_responses,
+                idempotent: false,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+        ]
+    }
+
+    /// The control plane's team snapshot sharing routes (`hv2-cluster`
+    /// `control.rs`: `template_shares`, `share_template`; the node side is
+    /// `hv2-sandboxd` `snapshots.rs`). Served by the control plane and
+    /// authenticated with `X-API-Key` or a session; the `templates` scope.
+    fn build_template_share_operations() -> Vec<Operation> {
+        let json_error = |status_code: u16, description: &str| OperationResponse {
+            status_code,
+            description: description.to_string(),
+            schema: Some(serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "code": { "type": "integer" },
+                    "message": { "type": "string" }
+                }
+            })),
+        };
+        let auth_errors = || {
+            vec![
+                json_error(401, "missing, expired or wrong X-API-Key or session"),
+                json_error(
+                    403,
+                    "the key or member lacks the `templates` scope, is an observer or viewer, or \
+                     a session-cookie change did not come from the control plane's own pages",
+                ),
+                json_error(503, "the cluster store is unavailable"),
+            ]
+        };
+        let snapshot_param = || Parameter {
+            name: "id".to_string(),
+            location: ParameterLocation::Path,
+            required: true,
+            description: "The snapshot's name (an optional `:tag` is ignored)".to_string(),
+            schema: serde_json::json!({ "type": "string" }),
+            default: None,
+        };
+        let team_param = || Parameter {
+            name: "team".to_string(),
+            location: ParameterLocation::Path,
+            required: true,
+            description: "The team to share with, or stop sharing with: a bounded team label"
+                .to_string(),
+            schema: serde_json::json!({ "type": "string" }),
+            default: None,
+        };
+        let shares_schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "snapshotID": { "type": "string" },
+                "teamID": { "type": "string", "description": "the owning team" },
+                "sharedWith": { "type": "array", "items": { "type": "string" } }
+            }
+        });
+        let mut list_responses = vec![
+            OperationResponse {
+                status_code: 200,
+                description: "The snapshot's owning team and the teams it is shared with."
+                    .to_string(),
+                schema: Some(shares_schema.clone()),
+            },
+            json_error(
+                404,
+                "no such snapshot, or it belongs to another team (the two look the same)",
+            ),
+        ];
+        list_responses.extend(auth_errors());
+        let mut share_responses = vec![
+            OperationResponse {
+                status_code: 200,
+                description: "Shared (or already shared). Every node that has the snapshot was \
+                    told."
+                    .to_string(),
+                schema: Some(shares_schema),
+            },
+            json_error(
+                400,
+                "the team or snapshot id is invalid, or the body does not say \
+                 `acknowledgeContents: true`",
+            ),
+            json_error(
+                404,
+                "no such snapshot, or it belongs to another team (the two look the same)",
+            ),
+            json_error(
+                409,
+                "the snapshot is an operator's template (every team already uses it), or the \
+                 team is the snapshot's own",
+            ),
+            json_error(
+                500,
+                "the share list could not be written to the snapshot store",
+            ),
+        ];
+        share_responses.extend(auth_errors());
+        let mut unshare_responses = vec![
+            OperationResponse {
+                status_code: 204,
+                description: "Not shared with the team any more. Sandboxes it already started \
+                    run on."
+                    .to_string(),
+                schema: None,
+            },
+            json_error(400, "the team or snapshot id is invalid"),
+            json_error(
+                404,
+                "no such snapshot, or it belongs to another team (the two look the same)",
+            ),
+            json_error(
+                409,
+                "the snapshot is an operator's template, or the team is the snapshot's own",
+            ),
+            json_error(
+                500,
+                "the share list could not be written to the snapshot store",
+            ),
+        ];
+        unshare_responses.extend(auth_errors());
+        vec![
+            Operation {
+                id: "list_template_shares".to_string(),
+                name: "List Snapshot Shares".to_string(),
+                description: "List the teams a snapshot is shared with. Only the snapshot's own \
+                    team (or an administrator) may read it; the team shared with, and every \
+                    other team, gets 404."
+                    .to_string(),
+                http_method: "GET".to_string(),
+                path: "/templates/{id}/shares".to_string(),
+                parameters: vec![snapshot_param()],
+                request_body: None,
+                responses: list_responses,
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: "share_template_snapshot".to_string(),
+                name: "Share A Snapshot With A Team".to_string(),
+                description: "Let another team start sandboxes from this team's snapshot. What \
+                    they start from is the source sandbox as it was: its memory, its files and \
+                    its environment variables; nothing is removed first. The request must \
+                    say it knows with `{\"acknowledgeContents\": true}`. Only the snapshot's \
+                    own team (or an administrator) may do it. The team shared with lists \
+                    the snapshot and starts sandboxes from it (those sandboxes are its \
+                    own); it cannot read the list, share it on, revoke it or delete it. \
+                    Taking a new snapshot of the same name replaces it and drops its \
+                    shares. Idempotent: sharing twice is the same as once. See the \
+                    guardrails."
+                    .to_string(),
+                http_method: "PUT".to_string(),
+                path: "/templates/{id}/shares/{team}".to_string(),
+                parameters: vec![snapshot_param(), team_param()],
+                request_body: Some(RequestBody {
+                    content_type: "application/json".to_string(),
+                    required: true,
+                    schema: serde_json::json!({
+                        "type": "object",
+                        "required": ["acknowledgeContents"],
+                        "properties": {
+                            "acknowledgeContents": { "type": "boolean", "const": true,
+                                "description": "must be true: the other team gets the sandbox's memory, files and environment variables" }
+                        }
+                    }),
+                }),
+                responses: share_responses,
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+            Operation {
+                id: "unshare_template_snapshot".to_string(),
+                name: "Stop Sharing A Snapshot With A Team".to_string(),
+                description: "Stop letting a team start sandboxes from this team's snapshot. \
+                    New starts are refused at once; sandboxes already started run on. Only \
+                    the snapshot's own team (or an administrator) may do it. Idempotent: \
+                    stopping a share that does not exist is 204."
+                    .to_string(),
+                http_method: "DELETE".to_string(),
+                path: "/templates/{id}/shares/{team}".to_string(),
+                parameters: vec![snapshot_param(), team_param()],
+                request_body: None,
+                responses: unshare_responses,
+                idempotent: true,
+                async_operation: false,
+                rate_limit: None,
+                examples: vec![],
+            },
+        ]
+    }
+
     /// Warnings attached to interfaces. Exposures only: each entry is a
     /// documented residual, not a general caution.
     fn build_guardrails() -> Vec<Guardrail> {
@@ -2303,6 +2912,113 @@ impl HyperMachineOntology {
                     Create keys with short expiries."
                     .to_string(),
                 reference: "docs/security/SECURITY_AUDIT_2026-11-16.md".to_string(),
+            },
+            Guardrail {
+                id: "control-plane-unauthenticated-mode".to_string(),
+                severity: GuardrailSeverity::Critical,
+                title: "A control plane started with --allow-unauthenticated is open".to_string(),
+                description: "With --allow-unauthenticated the control plane has no API key \
+                    and no sign-on, so every caller who can reach its port (and its envd \
+                    proxy port) is treated as an administrator, with no team: anyone can \
+                    make, read and delete sandboxes, machines, volumes and keys. For \
+                    snapshot sharing that means any caller can read the share list of any \
+                    team's snapshot and share it with any team, which gives that team the \
+                    sandbox's memory, files and environment variables. The control plane \
+                    logs a warning each time it starts this way. (The key routes still \
+                    want an administrator or team-admin credential, so an anonymous caller \
+                    does not get them.)"
+                    .to_string(),
+                applies_to: vec![
+                    "team_template_sharing".to_string(),
+                    "share_template_snapshot".to_string(),
+                    "unshare_template_snapshot".to_string(),
+                    "list_template_shares".to_string(),
+                ],
+                condition: "The control plane was started with --allow-unauthenticated. Without \
+                    it, a control plane with no key source and no --sso-issuer refuses to \
+                    start."
+                    .to_string(),
+                mitigation: "Do not use the flag on a reachable control plane. Give it an \
+                    --api-key (or HV2_API_KEY), an --api-keys-file, or single sign-on \
+                    (--sso-issuer); managed keys alone do not count, because an \
+                    administrator mints them. Where it must run open, bind it to loopback or \
+                    a private network."
+                    .to_string(),
+                reference: "docs/security/SECURITY_AUDIT_2026-11-16.md".to_string(),
+            },
+            Guardrail {
+                id: "sso-session-not-revocable".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "A single sign-on session cannot be revoked one at a time".to_string(),
+                description: "A session is a signed, stateless token. Signing out only clears \
+                    the browser's cookie; a copy of the token (a CLI bearer token, a stolen \
+                    cookie) keeps working until it expires, which is `--sso-session-hours` \
+                    after sign-in (12 by default, at most 168). The control plane has no \
+                    list of sessions to delete from."
+                    .to_string(),
+                applies_to: vec![
+                    "sso_logout".to_string(),
+                    "sso_callback".to_string(),
+                    "sso_cli_token".to_string(),
+                ],
+                condition: "A session token may have been copied or exposed before it expired."
+                    .to_string(),
+                mitigation: "Remove the member from the members file (reloaded on SIGHUP): \
+                    they lose access on their next request even with an unexpired session. \
+                    To end every session at once, replace the session key \
+                    (`--sso-session-key-file`); control planes behind one name share it, so \
+                    replace it on all. Shorten `--sso-session-hours` where tokens are \
+                    kept on laptops."
+                    .to_string(),
+                reference: "docs/SSO.md".to_string(),
+            },
+            Guardrail {
+                id: "sso-guest-urls-need-guest-domain".to_string(),
+                severity: GuardrailSeverity::Info,
+                title: "Private guest URLs are signed in only under a configured guest domain"
+                    .to_string(),
+                description: "A guest URL names its sandbox by its first label alone, so \
+                    which domains count as guest URLs is the operator's to say. \
+                    /auth/guest hands a member a sign-in only for `{port}-{sandbox}.{domain}` \
+                    with exactly one label before a configured --guest-domain, or for a \
+                    custom domain bound to a sandbox; any other URL answers 400. \
+                    Without this a member who followed a link to an attacker's domain would \
+                    be handed a credential its owner could redeem at the proxy."
+                    .to_string(),
+                applies_to: vec!["sso_guest_handoff".to_string()],
+                condition: "A URL not under a configured --guest-domain is passed as `url`, \
+                    or the control plane runs without --sso-guest-urls and --guest-domain."
+                    .to_string(),
+                mitigation: "Start the control plane with --sso-guest-urls, proxy TLS and one \
+                    --guest-domain per domain you serve sandboxes under; it refuses to start \
+                    with one of the two flags and not the other. Do not expect /auth/guest \
+                    to sign in to any other host."
+                    .to_string(),
+                reference: "docs/SSO.md#private-guest-urls".to_string(),
+            },
+            Guardrail {
+                id: "shared-snapshot-contains-memory-and-secrets".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "A shared snapshot is the source sandbox as it was, memory included"
+                    .to_string(),
+                description: "A snapshot shared with another team gives that team the source \
+                    sandbox's memory, its files and its environment variables. Nothing is \
+                    removed first, because a layered memory snapshot cannot be cleaned \
+                    after the fact, which is why the request must carry \
+                    `acknowledgeContents: true`. Revoking stops new starts at once but \
+                    cannot recall sandboxes the team already started, or what they read."
+                    .to_string(),
+                applies_to: vec![
+                    "share_template_snapshot".to_string(),
+                    "team_template_sharing".to_string(),
+                ],
+                condition: "Any share of a team's snapshot with another team.".to_string(),
+                mitigation: "Take the snapshot from a sandbox that never held what the other \
+                    team must not have (secrets, tokens, customer data in memory or on \
+                    disk). A Git credential held on the host (--team-git-credential, \
+                    --git-credential) is not in the guest and so not in the snapshot."
+                    .to_string(),
+                reference: "docs/TEAMS.md#sharing-a-snapshot-with-another-team".to_string(),
             },
         ]
     }
@@ -5659,13 +6375,29 @@ mod tests {
     fn guardrails_name_known_interfaces_and_have_content() {
         let onto = HyperMachineOntology::build();
         let tools: Vec<String> = mcp_registry_tools().into_iter().map(|t| t.name).collect();
-        for id in ["redis-shared-user-revocation", "pre-tombstone-revocations"] {
+        let ids = [
+            "redis-shared-user-revocation",
+            "pre-tombstone-revocations",
+            "control-plane-unauthenticated-mode",
+            "sso-session-not-revocable",
+            "sso-guest-urls-need-guest-domain",
+            "shared-snapshot-contains-memory-and-secrets",
+        ];
+        let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        for id in ids {
             let g = onto.guardrails.iter().find(|g| g.id == id).expect(id);
             assert!(!g.description.is_empty() && !g.mitigation.is_empty());
             assert!(!g.condition.is_empty() && !g.reference.is_empty());
             assert!(!g.applies_to.is_empty());
+            // Each cites a document that exists.
+            let doc = g.reference.split('#').next().unwrap();
+            assert!(repo.join(doc).is_file(), "{id}: {doc} does not exist");
         }
-        assert_eq!(onto.guardrails.len(), 2, "owner chose exposures only");
+        assert_eq!(
+            onto.guardrails.len(),
+            ids.len(),
+            "exposures only, each sourced"
+        );
         for g in &onto.guardrails {
             for id in &g.applies_to {
                 let known = onto.operations.iter().any(|o| &o.id == id)

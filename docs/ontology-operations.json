@@ -1,0 +1,142 @@
+{
+  "operations": [
+    {
+      "component": "hv2-api",
+      "id": "list_vms",
+      "method": "GET",
+      "path": "/api/v1/vms"
+    },
+    {
+      "component": "hv2-api",
+      "id": "create_vm",
+      "method": "POST",
+      "path": "/api/v1/vms"
+    },
+    {
+      "component": "hv2-api",
+      "id": "delete_vm",
+      "method": "DELETE",
+      "path": "/api/v1/vms/{id}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_vm",
+      "method": "GET",
+      "path": "/api/v1/vms/{id}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_metrics",
+      "method": "GET",
+      "path": "/api/v1/vms/{id}/metrics"
+    },
+    {
+      "component": "hv2-api",
+      "id": "pause_vm",
+      "method": "POST",
+      "path": "/api/v1/vms/{id}/pause"
+    },
+    {
+      "component": "hv2-api",
+      "id": "resume_vm",
+      "method": "POST",
+      "path": "/api/v1/vms/{id}/resume"
+    },
+    {
+      "component": "hv2-api",
+      "id": "execute_script",
+      "method": "POST",
+      "path": "/api/v1/vms/{id}/script"
+    },
+    {
+      "component": "hv2-api",
+      "id": "start_vm",
+      "method": "POST",
+      "path": "/api/v1/vms/{id}/start"
+    },
+    {
+      "component": "hv2-api",
+      "id": "stop_vm",
+      "method": "POST",
+      "path": "/api/v1/vms/{id}/stop"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "sso_callback",
+      "method": "GET",
+      "path": "/auth/callback"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "sso_cli_token",
+      "method": "POST",
+      "path": "/auth/cli-token"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "sso_guest_handoff",
+      "method": "GET",
+      "path": "/auth/guest"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "sso_login",
+      "method": "GET",
+      "path": "/auth/login"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "sso_logout",
+      "method": "POST",
+      "path": "/auth/logout"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "sso_session",
+      "method": "GET",
+      "path": "/auth/session"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_managed_keys",
+      "method": "GET",
+      "path": "/keys"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "create_managed_key",
+      "method": "POST",
+      "path": "/keys"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "revoke_managed_key",
+      "method": "DELETE",
+      "path": "/keys/{id}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_team_members",
+      "method": "GET",
+      "path": "/teams/{team}/members"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_template_shares",
+      "method": "GET",
+      "path": "/templates/{id}/shares"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "unshare_template_snapshot",
+      "method": "DELETE",
+      "path": "/templates/{id}/shares/{team}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "share_template_snapshot",
+      "method": "PUT",
+      "path": "/templates/{id}/shares/{team}"
+    }
+  ]
+}

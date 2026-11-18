@@ -209,6 +209,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seventh, Gitleaks, is now a real gate; see Security.)
 
 ### Added
+- **The agentic ontology describes the control plane's sign-in and snapshot
+  sharing routes, and a CI gate keeps it complete.** `sso_sign_in`
+  (`/auth/login`, `/callback`, `/session`, `/guest`, `/logout`, `/cli-token`)
+  and `team_template_sharing` (`/templates/{id}/shares[/{team}]`) are modelled
+  with request and response shapes, and four new guardrails (open
+  `--allow-unauthenticated` mode, non-revocable SSO sessions, guest URLs
+  needing a `--guest-domain`, shared snapshots carrying memory). New
+  `tools/check-ontology-coverage.py` extracts every axum route from hv2-api,
+  hv2-cluster, hv2-sandboxd, hm-cli and hv2-jobs and fails CI if one is
+  neither declared (`docs/ontology-operations.json`, kept in sync by a test)
+  nor in `tools/ontology-coverage-allowlist.txt`, which can only shrink.
 - **The agentic ontology has guardrails, and describes the managed API key
   interface.** `/agentic/ontology` gains a top-level `guardrails` list
   (`id`, `severity`, `title`, `description`, `applies_to`, `condition`,

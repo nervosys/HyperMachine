@@ -534,7 +534,7 @@ async fn test_served_ontology_carries_guardrails_and_key_interface() {
     };
     let (operations, capabilities) = (ids("operations"), ids("capabilities"));
     let guardrails = json["guardrails"].as_array().expect("guardrails list");
-    assert_eq!(guardrails.len(), 2);
+    assert_eq!(guardrails.len(), 6);
     for id in ["redis-shared-user-revocation", "pre-tombstone-revocations"] {
         let g = guardrails
             .iter()
@@ -580,4 +580,134 @@ async fn test_served_ontology_carries_guardrails_and_key_interface() {
         .unwrap();
     assert_eq!(revoke["http_method"], "DELETE");
     assert_eq!(revoke["path"], "/keys/{id}");
+}
+
+// ============================================================================
+// Declared-operations manifest (read by tools/check-ontology-coverage.py)
+// ============================================================================
+
+/// `docs/ontology-operations.json` lists every operation the ontology
+/// declares (component, id, method, path), so the CI coverage gate can read
+/// it without building Rust. This test keeps it identical to the built
+/// ontology. After changing an operation, regenerate it with
+/// `UPDATE_ONTOLOGY_OPERATIONS=1 cargo test -p hv2-api --test ontology_tests`.
+#[test]
+fn ontology_operations_manifest_is_current() {
+    use hv2_api::ontology::HyperMachineOntology;
+
+    let onto = HyperMachineOntology::build();
+    let mut operations: Vec<serde_json::Value> = onto
+        .operations
+        .iter()
+        .map(|op| {
+            serde_json::json!({
+                "component": HyperMachineOntology::operation_component(&op.id),
+                "id": op.id,
+                "method": op.http_method.to_uppercase(),
+                "path": op.path,
+            })
+        })
+        .collect();
+    operations.sort_by_key(|o| {
+        (
+            o["component"].as_str().unwrap().to_string(),
+            o["path"].as_str().unwrap().to_string(),
+            o["method"].as_str().unwrap().to_string(),
+            o["id"].as_str().unwrap().to_string(),
+        )
+    });
+    let mut expected =
+        serde_json::to_string_pretty(&serde_json::json!({ "operations": operations })).unwrap();
+    expected.push('\n');
+
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/ontology-operations.json");
+    if std::env::var_os("UPDATE_ONTOLOGY_OPERATIONS").is_some() {
+        std::fs::write(&path, &expected).unwrap();
+        return;
+    }
+    let on_disk = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| {
+            panic!(
+                "{}: {e}; regenerate with UPDATE_ONTOLOGY_OPERATIONS=1",
+                path.display()
+            )
+        })
+        .replace("\r\n", "\n");
+    assert!(
+        on_disk == expected,
+        "docs/ontology-operations.json is stale; regenerate it with \
+         UPDATE_ONTOLOGY_OPERATIONS=1 cargo test -p hv2-api --test ontology_tests"
+    );
+}
+
+/// The sign-in and team routes the control plane serves are described, with
+/// the facts an agent needs to call them.
+#[test]
+fn control_plane_sign_in_and_sharing_operations_are_described() {
+    use hv2_api::ontology::HyperMachineOntology;
+
+    let onto = HyperMachineOntology::build();
+    let want = [
+        ("sso_login", "GET", "/auth/login"),
+        ("sso_callback", "GET", "/auth/callback"),
+        ("sso_session", "GET", "/auth/session"),
+        ("sso_guest_handoff", "GET", "/auth/guest"),
+        ("sso_logout", "POST", "/auth/logout"),
+        ("sso_cli_token", "POST", "/auth/cli-token"),
+        ("list_template_shares", "GET", "/templates/{id}/shares"),
+        (
+            "share_template_snapshot",
+            "PUT",
+            "/templates/{id}/shares/{team}",
+        ),
+        (
+            "unshare_template_snapshot",
+            "DELETE",
+            "/templates/{id}/shares/{team}",
+        ),
+    ];
+    for (id, method, path) in want {
+        let op = onto
+            .operations
+            .iter()
+            .find(|o| o.id == id)
+            .unwrap_or_else(|| panic!("missing operation {id}"));
+        assert_eq!((op.http_method.as_str(), op.path.as_str()), (method, path));
+        assert!(op.description.len() > 150, "{id} needs a full description");
+        assert!(!op.responses.is_empty(), "{id} lists no responses");
+        assert_eq!(HyperMachineOntology::operation_component(id), "hv2-cluster");
+        // Every capability that lists it is a real capability.
+        assert!(
+            onto.capabilities
+                .iter()
+                .any(|c| c.operations.iter().any(|o| o == id)),
+            "{id} belongs to no capability"
+        );
+    }
+    // Operations that are declared with a body or parameters say so.
+    let cli = onto
+        .operations
+        .iter()
+        .find(|o| o.id == "sso_cli_token")
+        .unwrap();
+    assert!(cli.request_body.is_some());
+    let share = onto
+        .operations
+        .iter()
+        .find(|o| o.id == "share_template_snapshot")
+        .unwrap();
+    assert!(share.request_body.as_ref().unwrap().schema["required"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|r| r == "acknowledgeContents"));
+    // The guardrails that name them.
+    assert!(!onto.guardrails_for("share_template_snapshot").is_empty());
+    assert!(!onto.guardrails_for("sso_logout").is_empty());
+    assert!(!onto.guardrails_for("sso_guest_handoff").is_empty());
+    // A path-less operation would escape the coverage gate.
+    for op in &onto.operations {
+        assert!(op.path.starts_with('/'), "{} has path {:?}", op.id, op.path);
+    }
 }

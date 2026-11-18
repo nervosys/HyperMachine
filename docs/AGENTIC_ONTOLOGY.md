@@ -178,6 +178,49 @@ reachable here ([API_KEY_ROTATION.md](API_KEY_ROTATION.md)).
 **Permissions Required:** `administrator` or `team-admin`.
 **Prerequisite:** control plane started with `--managed-key-secret-file`.
 
+### Single Sign-On (`sso_sign_in`)
+
+Sign people in to the cluster control plane through an OpenID Connect
+provider, from a browser or the CLI. Served by the **control plane**, outside
+its API key check (they are how a person without a key gets a session), and
+modelled as data like the key routes. Every route answers 404 unless the
+control plane was started with `--sso-issuer` and the related `--sso-*`
+options ([SSO.md](SSO.md)). Handlers: `crates/hv2-cluster/src/sso_login.rs`
+and `sso_guest.rs`.
+
+| Operation (`id`)    | Method and path       | Notes |
+| ------------------- | --------------------- | ----- |
+| `sso_login`         | `GET /auth/login`     | 303 to the provider; `returnTo` (own paths only, else `/ui`); CLI: `cliPort` (from 1024), `cliChallenge`, `cliState`; 400 on malformed CLI parameters |
+| `sso_callback`      | `GET /auth/callback`  | Browser-only. 303 with `__Host-hm_session` (or, for the CLI, to `127.0.0.1:{cliPort}/callback?code=…`); 400 no sign-in or bad state, 401 provider/ID token refused, 403 not in the members file |
+| `sso_session`       | `GET /auth/session`   | `Authorization: Bearer hms1.…` or the cookie; 200 `{email, principalID, teamID, expiresAt}`, 401 not signed in |
+| `sso_guest_handoff` | `GET /auth/guest?url=` | Cookie session only. 303 to the guest host's `/__hm/auth` with a one-minute handoff; 400 if not under a `--guest-domain`, 403 if the member may not view the sandbox |
+| `sso_logout`        | `POST /auth/logout`   | 204 and the cookie cleared; 403 without a matching `Origin`. Revokes nothing server-side |
+| `sso_cli_token`     | `POST /auth/cli-token` | `{code, verifier}` for `{token, email, expiresAt}`; 401 bad or expired code or verifier, 403 member removed |
+
+**Permissions Required:** a member listed in the members file.
+**Prerequisite:** control plane started with `--sso-issuer`,
+`--sso-client-id`, `--sso-redirect-url`, `--sso-members-file` and
+`--sso-session-key-file`; guest URLs also need `--sso-guest-urls`, proxy TLS
+and a `--guest-domain`.
+
+### Snapshot Sharing Between Teams (`team_template_sharing`)
+
+Let another team start sandboxes from a team's snapshot. Served by the
+**control plane**; authenticated with `X-API-Key` or a session with the
+`templates` scope. Only the snapshot's own team (or an administrator) may use
+these; every other team gets 404 ([TEAMS.md](TEAMS.md#sharing-a-snapshot-with-another-team)).
+Handlers: `template_shares` and `share_template` in
+`crates/hv2-cluster/src/control.rs`, and `snapshots::share` in
+`crates/hv2-sandboxd/src/snapshots.rs`.
+
+| Operation (`id`)            | Method and path                       | Notes |
+| --------------------------- | ------------------------------------- | ----- |
+| `list_template_shares`      | `GET /templates/{id}/shares`          | 200 `{snapshotID, teamID, sharedWith}` |
+| `share_template_snapshot`   | `PUT /templates/{id}/shares/{team}`   | Body `{"acknowledgeContents": true}` required (400 without); 409 for an operator's template or the snapshot's own team |
+| `unshare_template_snapshot` | `DELETE /templates/{id}/shares/{team}` | 204; sandboxes already started run on |
+
+**Permissions Required:** `templates` scope, as the snapshot's team or an administrator.
+
 ### Cluster Store Configuration (`cluster_store_configuration`)
 
 Where control planes, nodes and the native gateway keep shared state,
@@ -206,13 +249,14 @@ are served as the top-level `guardrails` list of `/agentic/ontology`.
 Guardrails are advisory data: nothing blocks a call because of one. For every
 MCP tool named in `applies_to`, the OpenAI, Anthropic, Gemini and
 `/agentic/mcp` exports append a `WARNING - ...` line to the tool description,
-so a model sees the caveat when it picks the tool. (Today the two guardrails
-below name control-plane operations, which are not MCP tools, so no tool
+so a model sees the caveat when it picks the tool. (Today every guardrail
+below names control-plane operations, which are not MCP tools, so no tool
 description changes yet.) Older documents without the field still deserialize
 (`guardrails` defaults to empty).
 
-Current guardrails (the documented residuals of finding O12 in
-[the 2026-11-16 security audit](security/SECURITY_AUDIT_2026-11-16.md)):
+Current guardrails. Each is a documented residual or dangerous mode and cites
+its source; the first two are finding O12 in
+[the 2026-11-16 security audit](security/SECURITY_AUDIT_2026-11-16.md):
 
 - **`redis-shared-user-revocation`** (warning; applies to `revoke_managed_key`,
   `cluster_store_configuration`). Where nodes and control planes share one
@@ -226,6 +270,32 @@ Current guardrails (the documented residuals of finding O12 in
   above never covered it. Revoking again does not help (404, nothing
   written); only the key's expiry bounds it. Changing the managed-key secret
   is a blunt revoke-all.
+- **`control-plane-unauthenticated-mode`** (critical; applies to
+  `team_template_sharing` and its three operations). A control plane started
+  with `--allow-unauthenticated` has no key and no sign-on, so every caller who
+  can reach it is an administrator with no team: any caller can read and change
+  any team's snapshot shares, which hands that team the sandbox's memory, files
+  and environment variables. (The key routes still want an administrator or
+  team-admin credential.) Mitigation: do not use the flag on a reachable
+  control plane. Finding O4 in
+  [the audit](security/SECURITY_AUDIT_2026-11-16.md).
+- **`sso-session-not-revocable`** (warning; applies to `sso_logout`,
+  `sso_callback`, `sso_cli_token`). A session is a stateless signed token;
+  signing out only clears the cookie, and a copied token works until it
+  expires (`--sso-session-hours`, 12 by default). Mitigation: remove the member
+  from the members file, or replace the session key to end every session
+  ([SSO.md](SSO.md)).
+- **`sso-guest-urls-need-guest-domain`** (info; applies to
+  `sso_guest_handoff`). `/auth/guest` signs a member in only for
+  `{port}-{sandbox}.{domain}` under a configured `--guest-domain` (or a bound
+  custom domain); any other URL is 400, so a link to an attacker's domain gets
+  no credential ([SSO.md](SSO.md#private-guest-urls)).
+- **`shared-snapshot-contains-memory-and-secrets`** (warning; applies to
+  `share_template_snapshot`, `team_template_sharing`). A shared snapshot is
+  the source sandbox as it was, memory included, and revoking cannot recall
+  sandboxes already started. Take the snapshot from a sandbox that never held
+  what the other team must not have
+  ([TEAMS.md](TEAMS.md#sharing-a-snapshot-with-another-team)).
 
 ---
 
@@ -597,3 +667,20 @@ response = model.generate_content("Create a VM with GPU support")
 - Author: HyperMachine API Team
 - Reviewers: AI Integration Lead, Security Team
 - Next Review: 2026-05-02
+
+---
+
+## Coverage gate
+
+The ontology is meant to describe every HTTP interface. Until it does,
+`tools/check-ontology-coverage.py` (CI job "Unread Controls") extracts every
+route from the axum route tables of `hv2-api`, `hv2-cluster`, `hv2-sandboxd`,
+`hm-cli` and `hv2-jobs` and compares them with the operations declared here.
+A route that is neither declared nor listed in
+`tools/ontology-coverage-allowlist.txt` fails the build, and so does an
+allowlisted route that is now declared or no longer exists, so the list only
+shrinks. The declared operations are read from
+`docs/ontology-operations.json`, which the `ontology_operations_manifest_is_current`
+test keeps identical to the built ontology; after adding an operation run
+`UPDATE_ONTOLOGY_OPERATIONS=1 cargo test -p hv2-api --test ontology_tests`
+and delete the route's line from the allowlist.
