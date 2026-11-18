@@ -288,6 +288,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 
 ### Security
+- **A Redis error could abort a node.** A Redis server or proxy that answers MULTI with an error (for example an ACL user without `+@transaction`) made redis-rs underflow a counter, and release builds abort on that. Node registration and removal now use EVAL scripts instead of MULTI/EXEC, and clippy forbids `redis::Pipeline::atomic` and `redis::transaction`.
 - **A node could undo a key revocation through Redis (O12).** Nodes, control planes and the native
   gateway shared one Redis user, so a node could delete a revoked managed key's revocation record and
   write the old key record back. `tools/redis-acl.py` now prints one Redis 7+ ACL user per role; the node
