@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`/sandboxes/{id}/network` answered a wrong method with an empty body
+  labelled JSON.** The control plane relayed every method to a node that
+  serves only `PUT`, so `GET`, `POST` or `DELETE` came back as the node's bare
+  405 under `content-type: application/json`. The control plane now refuses
+  them itself with a JSON 405 and `Allow: PUT`, after the usual key and
+  ownership checks, and sends nothing to the node.
 - **The control plane dropped a checkpoint archive's `content-disposition` and
   `x-hv2-archive-skipped`.** Its forward of a sandbox's routes passed on only the
   node's status and `content-type`, so a caller going through the control plane

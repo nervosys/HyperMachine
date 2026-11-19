@@ -515,7 +515,12 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         .route("/machines/{name}/network/decisions", get(to_machine_node))
         .route("/machines/{name}/{action}", post(to_machine_node))
         .route("/sandboxes/{id}/refreshes", post(forward))
-        .route("/sandboxes/{id}/network", any(forward))
+        // The node serves only `PUT` here; any other method it would answer 405
+        // with an empty body, which `forward` labels JSON.
+        .route(
+            "/sandboxes/{id}/network",
+            axum::routing::put(forward).fallback(network_method_not_allowed),
+        )
         .route("/sandboxes/{id}/network/decisions", get(forward))
         .route("/sandboxes/{id}/exec", post(forward))
         .route("/sandboxes/{id}/commands", get(forward))
@@ -3803,6 +3808,19 @@ async fn to_volume_node(
         team.as_ref(),
     )
     .await
+}
+
+/// Any method but `PUT` on `/sandboxes/{id}/network`: refused here, as JSON,
+/// since the node would answer with an empty body.
+async fn network_method_not_allowed() -> Response {
+    let mut response = api_error(
+        StatusCode::METHOD_NOT_ALLOWED,
+        "only PUT is served on /sandboxes/{id}/network",
+    );
+    response
+        .headers_mut()
+        .insert(axum::http::header::ALLOW, HeaderValue::from_static("PUT"));
+    response
 }
 
 /// `GET /sandboxes/metrics`: each sandbox's latest sample, from whichever

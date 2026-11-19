@@ -813,3 +813,90 @@ async fn telemetry_destinations_are_a_principals_own() {
         200
     );
 }
+
+/// A node reports every sandbox it runs; a key sees the samples of its own
+/// scope's sandboxes only, however it asks.
+#[tokio::test]
+async fn sandbox_metrics_are_filtered_to_the_callers_scope() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    seed_sandboxes(&store).await;
+    let seen: Seen = Arc::default();
+    let sample = json!({"cpuCount": 1});
+    let rows = json!({"sandboxes": {
+        "alice-sbx": sample, "bob-sbx": sample, "red-sbx": sample, "legacy": sample,
+    }});
+    let _node = fake_node(&store, "n", "/sandboxes/metrics", rows, &seen).await;
+    let plane = Plane::new(store).await;
+    let ids = |value: Value| -> BTreeSet<String> {
+        value["sandboxes"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect()
+    };
+    assert_eq!(
+        ids(plane.json("/sandboxes/metrics", "alice-key").await),
+        set(&["alice-sbx"])
+    );
+    assert_eq!(
+        ids(plane.json("/sandboxes/metrics", "bob-key").await),
+        set(&["bob-sbx"])
+    );
+    assert_eq!(
+        ids(plane.json("/sandboxes/metrics", "red-key").await),
+        set(&["red-sbx"])
+    );
+    // Naming another's sandbox in the query does not widen it (this node
+    // ignores the query and reports all four; the control plane filters).
+    assert_eq!(
+        ids(plane
+            .json(
+                "/sandboxes/metrics?sandbox_ids=bob-sbx,red-sbx",
+                "alice-key"
+            )
+            .await),
+        set(&["alice-sbx"])
+    );
+    assert_eq!(
+        ids(plane.json("/sandboxes/metrics", "admin-key").await),
+        set(&["alice-sbx", "bob-sbx", "red-sbx", "legacy"])
+    );
+}
+
+/// `/sandboxes/{id}/network` is `PUT` on the node. Another method is refused
+/// by the control plane, as JSON and without reaching the node; `PUT` still
+/// reaches it, and still only for the sandbox's own scope.
+#[tokio::test]
+async fn only_put_reaches_a_sandboxs_network_route() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let seen: Seen = Arc::default();
+    let _node = fake_node(&store, "n", "/nothing", json!([]), &seen).await;
+    let mut rec = record("alice-sbx", Some("alice"), Some(me("alice")));
+    rec.node_id = "n".into();
+    store.put_sandbox(&rec).await.unwrap();
+    let plane = Plane::new(store).await;
+    let path = "/sandboxes/alice-sbx/network";
+    for method in [Method::GET, Method::POST, Method::DELETE, Method::PATCH] {
+        let response = plane
+            .call(method.clone(), path, "alice-key")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 405, "{method}");
+        assert_eq!(response.headers()["allow"], "PUT");
+        assert_eq!(response.headers()["content-type"], "application/json");
+        let body: Value = response.json().await.unwrap();
+        assert_eq!(body["code"], 405, "{method}");
+    }
+    assert_eq!(plane.status(Method::GET, path, "no-such-key").await, 401);
+    assert_eq!(seen.lock().len(), 0, "a refused method reached the node");
+    assert_eq!(plane.status(Method::PUT, path, "bob-key").await, 403);
+    assert_eq!(
+        seen.lock().len(),
+        0,
+        "another principal's PUT reached the node"
+    );
+    assert_eq!(plane.status(Method::PUT, path, "alice-key").await, 201);
+    assert_eq!(seen.lock().len(), 1);
+}
