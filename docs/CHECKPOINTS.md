@@ -22,7 +22,12 @@ hm sandbox vm checkpoint save|list|restore|delete $SBX [NAME]
   needs that template to restore.
 - `autoCheckpoint` on a create, or `--auto-checkpoint-every` for a node,
   keeps one named `auto`, replaced on the interval.
-- Not for a sandbox holding a [disk](DISKS.md), which can be paused.
+- A sandbox holding a [disk](DISKS.md) can be checkpointed by name: the
+  node copies the disk out while the sandbox is paused, keeps the copy with
+  the checkpoint, and a restore makes a new disk from it and lets the old
+  one go, unchanged ([details](DISKS.md#checkpoints-of-a-sandbox-with-a-disk)). The copy can be
+  large, so the node never takes the `auto` checkpoint of such a sandbox
+  (409), and a guest that booted with its disk has its memory written whole.
 - A sandbox that is [a size of its own](SANDBOX_SIZES.md) can be
   checkpointed: its memory is written whole, as a pause writes it, so the
   file is as large as the guest's used memory and not only what changed. A

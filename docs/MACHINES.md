@@ -302,14 +302,18 @@ hm sandbox vm machine unpublish web-01 20000
   sandbox's ports are, over TLS when the node has `--tls-cert`; and by E2B's
   `e2b-sandbox-id` and `e2b-sandbox-port` headers. The answer gives the
   name's first label as `proxyLabel`. Off unless asked, since the proxy is
-  commonly on a public address. **A node's own proxy adds no login, and
-  neither does the cluster token guard it:** whoever can reach the node's
-  proxy listener reaches every `proxy: true` port on it, by a name made of
-  the guest port and the machine's ID, which can be guessed. A standalone
-  node listens on loopback unless started with `--bind`
+  commonly on a public address. **A node's own proxy adds no user login, but
+  a node with a cluster token guards it with one:** every connection must
+  open with an `HV2-PROXY` HMAC line only a holder of the token (the control
+  plane) can make, and the node closes any other. A node started with
+  `--proxy-open`, or without a token, has no such check, and whoever can
+  reach its proxy listener reaches every `proxy: true` port on it, by a name
+  made of the guest port and the machine's ID, which can be guessed. A
+  standalone node listens on loopback unless started with `--bind`
   ([where a node listens](SANDBOXES.md#where-a-node-listens)); a node in a
-  cluster listens on every address, and its proxy port must be reachable by
-  the control plane alone.
+  cluster listens on every address, and its proxy port should still be
+  reachable by the control plane alone (the line proves the token; it does
+  not encrypt).
 - **With a login, through the control plane.** The control plane's proxy
   reaches a machine's proxied port too, at the same name, and puts its
   [operator-provisioned login](PRIVATE_GUEST_URLS.md) in front of it: grant
@@ -689,8 +693,9 @@ key that is not a name and an action that is not one are refused with 400.
   agent as its own user. Nothing of the desktop listens outside the guest
   but noVNC, which has no password of its own, and a published port gives it
   to whoever can reach that port. Through a node's own proxy (`proxy`) there is
-  no login at all: anyone who can reach the node's proxy listener sees and
-  drives the desktop. A login exists only through a control plane, where the
+  no user login: a node with a cluster token requires the control plane's
+  `HV2-PROXY` line, but on a node without a token or with `--proxy-open`
+  anyone who can reach the proxy listener sees and drives the desktop. A login exists only through a control plane, where the
   [operator-provisioned login](PRIVATE_GUEST_URLS.md) can be put in front.
 - **It is the guest's, not a VM's display device.** Nothing on the node
   draws it, and the machine's console is still its serial port.

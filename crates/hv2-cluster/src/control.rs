@@ -2630,6 +2630,15 @@ async fn forward(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("application/json")
         .to_string();
+    // What a download is named and whether it is whole (a checkpoint archive
+    // says how many entries it left out) travel with the body.
+    let kept: Vec<(&str, HeaderValue)> = KEPT_NODE_HEADERS
+        .iter()
+        .filter_map(|name| {
+            let value = response.headers().get(*name)?;
+            Some((*name, HeaderValue::from_bytes(value.as_bytes()).ok()?))
+        })
+        .collect();
     let bytes = response.bytes().await.unwrap_or_default();
 
     // Older nodes remove the VM record without knowing about reserved names.
@@ -2669,8 +2678,15 @@ async fn forward(
     if let Ok(value) = HeaderValue::from_str(&content_type) {
         out.headers_mut().insert("content-type", value);
     }
+    for (name, value) in kept {
+        out.headers_mut().insert(name, value);
+    }
     out
 }
+
+/// The node's response headers `forward` passes on besides `content-type`.
+/// Not hop-by-hop, `set-cookie` or anything of the node's own.
+const KEPT_NODE_HEADERS: [&str; 2] = ["content-disposition", "x-hv2-archive-skipped"];
 
 // ── Operations ──────────────────────────────────────────────────────────────
 

@@ -1591,6 +1591,10 @@ async fn fake_node(
             "/sandboxes/{id}/checkpoints/{name}/restore",
             axum::routing::any(echo_checkpoint),
         )
+        .route(
+            "/sandboxes/{id}/checkpoints/{name}/archive",
+            axum::routing::get(archive_checkpoint),
+        )
         .with_state(Arc::clone(&node));
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
@@ -1610,6 +1614,49 @@ async fn echo_checkpoint(
         return StatusCode::UNAUTHORIZED.into_response();
     }
     Json(json!({"path": uri.path(), "method": method.as_str(), "body": String::from_utf8_lossy(&body)})).into_response()
+}
+
+/// What a node answers an archive download with: the gzip, its file name,
+/// and how many entries it had to leave out.
+async fn archive_checkpoint(headers: HeaderMap) -> Response {
+    if token_of(&headers).as_deref() != Some(TOKEN) {
+        return StatusCode::UNAUTHORIZED.into_response();
+    }
+    (
+        [
+            ("content-type", "application/gzip"),
+            (
+                "content-disposition",
+                "attachment; filename=\"before.tar.gz\"",
+            ),
+            ("x-hv2-archive-skipped", "3"),
+        ],
+        "gzip-bytes",
+    )
+        .into_response()
+}
+
+#[tokio::test]
+async fn a_checkpoint_archive_keeps_its_name_and_its_skipped_count_through_the_control_plane() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let (_node, _heart) = fake_node(store.clone(), "a", 4, Duration::from_secs(30)).await;
+    let base = control_plane(store, Some(KEY)).await;
+    let (_, created) = create(&base, json!({"templateID": "base"})).await;
+    let id = created["sandboxID"].as_str().unwrap();
+    let response = client()
+        .get(format!("{base}/sandboxes/{id}/checkpoints/before/archive"))
+        .header("x-api-key", KEY)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(response.headers()["content-type"], "application/gzip");
+    assert_eq!(
+        response.headers()["content-disposition"],
+        "attachment; filename=\"before.tar.gz\""
+    );
+    assert_eq!(response.headers()["x-hv2-archive-skipped"], "3");
+    assert_eq!(response.bytes().await.unwrap().as_ref(), b"gzip-bytes");
 }
 
 #[tokio::test]
