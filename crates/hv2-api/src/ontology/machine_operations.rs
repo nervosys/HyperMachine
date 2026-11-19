@@ -1634,8 +1634,8 @@ impl HyperMachineOntology {
             .answers(ok(
                 200,
                 "The raw disk, as `application/octet-stream` with a `content-disposition` \
-                 naming `{name}-{snapshotID}.img`. Through the control plane the content type is \
-                 kept and `content-length` and `content-disposition` are not.",
+                 naming `{name}-{snapshotID}.img`. Through the control plane the content type and \
+                 the `content-disposition` are kept; `content-length` is not.",
                 Some(json!({ "type": "string", "format": "binary" })),
             ))
             .answers(no_snapshot())
@@ -1719,7 +1719,7 @@ impl HyperMachineOntology {
             .with(partition())
             .answers(ok(
                 200,
-                "The archive, `application/gzip`. Through the control plane `content-disposition` is not kept.",
+                "The archive, `application/gzip`. Through the control plane `content-disposition` is kept.",
                 Some(json!({ "type": "string", "format": "binary" })),
             ))
             .answers(fail(413, "over 64 MiB of archive, 256 MiB read or 500,000 entries"))

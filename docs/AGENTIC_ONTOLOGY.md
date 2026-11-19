@@ -260,8 +260,6 @@ and `create` answer with.
 
 **Permissions Required:** `sandboxes` scope (control plane); the cluster token
 (node).
-**Not yet described:** networking, ports, domains, web sharing, logs and
-metrics and `/sandboxes/{id}/names`; these stay in the coverage allowlist.
 
 ### Machines (`machine_lifecycle`, `machine_commands`, `machine_agents`, `machine_ports`, `machine_snapshots`, their `node_` twins, and `node_machine_desktop`)
 
@@ -299,10 +297,10 @@ token. Handlers: `crates/hv2-cluster/src/control.rs` (`list_machines`,
 ### Fork, Snapshots And Checkpoints (`sandbox_fork_and_snapshots`, `sandbox_checkpoints`, and their `node_` twins)
 
 Served by both components: the control plane forwards to the sandbox's node.
-Forwarding buffers the node's answer and keeps its status and `content-type`
-only, so a checkpoint archive reaches a control plane caller without
-`content-disposition` or `x-hv2-archive-skipped` (the list of what was
-skipped). The `sandboxes` scope; `list_snapshots` needs `templates` and
+Forwarding buffers the node's answer and keeps its status, `content-type`,
+`content-disposition` and `x-hv2-archive-skipped` (the list of what an
+archive skipped), so a checkpoint archive reaches a control plane caller
+complete with both. The `sandboxes` scope; `list_snapshots` needs `templates` and
 refuses an observer or viewer.
 
 | Operation | Method and path | Notes |
@@ -311,6 +309,36 @@ refuses an observer or viewer.
 | `create_sandbox_checkpoint`, `list_sandbox_checkpoints`, `delete_sandbox_checkpoint`, `restore_sandbox_checkpoint` | `.../checkpoints[/{name}[/restore]]` | 10 held (`auto` not counted); a disk is copied with it (CHECKPOINTS.md says otherwise; the code, `checkpoints.rs`, does); restore is in place |
 | `list_sandbox_checkpoint_files`, `read_sandbox_checkpoint_file`, `archive_sandbox_checkpoint_directory` | `.../checkpoints/{name}/files, /file or /archive?path=` | Each restores into a throwaway guest (2 at a time, else 503); file 64 MiB; archive 64 MiB, 180 s (504) |
 | `snapshot_sandbox`, `list_snapshots` | `POST /sandboxes/{id}/snapshots`, `GET /snapshots` | A template that holds the sandbox's memory; 409 for a disk or a paused sandbox; the control plane merges nodes and filters by team |
+
+### Sandbox Network, Exposure, Telemetry And Recovery (`sandbox_egress_network`, `sandbox_port_tunnels`, `sandbox_telemetry`, `sandbox_events`, `registration_recovery`, their `node_` twins; control plane only: `sandbox_public_ports`, `sandbox_web_sharing`, `sandbox_domains_and_names`, `sandbox_private_networks`, `sandbox_refreshes`; node only: `node_sandbox_private_networks`, `node_local_networks`)
+
+Operations that the control plane **relays** to the sandbox's node (rules,
+decisions, metrics, logs) are the node's handler behind an ownership check; the
+tunnels it **splices** itself (ownership, node lookup, a 15 second upgrade); the
+rest it answers from the cluster store. The node serves 22 of these and the
+control plane 28. A team's key reaches its own team's sandboxes only. Public
+ports, web sharing and private networks need a key with a configured creator
+(`principal_id`) that owns the sandbox (a teammate acts as the creator); they
+are refused with no credential, so an open control plane does not serve them.
+
+| Operation | Method and path | Notes |
+| --------- | --------------- | ----- |
+| `update_sandbox_network` | `PUT /sandboxes/{id}/network` (the control plane registers every method; the node serves PUT) | The whole new policy, not a patch: what is left out is cleared. `allowOut`, `denyOut` (no names), `allow_internet_access` (snake case), `rules`, `egressProxy`; `allowOut` alone restricts nothing on a node whose default is allow |
+| `get_sandbox_network_decisions` | `GET .../network/decisions` | First and last 256 decisions of the gateway; 400 with no network |
+| `open_sandbox_tcp_tunnel`, `open_sandbox_udp_tunnel`, `open_sandbox_udp6_tunnel`, `open_sandbox_reverse_tunnel` | `GET .../ports/{port}/tcp`, `/udp`, `/udp6`, `/reverse` | Upgrade to `hv2-tcp/1`, `hv2-udp/1`, `hv2-udp6/1`, `hv2-reverse/1`; no TLS or login added; paused is 409 on the control plane and 404 on a node; reverse holds at most 64 waiting |
+| `list_sandbox_public_ports`, `reserve_sandbox_public_port`, `remove_sandbox_public_port` | `.../public-ports[/{port}]` | Control plane only, needs `--native-port-range`; 202 means stored, not bound; 16 per sandbox |
+| `get_sandbox_web_sharing`, `set_sandbox_web_sharing` | `.../web-sharing` | Grants `{subject, expires_at}`, compare-and-set on a UUID v4 revision; 256 at most |
+| `list_sandbox_domains`, `get_sandbox_domain_challenge`, `bind_sandbox_domain`, `unbind_sandbox_domain` | `.../domains[/{domain}[/challenge]]` | First claim wins; a DNS TXT proof only with `--domain-verification-file` (428 without, 403 wrong, 501 no policy) |
+| `assign_sandbox_name`, `resolve_sandbox_name` | `PUT .../names/{name}`, `GET /sandbox-names/{name}` | One namespace for the whole cluster; another team's name is 403 on lookup, which shows it is taken |
+| `get_sandbox_private_networks`, `set_sandbox_private_networks` | `.../private-networks` | At most 8 tags, an empty list removes; compare-and-set; `node_open_sandbox_private_tcp_tunnel` and `..._udp_tunnel` are the receiving end, for other nodes |
+| `refresh_sandbox` | `POST .../refreshes` | Routed and relayed, but no node serves it: always 404. Use `set_sandbox_timeout` |
+| `list_sandboxes_metrics`, `get_sandbox_metrics`, `get_sandbox_logs`, `get_sandbox_logs_v2` | `/sandboxes/metrics`, `.../metrics`, `.../logs`, `/v2/sandboxes/{id}/logs` | Samples every 5 s, the last hour; the log is the node's lifecycle notes (1000), not program output; both in node memory. The latest-samples route is open to an inventory key or observer |
+| `list_sandbox_events`, `get_sandbox_events` | `GET /events/sandboxes[/{id}]` | E2B's `SandboxEvent`, a JSON list (not a stream); needs the `events` scope; a node serves them unfiltered |
+| `list_node_pending_registrations`, `reconcile_node_sandbox_registration` (node: `node_list_pending_registrations`, `node_reconcile_sandbox_registration`) | `/cluster/nodes/{node}/registrations/pending`, `.../sandboxes/{id}/registration/reconcile`; node `/registrations/pending`, `/sandboxes/{sandboxID}/registration/reconcile` | Administrator only on the control plane; the answer carries the sandbox's access token |
+| `node_*_local_network` | `/networks[/{name}[/connect or /disconnect]]` | Node only, in memory, no owner or team: any caller can join any sandbox ID to a network |
+
+**Permissions Required:** `sandboxes` scope, `events` for events, `admin` for
+registration recovery (control plane); the cluster token (node).
 
 ### Cluster Store Configuration (`cluster_store_configuration`)
 
@@ -363,8 +391,9 @@ its source; the first two are finding O12 in
   is a blunt revoke-all.
 - **`control-plane-unauthenticated-mode`** (critical; applies to
   `team_template_sharing`, `sandbox_lifecycle`, `sandbox_commands`, the
-  machine, fork, snapshot and checkpoint capabilities and their
-  operations, except owner adoption). A control plane started
+  machine, fork, snapshot, checkpoint, egress, tunnel, domain, name, metrics,
+  log and event capabilities and their operations, except owner adoption,
+  public ports, web sharing, private networks and registration recovery). A control plane started
   with `--allow-unauthenticated` has no key and no sign-on, so every caller who
   can reach it is an administrator with no team: any caller can read and change
   any team's snapshot shares, which hands that team the sandbox's memory, files
@@ -373,6 +402,13 @@ its source; the first two are finding O12 in
   administrator or team-admin credential.) Mitigation: do not use the flag on a reachable
   control plane. Finding O4 in
   [the audit](security/SECURITY_AUDIT_2026-11-16.md).
+- **`egress-rules-replace-and-default-dependent`** (warning; sandbox creation, egress rules and decisions): `allowOut` alone restricts nothing where the node's default is allow, an update replaces the whole policy, and only host addresses read at node start are refused ([SANDBOXES.md](SANDBOXES.md#allowout-alone-does-not-restrict-egress-when-the-default-is-allow)).
+- **`public-ports-expose-guest-services`** (warning; public ports): the native gateway relays raw TCP/UDP with no login, a 202 is not a bound listener and a 204 not a barrier ([NATIVE_PORT_GATEWAY.md](NATIVE_PORT_GATEWAY.md)).
+- **`custom-domain-binding-routes-traffic`** (warning; domains): without `--domain-verification-file` any caller with the scope claims any free hostname, and the proxy has no login unless the operator turns one on ([CUSTOM_DOMAINS.md](CUSTOM_DOMAINS.md)).
+- **`web-sharing-grants-and-revocation`** (info; web sharing): a grant opens every port to an identity, operator scopes are independent, and an admitted stream keeps its admission ([PRIVATE_GUEST_URLS.md](PRIVATE_GUEST_URLS.md#owner-sharing-management-api)).
+- **`private-network-source-trust`** (warning; private networks): the source node label is trusted on the cluster's shared credential, and support is documented as Partial ([PRIVATE_VM_NETWORKS.md](PRIVATE_VM_NETWORKS.md#receiving-node-tcp-route)).
+- **`registration-reconcile-returns-access-token`** (warning; registration recovery): the answer is credential-bearing, and a retry may duplicate an event ([NATIVE_PORT_GATEWAY.md](NATIVE_PORT_GATEWAY.md#recovering-uncertain-guest-registration)).
+- **`sandbox-events-carry-metadata`** (info; events): metadata travels in every event, and a node does not filter by team (`crates/hv2-cluster/src/events.rs`).
 - **`sso-session-not-revocable`** (warning; applies to `sso_logout`,
   `sso_callback`, `sso_cli_token`). A session is a stateless signed token;
   signing out only clears the cookie, and a copied token works until it

@@ -216,6 +216,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seventh, Gitleaks, is now a real gate; see Security.)
 
 ### Added
+- **The agentic ontology describes sandbox networking, ports, domains, names,
+  metrics, logs, events and registration recovery, on the control plane and
+  the node.** 28 control plane operations and 22 node operations (egress
+  rules and decisions, the TCP/UDP/UDP6/reverse tunnels, public ports, web
+  sharing, custom domains, names, private network tags and tunnels, the node's
+  local networks, metrics, logs, events, and the pending-registration and
+  reconcile routes), with request and response shapes and status codes read
+  from the handlers. It records that `POST /sandboxes/{id}/refreshes` always
+  ends in 404 (no node serves it) and that a node's `/networks` has no owner
+  check. Seven new guardrails (egress rules replacing the whole policy,
+  public ports, custom domains, web sharing, private-network source trust,
+  the reconcile answer's access token, event metadata) and the open-control-
+  plane and open-node guardrails now name these routes. The coverage allowlist
+  shrinks from 222 to 174 routes.
 - **The agentic ontology describes `/machines` and a sandbox's fork,
   checkpoints and snapshots, on the control plane and the node.** Machine
   lifecycle, commands, runs and files, prompts, ports and disk snapshots
@@ -225,8 +239,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checkpoint routes, `snapshot_sandbox` and `list_snapshots` (10 each, in
   `sandbox_fork_and_snapshots` and `sandbox_checkpoints`). Request and
   response shapes and status codes are read from the handlers, including what
-  the control plane drops (`content-disposition` and `x-hv2-archive-skipped`
-  on archives), its 64 KiB cap on a create body, a create that answers 503
+  the control plane does and does not pass on (`content-disposition` and
+  `x-hv2-archive-skipped` travel; `content-length` does not), its 64 KiB cap on a create body, a create that answers 503
   with the machine already made, and a machine `exec` with no `timed_out`
   flag. Three new guardrails (runs keeping command lines and output,
   coding agents run with the caller's key and `unattended`, a desktop's noVNC

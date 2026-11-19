@@ -5,9 +5,9 @@
 //! neither crate.
 //!
 //! The control plane forwards each `/sandboxes/{id}/...` route to the node that
-//! holds the sandbox. It buffers the node's answer and keeps its status and
-//! `content-type` only, so the headers a node sets on an archive
-//! (`content-disposition`, `x-hv2-archive-skipped`) do not reach the caller.
+//! holds the sandbox. It buffers the node's answer and keeps its status,
+//! `content-type`, and the two headers a node sets on an archive
+//! (`content-disposition`, `x-hv2-archive-skipped`), and no other.
 
 use super::spec::{body_rejection, fail, ok, path_param, plain, query_param, required_query, Spec};
 use super::{HyperMachineOntology, Operation, Parameter};
@@ -277,8 +277,8 @@ impl HyperMachineOntology {
                  a throwaway guest. Limits: 64 MiB of archive, 256 MiB read and 200,000 \
                  entries, and a build over 180 seconds is stopped (504). The node names what \
                  it left out in an `x-hv2-archive-skipped` header, and a `content-disposition`; \
-                 through the control plane neither header arrives, only the content type, so \
-                 a caller there cannot tell a complete archive from one with entries skipped.",
+                 the control plane passes both on with the content type, so a caller there \
+                 can tell a complete archive from one with entries skipped.",
             )
             .with(sandbox())
             .with(checkpoint_param())

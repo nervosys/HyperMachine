@@ -534,7 +534,7 @@ async fn test_served_ontology_carries_guardrails_and_key_interface() {
     };
     let (operations, capabilities) = (ids("operations"), ids("capabilities"));
     let guardrails = json["guardrails"].as_array().expect("guardrails list");
-    assert_eq!(guardrails.len(), 12);
+    assert_eq!(guardrails.len(), 19);
     for id in ["redis-shared-user-revocation", "pre-tombstone-revocations"] {
         let g = guardrails
             .iter()
@@ -1106,4 +1106,252 @@ fn machine_and_checkpoint_operations_are_described_for_both_components() {
             "{id} needs its own guardrail"
         );
     }
+}
+
+/// The network, exposure, telemetry, event and registration routes are
+/// described for the component that serves them: 28 on the control plane and
+/// 22 on the node.
+#[test]
+fn network_and_exposure_operations_are_described_for_both_components() {
+    use hv2_api::ontology::HyperMachineOntology;
+
+    let onto = HyperMachineOntology::build();
+    let sb = "/sandboxes/{id}";
+    // Served by both: the node's path names the sandbox `{sandboxID}`.
+    let shared: Vec<(&str, &str, String)> = vec![
+        (
+            "get_sandbox_network_decisions",
+            "GET",
+            format!("{sb}/network/decisions"),
+        ),
+        (
+            "open_sandbox_tcp_tunnel",
+            "GET",
+            format!("{sb}/ports/{{port}}/tcp"),
+        ),
+        (
+            "open_sandbox_udp_tunnel",
+            "GET",
+            format!("{sb}/ports/{{port}}/udp"),
+        ),
+        (
+            "open_sandbox_udp6_tunnel",
+            "GET",
+            format!("{sb}/ports/{{port}}/udp6"),
+        ),
+        (
+            "open_sandbox_reverse_tunnel",
+            "GET",
+            format!("{sb}/ports/{{port}}/reverse"),
+        ),
+        ("list_sandboxes_metrics", "GET", "/sandboxes/metrics".into()),
+        ("get_sandbox_metrics", "GET", format!("{sb}/metrics")),
+        ("get_sandbox_logs", "GET", format!("{sb}/logs")),
+        (
+            "get_sandbox_logs_v2",
+            "GET",
+            "/v2/sandboxes/{id}/logs".into(),
+        ),
+    ];
+    let both_with_id: Vec<(&str, &str, &str)> = vec![
+        ("list_sandbox_events", "GET", "/events/sandboxes"),
+        ("get_sandbox_events", "GET", "/events/sandboxes/{id}"),
+    ];
+    let control_plane_only: Vec<(&str, &str, &str)> = vec![
+        (
+            "list_sandbox_public_ports",
+            "GET",
+            "/sandboxes/{id}/public-ports",
+        ),
+        (
+            "reserve_sandbox_public_port",
+            "PUT",
+            "/sandboxes/{id}/public-ports/{port}",
+        ),
+        (
+            "remove_sandbox_public_port",
+            "DELETE",
+            "/sandboxes/{id}/public-ports/{port}",
+        ),
+        (
+            "get_sandbox_web_sharing",
+            "GET",
+            "/sandboxes/{id}/web-sharing",
+        ),
+        (
+            "set_sandbox_web_sharing",
+            "PUT",
+            "/sandboxes/{id}/web-sharing",
+        ),
+        (
+            "get_sandbox_private_networks",
+            "GET",
+            "/sandboxes/{id}/private-networks",
+        ),
+        (
+            "set_sandbox_private_networks",
+            "PUT",
+            "/sandboxes/{id}/private-networks",
+        ),
+        ("list_sandbox_domains", "GET", "/sandboxes/{id}/domains"),
+        (
+            "get_sandbox_domain_challenge",
+            "GET",
+            "/sandboxes/{id}/domains/{domain}/challenge",
+        ),
+        (
+            "bind_sandbox_domain",
+            "PUT",
+            "/sandboxes/{id}/domains/{domain}",
+        ),
+        (
+            "unbind_sandbox_domain",
+            "DELETE",
+            "/sandboxes/{id}/domains/{domain}",
+        ),
+        ("assign_sandbox_name", "PUT", "/sandboxes/{id}/names/{name}"),
+        ("resolve_sandbox_name", "GET", "/sandbox-names/{name}"),
+        ("refresh_sandbox", "POST", "/sandboxes/{id}/refreshes"),
+        ("update_sandbox_network", "ANY", "/sandboxes/{id}/network"),
+        (
+            "list_node_pending_registrations",
+            "GET",
+            "/cluster/nodes/{node}/registrations/pending",
+        ),
+        (
+            "reconcile_node_sandbox_registration",
+            "POST",
+            "/cluster/nodes/{node}/sandboxes/{id}/registration/reconcile",
+        ),
+    ];
+    let node_only: Vec<(&str, &str, &str)> = vec![
+        (
+            "node_update_sandbox_network",
+            "PUT",
+            "/sandboxes/{sandboxID}/network",
+        ),
+        (
+            "node_list_pending_registrations",
+            "GET",
+            "/registrations/pending",
+        ),
+        (
+            "node_reconcile_sandbox_registration",
+            "POST",
+            "/sandboxes/{sandboxID}/registration/reconcile",
+        ),
+        (
+            "node_open_sandbox_private_tcp_tunnel",
+            "GET",
+            "/sandboxes/{sandboxID}/private-ports/{port}/tcp",
+        ),
+        (
+            "node_open_sandbox_private_udp_tunnel",
+            "GET",
+            "/sandboxes/{sandboxID}/private-ports/{port}/udp",
+        ),
+        ("node_list_local_networks", "GET", "/networks"),
+        ("node_create_local_network", "POST", "/networks"),
+        ("node_get_local_network", "GET", "/networks/{name}"),
+        ("node_delete_local_network", "DELETE", "/networks/{name}"),
+        (
+            "node_connect_sandbox_to_local_network",
+            "POST",
+            "/networks/{name}/connect",
+        ),
+        (
+            "node_disconnect_sandbox_from_local_network",
+            "POST",
+            "/networks/{name}/disconnect",
+        ),
+    ];
+    let check = |id: &str, component: &str, method: &str, path: &str| {
+        let op = onto
+            .operations
+            .iter()
+            .find(|o| o.id == id)
+            .unwrap_or_else(|| panic!("missing operation {id}"));
+        assert_eq!(
+            (op.http_method.as_str(), op.path.as_str()),
+            (method, path),
+            "{id}"
+        );
+        assert_eq!(
+            HyperMachineOntology::operation_component(id),
+            component,
+            "{id}"
+        );
+        assert!(op.description.len() > 150, "{id} needs a full description");
+        assert!(!op.responses.is_empty(), "{id} lists no responses");
+        assert!(
+            onto.capabilities
+                .iter()
+                .any(|c| c.operations.iter().any(|o| o == id)),
+            "{id} belongs to no capability"
+        );
+        assert!(
+            !onto.guardrails_for(id).is_empty(),
+            "{id} is named by no guardrail"
+        );
+        for name in path
+            .split('{')
+            .skip(1)
+            .map(|s| s.split('}').next().unwrap())
+        {
+            assert!(
+                op.parameters.iter().any(|p| p.name == name),
+                "{id} does not declare path parameter {name}"
+            );
+        }
+    };
+    for (id, method, path) in &shared {
+        check(id, "hv2-cluster", method, path);
+        check(
+            &format!("node_{id}"),
+            "hv2-sandboxd",
+            method,
+            &path.replace("{id}", "{sandboxID}"),
+        );
+    }
+    for (id, method, path) in &both_with_id {
+        check(id, "hv2-cluster", method, path);
+        // The events router names the sandbox `{id}` on a node too.
+        check(&format!("node_{id}"), "hv2-sandboxd", method, path);
+    }
+    for (id, method, path) in &control_plane_only {
+        check(id, "hv2-cluster", method, path);
+    }
+    for (id, method, path) in &node_only {
+        check(id, "hv2-sandboxd", method, path);
+    }
+    // The control plane does not route the node's local networks or private tunnels.
+    assert!(onto
+        .operations
+        .iter()
+        .all(|o| o.id != "list_local_networks"));
+    // Owner-bound and administrator routes are not open on an unauthenticated control plane.
+    for id in [
+        "reserve_sandbox_public_port",
+        "set_sandbox_web_sharing",
+        "set_sandbox_private_networks",
+        "reconcile_node_sandbox_registration",
+    ] {
+        let named: Vec<_> = onto
+            .guardrails_for(id)
+            .iter()
+            .map(|g| g.id.as_str())
+            .collect();
+        assert!(
+            !named.contains(&"control-plane-unauthenticated-mode"),
+            "{id} is refused with no credential"
+        );
+    }
+    // A refresh is routed and never served.
+    let refresh = onto
+        .operations
+        .iter()
+        .find(|o| o.id == "refresh_sandbox")
+        .unwrap();
+    assert!(refresh.responses.iter().any(|r| r.status_code == 404));
+    assert!(!refresh.responses.iter().any(|r| r.status_code == 200));
 }

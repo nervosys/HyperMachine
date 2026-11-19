@@ -142,6 +142,11 @@ impl Spec {
         }
     }
 
+    /// The operation's ID, before a node's prefix.
+    pub(super) fn id(&self) -> &'static str {
+        self.id
+    }
+
     pub(super) fn about(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
         self

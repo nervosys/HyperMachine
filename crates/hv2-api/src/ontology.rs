@@ -15,8 +15,12 @@ use serde::{Deserialize, Serialize};
 
 mod capabilities;
 mod checkpoint_operations;
+mod exposure_operations;
 mod machine_operations;
+mod network_capabilities;
+mod network_operations;
 mod spec;
+mod telemetry_operations;
 
 // ============================================================================
 // Core Ontology Types
@@ -1661,6 +1665,8 @@ impl HyperMachineOntology {
         .chain(Self::build_machine_capabilities(true))
         .chain(Self::build_checkpoint_capabilities(false))
         .chain(Self::build_checkpoint_capabilities(true))
+        .chain(Self::build_network_capabilities(false))
+        .chain(Self::build_network_capabilities(true))
         .collect()
     }
 
@@ -2217,6 +2223,8 @@ impl HyperMachineOntology {
         .chain(Self::build_machine_node_operations())
         .chain(Self::build_checkpoint_control_plane_operations())
         .chain(Self::build_checkpoint_node_operations())
+        .chain(Self::build_network_control_plane_operations())
+        .chain(Self::build_network_node_operations())
         .collect()
     }
 
@@ -2233,6 +2241,7 @@ impl HyperMachineOntology {
             || on(Self::build_sandbox_exec_node_operations())
             || on(Self::build_machine_node_operations())
             || on(Self::build_checkpoint_node_operations())
+            || on(Self::build_network_node_operations())
         {
             return "hv2-sandboxd";
         }
@@ -2244,6 +2253,7 @@ impl HyperMachineOntology {
             .chain(Self::build_sandbox_exec_control_plane_operations())
             .chain(Self::build_machine_control_plane_operations())
             .chain(Self::build_checkpoint_control_plane_operations())
+            .chain(Self::build_network_control_plane_operations())
             .any(|op| op.id == id);
         if control_plane {
             "hv2-cluster"
@@ -4434,9 +4444,14 @@ impl HyperMachineOntology {
                     from and prompt a coding agent in any team's machine, and read the disk \
                     of its snapshots) and for a sandbox's fork, snapshots and checkpoints \
                     (any caller can fork or checkpoint any sandbox and read the files of its \
-                    memory, or list every team's snapshots). (The key routes and owner \
+                    memory, or list every team's snapshots), and for a sandbox's network \
+                    (any caller can open a tunnel to any guest port, replace any sandbox's \
+                    egress rules, bind a hostname or a name to any sandbox, and read every \
+                    team's metrics, logs and lifecycle events). (The key routes and owner \
                     adoption still want an administrator or team-admin credential, so an \
-                    anonymous caller does not get them.)"
+                    anonymous caller does not get them; nor do registration recovery, \
+                    public ports, web sharing and private networks, which want a key with \
+                    a creator identity that open mode does not have.)"
                     .to_string(),
                 applies_to: [
                     "team_template_sharing",
@@ -4452,6 +4467,12 @@ impl HyperMachineOntology {
                     "machine_snapshots",
                     "sandbox_fork_and_snapshots",
                     "sandbox_checkpoints",
+                    "sandbox_egress_network",
+                    "sandbox_port_tunnels",
+                    "sandbox_telemetry",
+                    "sandbox_events",
+                    "sandbox_domains_and_names",
+                    "sandbox_refreshes",
                 ]
                 .into_iter()
                 .map(str::to_string)
@@ -4461,8 +4482,10 @@ impl HyperMachineOntology {
                         .chain(Self::build_sandbox_exec_control_plane_operations())
                         .chain(Self::build_machine_control_plane_operations())
                         .chain(Self::build_checkpoint_control_plane_operations())
+                        .chain(Self::build_network_control_plane_operations())
                         .map(|op| op.id)
-                        .filter(|id| id != "adopt_sandbox_owner"),
+                        .filter(|id| id != "adopt_sandbox_owner")
+                        .filter(|id| !Self::needs_creator_or_administrator(id)),
                 )
                 .collect(),
                 condition: "The control plane was started with --allow-unauthenticated. Without \
@@ -4567,8 +4590,10 @@ impl HyperMachineOntology {
                     token and no mTLS, so every host that can reach its API port (3980) or \
                     proxy port (3981) can do all of that to every sandbox on it: the node has \
                     no users, teams or ownership of its own, the control plane's checks are \
-                    not in front of it. The node prints a warning naming both ports every \
-                    time it starts this way."
+                    not in front of it, which includes every sandbox's tunnels, egress \
+                    rules, metrics, logs and lifecycle events (of every team) and the \
+                    node's local networks. The node prints a warning naming both ports \
+                    every time it starts this way."
                     .to_string(),
                 applies_to: [
                     "node_sandbox_lifecycle",
@@ -4581,6 +4606,11 @@ impl HyperMachineOntology {
                     "node_machine_snapshots",
                     "node_sandbox_fork_and_snapshots",
                     "node_sandbox_checkpoints",
+                    "node_sandbox_egress_network",
+                    "node_sandbox_port_tunnels",
+                    "node_sandbox_telemetry",
+                    "node_sandbox_events",
+                    "node_local_networks",
                 ]
                 .into_iter()
                 .map(str::to_string)
@@ -4590,7 +4620,9 @@ impl HyperMachineOntology {
                         .chain(Self::build_sandbox_exec_node_operations())
                         .chain(Self::build_machine_node_operations())
                         .chain(Self::build_checkpoint_node_operations())
-                        .map(|op| op.id),
+                        .chain(Self::build_network_node_operations())
+                        .map(|op| op.id)
+                        .filter(|id| !Self::needs_creator_or_administrator(id)),
                 )
                 .collect(),
                 condition: "The node was started with --bind ADDR beyond loopback and \
@@ -4783,7 +4815,278 @@ impl HyperMachineOntology {
                     .to_string(),
                 reference: "docs/MACHINES.md#desktop".to_string(),
             },
+            Guardrail {
+                id: "egress-rules-replace-and-default-dependent".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "An `allowOut` list restricts nothing where the node's default is \
+                    allow, and an update replaces the whole policy"
+                    .to_string(),
+                description: "On a microVM sandbox `allowOut` is an exception to a deny, not \
+                    a deny of its own, as in E2B. On a node whose default is deny \
+                    (`--egress-default deny`) an `allowOut` sent alone is exclusive; on a \
+                    node whose default is allow it restricts nothing, and the API does not \
+                    say so. An update to a running sandbox's rules is the whole new policy, \
+                    not a patch: what it leaves out (a `denyOut` set at creation) is \
+                    cleared. Reserved, link-local and cloud metadata addresses stay refused \
+                    whatever the rules say, and the host's own interface addresses are \
+                    refused too, but only those the node read when it started: an interface \
+                    added afterwards is not covered. The decisions log shows what the \
+                    gateway did, and keeps only the first and last 256."
+                    .to_string(),
+                applies_to: [
+                    "create_sandbox",
+                    "create_sandbox_v2",
+                    "update_sandbox_network",
+                    "get_sandbox_network_decisions",
+                    "sandbox_egress_network",
+                ]
+                .into_iter()
+                .flat_map(|id| [id.to_string(), format!("node_{id}")])
+                .collect(),
+                condition: "A rule set is sent with `allowOut` and no `denyOut` or \
+                    `allow_internet_access: false`, to a node whose egress default is allow; \
+                    or an update is sent that omits rules the sandbox was made with; or a \
+                    network interface is added to the node after it started."
+                    .to_string(),
+                mitigation: "Send `allowOut` together with `denyOut: [\"0.0.0.0/0\", \"::/0\"]` \
+                    to hold on either kind of node, send the complete rule set in every \
+                    update, run nodes with `--egress-default deny`, restart a node after \
+                    its interfaces change, and read the decisions to check what was \
+                    allowed."
+                    .to_string(),
+                reference: "docs/SANDBOXES.md#allowout-alone-does-not-restrict-egress-when-the-default-is-allow"
+                    .to_string(),
+            },
+            Guardrail {
+                id: "public-ports-expose-guest-services".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "A public port puts a guest service on a listener the operator \
+                    exposes"
+                    .to_string(),
+                description: "A reservation makes the native gateway listen on a stable \
+                    port, on the interface the operator gave it, and relay raw TCP or UDP to \
+                    the guest's port through the node's mutual TLS. The gateway adds no \
+                    authentication, so whoever can reach that interface can reach the \
+                    service, and what protects it is the service. Public DNS, firewall and \
+                    NAT are the operator's. A 202 means the reservation is stored, not that \
+                    a listener is bound; removing a reservation is seen by the gateway on \
+                    its next poll, so a 204 is not a barrier and a connection may still be \
+                    carried. A store call that times out may have committed. A sandbox has \
+                    at most 16."
+                    .to_string(),
+                applies_to: [
+                    "sandbox_public_ports",
+                    "list_sandbox_public_ports",
+                    "reserve_sandbox_public_port",
+                    "remove_sandbox_public_port",
+                ]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+                condition: "A guest port is reserved on a control plane with \
+                    --native-port-range and a native gateway bound to an interface others \
+                    can reach."
+                    .to_string(),
+                mitigation: "Reserve only ports whose service authenticates its own \
+                    clients, bind the gateway to an interface and a firewall that match who \
+                    may use it, and treat removal as taking effect after the gateway's next \
+                    poll; delete the sandbox to end carried connections."
+                    .to_string(),
+                reference: "docs/NATIVE_PORT_GATEWAY.md".to_string(),
+            },
+            Guardrail {
+                id: "custom-domain-binding-routes-traffic".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "A bound hostname sends its traffic to the guest, and without a DNS \
+                    policy needs no proof of owning it"
+                    .to_string(),
+                description: "Binding routes an operator-managed hostname to one HTTP port \
+                    of a sandbox: the control plane's proxy serves requests for it from the \
+                    guest, and wakes a paused sandbox that was made with `autoResume`. The \
+                    first claim of a hostname wins within the cluster namespace. Unless the \
+                    control plane runs with `--domain-verification-file`, any caller with \
+                    the `sandboxes` scope on the sandbox can claim any free hostname, \
+                    controlled or not; with it, a DNS TXT proof is checked once and \
+                    expiring or removing the record later does not unbind. The proxy adds \
+                    no login of its own: browser login is opt-in (`--web-access-file` or \
+                    `--sso-guest-urls`). Unbinding is not a barrier for a request already in \
+                    flight. The certificate for the hostname is the operator's."
+                    .to_string(),
+                applies_to: [
+                    "sandbox_domains_and_names",
+                    "bind_sandbox_domain",
+                    "unbind_sandbox_domain",
+                    "get_sandbox_domain_challenge",
+                ]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+                condition: "A hostname is bound on a control plane with no DNS verification \
+                    policy, or with no browser login in front of the proxy."
+                    .to_string(),
+                mitigation: "Start the control plane with --domain-verification-file; add \
+                    --web-access-file or --sso-guest-urls (with --guest-domain) where the \
+                    guest is not meant for everyone; unbind to revoke routing."
+                    .to_string(),
+                reference: "docs/CUSTOM_DOMAINS.md".to_string(),
+            },
+            Guardrail {
+                id: "web-sharing-grants-and-revocation".to_string(),
+                severity: GuardrailSeverity::Info,
+                title: "A web-sharing grant opens every port of a sandbox to an identity, and \
+                    revocation does not cut a connection already admitted"
+                    .to_string(),
+                description: "A grant names a subject (a browser credential the operator \
+                    provisioned with `allow_owner_grants`, or the email of a member signed \
+                    in with --sso-guest-urls) and an expiry. Until then that identity \
+                    opens the sandbox's web on every port and bound domain; it does not \
+                    grant API, exec or envd access. Operator scopes in the web-access \
+                    file authorize independently, so removing a grant does not revoke \
+                    them. Revocation applies to later requests; an admitted connection \
+                    keeps its admission. Sharing state survives the sandbox's deletion, \
+                    as revisions, and a reused ID needs the retained revision."
+                    .to_string(),
+                applies_to: [
+                    "sandbox_web_sharing",
+                    "get_sandbox_web_sharing",
+                    "set_sandbox_web_sharing",
+                ]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+                condition: "A sandbox is shared with a subject, or a subject's access is \
+                    revoked while it holds a connection."
+                    .to_string(),
+                mitigation: "Grant short expiries, grant only the subjects that need it, \
+                    and remove the credential from the web-access file as well to revoke \
+                    an operator scope; delete or pause the sandbox to end admitted streams."
+                    .to_string(),
+                reference: "docs/PRIVATE_GUEST_URLS.md#owner-sharing-management-api"
+                    .to_string(),
+            },
+            Guardrail {
+                id: "private-network-source-trust".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "Private networks trust the cluster's shared credential for the \
+                    source of a connection"
+                    .to_string(),
+                description: "A private connection is authorized from the memberships of \
+                    both sandboxes (same owner, a shared tag), checked again by the \
+                    receiving node every second for as long as it lives, and none lives past \
+                    10 minutes. But the label naming the source sandbox's node is trusted \
+                    because the caller holds the cluster's shared credential and mutual \
+                    TLS: it is not bound to a distinct per-node certificate, so any holder \
+                    of those credentials is trusted to name the source honestly. The \
+                    documentation marks support Partial: lifecycle, crash and \
+                    independent-host gates are not all verified. Tags are one owner's \
+                    own; a teammate acts as the sandbox's creator."
+                    .to_string(),
+                applies_to: [
+                    "sandbox_private_networks",
+                    "get_sandbox_private_networks",
+                    "set_sandbox_private_networks",
+                    "node_sandbox_private_networks",
+                    "node_open_sandbox_private_tcp_tunnel",
+                    "node_open_sandbox_private_udp_tunnel",
+                ]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+                condition: "A node or its cluster credential is compromised, or a deployment \
+                    relies on private networks as a hard boundary."
+                    .to_string(),
+                mitigation: "Keep the cluster token and node certificates to nodes, run \
+                    nodes on a network only the control plane and nodes reach, and do not \
+                    treat tags as the only boundary between owners' sandboxes."
+                    .to_string(),
+                reference: "docs/PRIVATE_VM_NETWORKS.md#receiving-node-tcp-route".to_string(),
+            },
+            Guardrail {
+                id: "registration-reconcile-returns-access-token".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "Reconciling a registration returns the sandbox's access token".to_string(),
+                description: "Recovering a registration answers with the sandbox's \
+                    descriptor, which carries its `envdAccessToken` (a credential for its \
+                    envd), so the answer is as sensitive as a create's. A retry may \
+                    duplicate a lifecycle event: delivery is not exactly once. It repairs a \
+                    guest preserved on a node, not one lost with a crashed node, and \
+                    pending state is the node process's own. Recreating the guest instead \
+                    can leave an extra running instance."
+                    .to_string(),
+                applies_to: [
+                    "registration_recovery",
+                    "reconcile_node_sandbox_registration",
+                    "list_node_pending_registrations",
+                    "node_registration_recovery",
+                    "node_reconcile_sandbox_registration",
+                    "node_list_pending_registrations",
+                ]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+                condition: "A reconcile answer is logged, stored or shown."
+                    .to_string(),
+                mitigation: "Treat the answer as a credential; list the pending \
+                    registrations before retrying after a lost reply."
+                    .to_string(),
+                reference: "docs/NATIVE_PORT_GATEWAY.md#recovering-uncertain-guest-registration"
+                    .to_string(),
+            },
+            Guardrail {
+                id: "sandbox-events-carry-metadata".to_string(),
+                severity: GuardrailSeverity::Info,
+                title: "Sandbox events carry the sandbox's metadata, and a node does not \
+                    filter them by team"
+                    .to_string(),
+                description: "Each lifecycle event holds the sandbox's metadata as it was, \
+                    the node that ran it, and (for a pause or an end) its size and how long \
+                    it ran; webhooks deliver the same. Metadata is whatever the creator \
+                    put in it, so a secret placed there is read by every key with the \
+                    `events` scope in its team, and kept in the cluster's event log (the \
+                    newest 10,000 events). A control plane filters events by team; a node \
+                    serving the same routes filters nothing, and answers every team's \
+                    events to a caller with the cluster token."
+                    .to_string(),
+                applies_to: [
+                    "sandbox_events",
+                    "list_sandbox_events",
+                    "get_sandbox_events",
+                ]
+                .into_iter()
+                .flat_map(|id| [id.to_string(), format!("node_{id}")])
+                .collect(),
+                condition: "A secret or personal data is in a sandbox's metadata, or a node's \
+                    API is reachable by a party that must not see another team's sandboxes."
+                    .to_string(),
+                mitigation: "Keep secrets out of metadata (use `envVars`, which are never \
+                    returned) and keep node ports on a network only the control plane reaches."
+                    .to_string(),
+                reference: "crates/hv2-cluster/src/events.rs".to_string(),
+            },
         ]
+    }
+
+    /// Routes that an open control plane or node does not answer for a
+    /// caller with no credential: they need an administrator, a creator
+    /// identity, the cluster token or mutual TLS.
+    fn needs_creator_or_administrator(id: &str) -> bool {
+        let id = id.strip_prefix("node_").unwrap_or(id);
+        matches!(
+            id,
+            "list_sandbox_public_ports"
+                | "reserve_sandbox_public_port"
+                | "remove_sandbox_public_port"
+                | "get_sandbox_web_sharing"
+                | "set_sandbox_web_sharing"
+                | "get_sandbox_private_networks"
+                | "set_sandbox_private_networks"
+                | "list_node_pending_registrations"
+                | "reconcile_node_sandbox_registration"
+                | "list_pending_registrations"
+                | "reconcile_sandbox_registration"
+                | "open_sandbox_private_tcp_tunnel"
+                | "open_sandbox_private_udp_tunnel"
+        )
     }
 
     /// The agent-callable tools, with a one-line warning appended to every
@@ -8151,6 +8454,13 @@ mod tests {
             "machine-runs-keep-command-and-output",
             "machine-agents-act-with-the-callers-key",
             "machine-desktop-has-no-password",
+            "egress-rules-replace-and-default-dependent",
+            "public-ports-expose-guest-services",
+            "custom-domain-binding-routes-traffic",
+            "web-sharing-grants-and-revocation",
+            "private-network-source-trust",
+            "registration-reconcile-returns-access-token",
+            "sandbox-events-carry-metadata",
         ];
         let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         for id in ids {

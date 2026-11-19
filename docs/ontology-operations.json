@@ -98,6 +98,30 @@
     },
     {
       "component": "hv2-cluster",
+      "id": "list_node_pending_registrations",
+      "method": "GET",
+      "path": "/cluster/nodes/{node}/registrations/pending"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "reconcile_node_sandbox_registration",
+      "method": "POST",
+      "path": "/cluster/nodes/{node}/sandboxes/{id}/registration/reconcile"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_sandbox_events",
+      "method": "GET",
+      "path": "/events/sandboxes"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_sandbox_events",
+      "method": "GET",
+      "path": "/events/sandboxes/{id}"
+    },
+    {
+      "component": "hv2-cluster",
       "id": "list_managed_keys",
       "method": "GET",
       "path": "/keys"
@@ -326,6 +350,12 @@
     },
     {
       "component": "hv2-cluster",
+      "id": "resolve_sandbox_name",
+      "method": "GET",
+      "path": "/sandbox-names/{name}"
+    },
+    {
+      "component": "hv2-cluster",
       "id": "list_sandboxes",
       "method": "GET",
       "path": "/sandboxes"
@@ -335,6 +365,12 @@
       "id": "create_sandbox",
       "method": "POST",
       "path": "/sandboxes"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_sandboxes_metrics",
+      "method": "GET",
+      "path": "/sandboxes/metrics"
     },
     {
       "component": "hv2-cluster",
@@ -410,6 +446,30 @@
     },
     {
       "component": "hv2-cluster",
+      "id": "list_sandbox_domains",
+      "method": "GET",
+      "path": "/sandboxes/{id}/domains"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "unbind_sandbox_domain",
+      "method": "DELETE",
+      "path": "/sandboxes/{id}/domains/{domain}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "bind_sandbox_domain",
+      "method": "PUT",
+      "path": "/sandboxes/{id}/domains/{domain}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_sandbox_domain_challenge",
+      "method": "GET",
+      "path": "/sandboxes/{id}/domains/{domain}/challenge"
+    },
+    {
+      "component": "hv2-cluster",
       "id": "exec_in_sandbox",
       "method": "POST",
       "path": "/sandboxes/{id}/exec"
@@ -419,6 +479,36 @@
       "id": "fork_sandbox",
       "method": "POST",
       "path": "/sandboxes/{id}/fork"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_sandbox_logs",
+      "method": "GET",
+      "path": "/sandboxes/{id}/logs"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_sandbox_metrics",
+      "method": "GET",
+      "path": "/sandboxes/{id}/metrics"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "assign_sandbox_name",
+      "method": "PUT",
+      "path": "/sandboxes/{id}/names/{name}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "update_sandbox_network",
+      "method": "ANY",
+      "path": "/sandboxes/{id}/network"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_sandbox_network_decisions",
+      "method": "GET",
+      "path": "/sandboxes/{id}/network/decisions"
     },
     {
       "component": "hv2-cluster",
@@ -434,9 +524,69 @@
     },
     {
       "component": "hv2-cluster",
+      "id": "open_sandbox_reverse_tunnel",
+      "method": "GET",
+      "path": "/sandboxes/{id}/ports/{port}/reverse"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "open_sandbox_tcp_tunnel",
+      "method": "GET",
+      "path": "/sandboxes/{id}/ports/{port}/tcp"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "open_sandbox_udp_tunnel",
+      "method": "GET",
+      "path": "/sandboxes/{id}/ports/{port}/udp"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "open_sandbox_udp6_tunnel",
+      "method": "GET",
+      "path": "/sandboxes/{id}/ports/{port}/udp6"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_sandbox_private_networks",
+      "method": "GET",
+      "path": "/sandboxes/{id}/private-networks"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "set_sandbox_private_networks",
+      "method": "PUT",
+      "path": "/sandboxes/{id}/private-networks"
+    },
+    {
+      "component": "hv2-cluster",
       "id": "list_sandbox_processes",
       "method": "GET",
       "path": "/sandboxes/{id}/processes"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_sandbox_public_ports",
+      "method": "GET",
+      "path": "/sandboxes/{id}/public-ports"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "remove_sandbox_public_port",
+      "method": "DELETE",
+      "path": "/sandboxes/{id}/public-ports/{port}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "reserve_sandbox_public_port",
+      "method": "PUT",
+      "path": "/sandboxes/{id}/public-ports/{port}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "refresh_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{id}/refreshes"
     },
     {
       "component": "hv2-cluster",
@@ -473,6 +623,18 @@
       "id": "set_sandbox_timeout",
       "method": "POST",
       "path": "/sandboxes/{id}/timeout"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_sandbox_web_sharing",
+      "method": "GET",
+      "path": "/sandboxes/{id}/web-sharing"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "set_sandbox_web_sharing",
+      "method": "PUT",
+      "path": "/sandboxes/{id}/web-sharing"
     },
     {
       "component": "hv2-cluster",
@@ -521,6 +683,24 @@
       "id": "connect_sandbox_v2",
       "method": "POST",
       "path": "/v2/sandboxes/{id}/connect"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_sandbox_logs_v2",
+      "method": "GET",
+      "path": "/v2/sandboxes/{id}/logs"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_sandbox_events",
+      "method": "GET",
+      "path": "/events/sandboxes"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_sandbox_events",
+      "method": "GET",
+      "path": "/events/sandboxes/{id}"
     },
     {
       "component": "hv2-sandboxd",
@@ -794,6 +974,48 @@
     },
     {
       "component": "hv2-sandboxd",
+      "id": "node_list_local_networks",
+      "method": "GET",
+      "path": "/networks"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_create_local_network",
+      "method": "POST",
+      "path": "/networks"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_delete_local_network",
+      "method": "DELETE",
+      "path": "/networks/{name}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_local_network",
+      "method": "GET",
+      "path": "/networks/{name}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_connect_sandbox_to_local_network",
+      "method": "POST",
+      "path": "/networks/{name}/connect"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_disconnect_sandbox_from_local_network",
+      "method": "POST",
+      "path": "/networks/{name}/disconnect"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_pending_registrations",
+      "method": "GET",
+      "path": "/registrations/pending"
+    },
+    {
+      "component": "hv2-sandboxd",
       "id": "node_list_sandboxes",
       "method": "GET",
       "path": "/sandboxes"
@@ -803,6 +1025,12 @@
       "id": "node_create_sandbox",
       "method": "POST",
       "path": "/sandboxes"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_sandboxes_metrics",
+      "method": "GET",
+      "path": "/sandboxes/metrics"
     },
     {
       "component": "hv2-sandboxd",
@@ -890,6 +1118,30 @@
     },
     {
       "component": "hv2-sandboxd",
+      "id": "node_get_sandbox_logs",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/logs"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_sandbox_metrics",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/metrics"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_update_sandbox_network",
+      "method": "PUT",
+      "path": "/sandboxes/{sandboxID}/network"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_sandbox_network_decisions",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/network/decisions"
+    },
+    {
+      "component": "hv2-sandboxd",
       "id": "node_adopt_sandbox_owner",
       "method": "POST",
       "path": "/sandboxes/{sandboxID}/owner"
@@ -902,6 +1154,42 @@
     },
     {
       "component": "hv2-sandboxd",
+      "id": "node_open_sandbox_reverse_tunnel",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/ports/{port}/reverse"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_open_sandbox_tcp_tunnel",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/ports/{port}/tcp"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_open_sandbox_udp_tunnel",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/ports/{port}/udp"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_open_sandbox_udp6_tunnel",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/ports/{port}/udp6"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_open_sandbox_private_tcp_tunnel",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/private-ports/{port}/tcp"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_open_sandbox_private_udp_tunnel",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/private-ports/{port}/udp"
+    },
+    {
+      "component": "hv2-sandboxd",
       "id": "node_list_sandbox_processes",
       "method": "GET",
       "path": "/sandboxes/{sandboxID}/processes"
@@ -911,6 +1199,12 @@
       "id": "node_reboot_sandbox",
       "method": "POST",
       "path": "/sandboxes/{sandboxID}/reboot"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_reconcile_sandbox_registration",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/registration/reconcile"
     },
     {
       "component": "hv2-sandboxd",
@@ -971,6 +1265,12 @@
       "id": "node_connect_sandbox_v2",
       "method": "POST",
       "path": "/v2/sandboxes/{sandboxID}/connect"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_sandbox_logs_v2",
+      "method": "GET",
+      "path": "/v2/sandboxes/{sandboxID}/logs"
     }
   ]
 }
