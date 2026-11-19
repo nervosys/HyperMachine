@@ -12,7 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `x-hv2-archive-skipped`.** Its forward of a sandbox's routes passed on only the
   node's status and `content-type`, so a caller going through the control plane
   could not tell a whole archive from one with entries left out, and got no file
-  name. Those two headers now travel with the body.
+  name. Those two headers now travel with the body, and so does a machine
+  snapshot disk download's `content-disposition` (the machine routes' relay
+  had the same gap).
 - **A snapshot could tear while network or vsock traffic arrived.** Pausing a
   VM parked only its vCPUs; the vsock and network delivery threads kept
   writing receive rings and raising the interrupt line, so a snapshot read

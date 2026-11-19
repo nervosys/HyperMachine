@@ -322,6 +322,106 @@ async fn machines_are_placed_found_and_kept_to_their_team_across_nodes() {
     );
 }
 
+/// A machine snapshot's disk download keeps its file name through the
+/// control plane, which relays machine routes.
+#[tokio::test]
+async fn a_machine_snapshots_disk_keeps_its_file_name_through_the_control_plane() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let app = Router::new()
+        .route(
+            "/machines",
+            axum::routing::get(|| async {
+                Json(json!([{"machineID":"vm-red","name":"web-01","teamID":"red"}]))
+            }),
+        )
+        .route(
+            "/machines/{name}/snapshots/{id}/disk",
+            axum::routing::get(|| async {
+                (
+                    [
+                        ("content-type", "application/octet-stream"),
+                        (
+                            "content-disposition",
+                            "attachment; filename=\"web-01-snap.img\"",
+                        ),
+                        ("set-cookie", "node=1"),
+                    ],
+                    "disk-bytes",
+                )
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let _node = Owned(tokio::spawn(async move {
+        axum::serve(listener, app).await.unwrap();
+    }));
+    store
+        .put_node(
+            &NodeInfo {
+                id: "only".into(),
+                api: format!("http://{address}"),
+                proxy: address,
+                capacity: 8,
+                running: 0,
+                heartbeat_ms: now_ms(),
+                version: "fixture".into(),
+                jwk: None,
+                templates: vec!["base".into()],
+                template_metadata: Default::default(),
+            },
+            Duration::from_secs(60),
+        )
+        .await
+        .unwrap();
+    let digest = Sha256::digest(b"red-key")
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let expires = chrono::Utc::now().timestamp() + 60;
+    let policies = json!([
+        {"sha256":digest,"expires_at":expires,"scopes":["machines"],
+         "principal_id":"alice","team_id":"red"},
+    ]);
+    let control = ControlPlane::new(
+        store.clone(),
+        ControlConfig {
+            api_key: None,
+            api_keys: hv2_cluster::keys::ApiKeyPolicy::from_json(&policies.to_string()).unwrap(),
+            access_audit: None,
+            cluster_token: Some(TOKEN.into()),
+            proxy_port: 3000,
+            create_timeout: Duration::from_secs(5),
+            identity_issuer: None,
+        },
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let router = control::router(control.clone());
+    let _server = Owned(tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    }));
+    let response = reqwest::Client::new()
+        .get(format!("{base}/machines/web-01/snapshots/snap/disk"))
+        .header("x-api-key", "red-key")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    assert_eq!(
+        response.headers()["content-type"],
+        "application/octet-stream"
+    );
+    assert_eq!(
+        response.headers()["content-disposition"],
+        "attachment; filename=\"web-01-snap.img\""
+    );
+    assert!(
+        response.headers().get("set-cookie").is_none(),
+        "a node's cookie is not passed on"
+    );
+    assert_eq!(response.bytes().await.unwrap().as_ref(), b"disk-bytes");
+}
+
 /// A machine's reverse port through the control plane: found as the
 /// machine's other routes are, carried as the node's upgraded stream, and
 /// sent to the node as the machine's team and no one else.

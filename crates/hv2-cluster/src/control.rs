@@ -2632,13 +2632,7 @@ async fn forward(
         .to_string();
     // What a download is named and whether it is whole (a checkpoint archive
     // says how many entries it left out) travel with the body.
-    let kept: Vec<(&str, HeaderValue)> = KEPT_NODE_HEADERS
-        .iter()
-        .filter_map(|name| {
-            let value = response.headers().get(*name)?;
-            Some((*name, HeaderValue::from_bytes(value.as_bytes()).ok()?))
-        })
-        .collect();
+    let kept = kept_node_headers(response.headers());
     let bytes = response.bytes().await.unwrap_or_default();
 
     // Older nodes remove the VM record without knowing about reserved names.
@@ -2684,9 +2678,20 @@ async fn forward(
     out
 }
 
-/// The node's response headers `forward` passes on besides `content-type`.
+/// The node's response headers `forward` and `relay` pass on besides `content-type`.
 /// Not hop-by-hop, `set-cookie` or anything of the node's own.
 const KEPT_NODE_HEADERS: [&str; 2] = ["content-disposition", "x-hv2-archive-skipped"];
+
+/// The [`KEPT_NODE_HEADERS`] a node's response carries.
+fn kept_node_headers(headers: &reqwest::header::HeaderMap) -> Vec<(&'static str, HeaderValue)> {
+    KEPT_NODE_HEADERS
+        .iter()
+        .filter_map(|name| {
+            let value = headers.get(*name)?;
+            Some((*name, HeaderValue::from_bytes(value.as_bytes()).ok()?))
+        })
+        .collect()
+}
 
 // ── Operations ──────────────────────────────────────────────────────────────
 
@@ -3737,10 +3742,14 @@ async fn relay_with_team(
     let status =
         StatusCode::from_u16(response.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     let content_type = response.headers().get("content-type").cloned();
+    let kept = kept_node_headers(response.headers());
     let mut out = Response::new(Body::from_stream(response.bytes_stream()));
     *out.status_mut() = status;
     if let Some(value) = content_type {
         out.headers_mut().insert("content-type", value);
+    }
+    for (name, value) in kept {
+        out.headers_mut().insert(name, value);
     }
     out
 }
