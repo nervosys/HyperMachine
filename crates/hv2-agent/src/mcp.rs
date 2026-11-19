@@ -2083,14 +2083,24 @@ impl McpServer {
     /// return the number removed. A long-running agent runtime can call this
     /// periodically; `create_session` also calls it automatically at capacity.
     pub fn expire_idle_sessions(&self, max_idle: Duration) -> usize {
+        self.expire_idle_sessions_where(max_idle, |_| true)
+    }
+
+    /// Like [`Self::expire_idle_sessions`], but only considers sessions whose
+    /// id `eligible` accepts, so one tenant's reap cannot end another's.
+    pub fn expire_idle_sessions_where(
+        &self,
+        max_idle: Duration,
+        eligible: impl Fn(&str) -> bool,
+    ) -> usize {
         let now = Instant::now();
         let removed: Vec<Arc<AgentSession>> = {
             let mut sessions = self.sessions.write().unwrap_or_else(|e| e.into_inner());
             let expired: Vec<String> = sessions
                 .iter()
-                .filter(|(_, s)| {
+                .filter(|(id, s)| {
                     let last = *s.last_activity.read().unwrap_or_else(|e| e.into_inner());
-                    now.duration_since(last) >= max_idle
+                    eligible(id) && now.duration_since(last) >= max_idle
                 })
                 .map(|(k, _)| k.clone())
                 .collect();

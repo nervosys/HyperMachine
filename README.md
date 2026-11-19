@@ -157,7 +157,10 @@ curl -X POST http://localhost:8080/mcp/call \
 Spawn and operate a fleet of copy-on-write agents over HTTP. Each agent gets an
 MCP session plus an O(1) sandbox cloned from a warm baseline. Requests are
 tenant-scoped via `X-Tenant-Id` (an agent is owned by the tenant that spawned
-it), with an optional `Authorization: Bearer <token>`:
+it), with an optional `Authorization: Bearer <token>`. The header is the caller's word unless
+their API key is bound to a tenant (then the key decides and a different header is refused),
+so run without tenant-bound keys only behind a proxy that authenticates. `reap` only reaps the
+caller's tenant:
 
 ```bash
 # Spawn a tenant-scoped agent (O(1) CoW sandbox from the warm baseline)

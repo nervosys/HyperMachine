@@ -95,6 +95,12 @@ impl AgentRuntime {
         self.server.expire_idle_sessions(max_idle)
     }
 
+    /// Reap idle agents among those `eligible` accepts, returning the number
+    /// reclaimed. A multi-tenant caller passes its own tenant's sessions.
+    pub fn reap_idle_where(&self, max_idle: Duration, eligible: impl Fn(&str) -> bool) -> usize {
+        self.server.expire_idle_sessions_where(max_idle, eligible)
+    }
+
     /// Number of live agent sessions.
     pub fn live_agents(&self) -> usize {
         self.server.session_count()

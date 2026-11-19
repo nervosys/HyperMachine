@@ -124,12 +124,24 @@ pub struct ServerConfig {
     /// `Enforce` once the catalogue is populated — doing it the other way round
     /// refuses every boot image until each one is registered and approved.
     pub image_admission_mode: ImageAdmissionMode,
+    /// Let webhook URLs point at loopback, private, link-local and other
+    /// non-public addresses. Off by default: otherwise anyone who can register
+    /// a webhook makes this server send requests into its own network (cloud
+    /// metadata, internal services). Turn on only for internal receivers.
+    pub allow_private_webhooks: bool,
+    /// Listen beyond loopback with no API key. Off by default: with no key and
+    /// a non-loopback `host`, [`Self::check_startup_auth`] refuses to start,
+    /// because every route (VM lifecycle, guest exec, the image allowlist)
+    /// would be open to anyone who can reach the port. Setting this is the
+    /// operator saying that is what they mean, for example behind a proxy
+    /// that authenticates.
+    pub allow_unauthenticated: bool,
 }
 
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
-            host: "0.0.0.0".to_string(),
+            host: "127.0.0.1".to_string(),
             rest_port: 8080,
             grpc_port: 50051,
             enable_runtime: true,
@@ -141,11 +153,52 @@ impl Default for ServerConfig {
             tls: None,
             enforce_image_admission: false,
             image_admission_mode: ImageAdmissionMode::Audit,
+            allow_private_webhooks: false,
+            allow_unauthenticated: false,
         }
     }
 }
 
 impl ServerConfig {
+    /// Whether `host` is a loopback address.
+    pub fn binds_loopback(&self) -> bool {
+        self.host
+            .parse::<std::net::IpAddr>()
+            .is_ok_and(|ip| ip.is_loopback())
+    }
+
+    /// Whether the REST and gRPC surfaces require an API key.
+    pub fn authenticates(&self) -> bool {
+        self.middleware.enable_api_key_auth
+    }
+
+    /// Refuse a configuration that would expose every route to the network
+    /// with no authentication. Called by [`Server::serve_rest`] and
+    /// [`Server::serve_all`], and by the CLI before it prints a banner.
+    ///
+    /// Allowed: any host when an API key is required; loopback with none; a
+    /// non-loopback host with none only when `allow_unauthenticated` is set.
+    pub fn check_startup_auth(&self) -> std::result::Result<(), String> {
+        if self.authenticates() || self.binds_loopback() {
+            return Ok(());
+        }
+        if self.allow_unauthenticated {
+            tracing::warn!(
+                "{} is not loopback and no API key is configured: every caller who can reach \
+                 this port is an administrator (allow_unauthenticated is set)",
+                self.host
+            );
+            return Ok(());
+        }
+        Err(format!(
+            "refusing to listen on {} with no API key: every route would be open to anyone who \
+             can reach the port. Set HV2_API_KEYS (or [middleware.api_key] with \
+             enable_api_key_auth), bind a loopback address with --host, or pass \
+             --allow-unauthenticated if that is what you mean",
+            self.host
+        ))
+    }
+
     /// Builder-style: set REST port
     pub fn rest_port(mut self, port: u16) -> Self {
         self.rest_port = port;
@@ -257,7 +310,9 @@ impl Server {
         };
 
         let event_bus = if config.enable_events {
-            Some(Arc::new(EventBus::new()))
+            Some(Arc::new(
+                EventBus::new().with_allow_private_webhooks(config.allow_private_webhooks),
+            ))
         } else {
             None
         };
@@ -272,7 +327,9 @@ impl Server {
     /// Create a server with an existing runtime (for testing or embedding)
     pub fn with_runtime(config: ServerConfig, runtime: Runtime) -> Self {
         let event_bus = if config.enable_events {
-            Some(Arc::new(EventBus::new()))
+            Some(Arc::new(
+                EventBus::new().with_allow_private_webhooks(config.allow_private_webhooks),
+            ))
         } else {
             None
         };
@@ -391,6 +448,9 @@ impl Server {
 
     /// Start the REST API server with graceful shutdown (blocking)
     pub async fn serve_rest(&self) -> Result<()> {
+        self.config
+            .check_startup_auth()
+            .map_err(crate::ApiError::InvalidRequest)?;
         let addr = self.config.rest_addr();
         let app = self.build_router();
         let timeout = self.config.shutdown_timeout_secs;
@@ -424,7 +484,18 @@ impl Server {
 
     /// Start the gRPC server (blocking)
     pub async fn serve_grpc(&self) -> Result<()> {
-        crate::grpc::serve(self.config.grpc_addr()).await
+        self.config
+            .check_startup_auth()
+            .map_err(crate::ApiError::InvalidRequest)?;
+        crate::grpc::serve_with_auth(self.config.grpc_addr(), self.grpc_auth()).await
+    }
+
+    /// The key check the gRPC surface applies: the same keys as REST, or none
+    /// when REST does not authenticate either.
+    fn grpc_auth(&self) -> Option<crate::middleware::ApiKeyConfig> {
+        self.config
+            .authenticates()
+            .then(|| self.config.middleware.api_key.clone())
     }
 
     /// Start both REST and gRPC servers concurrently with graceful shutdown
@@ -434,6 +505,10 @@ impl Server {
     /// 2. Waits up to `shutdown_timeout_secs` for in-flight requests to drain
     /// 3. Logs a shutdown summary with uptime
     pub async fn serve_all(&self) -> Result<()> {
+        self.config
+            .check_startup_auth()
+            .map_err(crate::ApiError::InvalidRequest)?;
+        let grpc_auth = self.grpc_auth();
         let rest_addr = self.config.rest_addr();
         let grpc_addr = self.config.grpc_addr();
         let app = self.build_router();
@@ -468,7 +543,9 @@ impl Server {
         };
 
         let grpc_handle = tokio::spawn(async move {
-            crate::grpc::serve(grpc_addr).await.ok();
+            crate::grpc::serve_with_auth(grpc_addr, grpc_auth)
+                .await
+                .ok();
         });
 
         tokio::select! {
@@ -719,7 +796,7 @@ mod tests {
     #[test]
     fn test_server_config_default() {
         let config = ServerConfig::default();
-        assert_eq!(config.host, "0.0.0.0");
+        assert_eq!(config.host, "127.0.0.1");
         assert_eq!(config.rest_port, 8080);
         assert_eq!(config.grpc_port, 50051);
         assert!(config.enable_runtime);
@@ -750,12 +827,57 @@ mod tests {
         let config = ServerConfig::default();
         assert_eq!(
             config.rest_addr(),
-            "0.0.0.0:8080".parse::<std::net::SocketAddr>().unwrap()
+            "127.0.0.1:8080".parse::<std::net::SocketAddr>().unwrap()
         );
         assert_eq!(
             config.grpc_addr(),
-            "0.0.0.0:50051".parse::<std::net::SocketAddr>().unwrap()
+            "127.0.0.1:50051".parse::<std::net::SocketAddr>().unwrap()
         );
+    }
+
+    // ── Startup authentication ────────────────────────────────────────
+
+    #[test]
+    fn a_default_server_is_loopback_only_and_starts() {
+        let config = ServerConfig::default();
+        assert!(config.binds_loopback());
+        assert!(config.check_startup_auth().is_ok());
+    }
+
+    #[test]
+    fn listening_beyond_loopback_without_a_key_is_refused() {
+        for host in ["0.0.0.0", "192.0.2.10", "::"] {
+            let config = ServerConfig::default().host(host);
+            let err = config.check_startup_auth().unwrap_err();
+            assert!(err.contains("--allow-unauthenticated"), "{host}: {err}");
+        }
+    }
+
+    #[test]
+    fn listening_beyond_loopback_is_allowed_with_a_key_or_an_explicit_opt_in() {
+        let keyed = ServerConfig {
+            middleware: MiddlewareConfig::none().api_keys(vec!["k".to_string()]),
+            ..ServerConfig::default().host("0.0.0.0")
+        };
+        assert!(keyed.check_startup_auth().is_ok());
+
+        let opted_in = ServerConfig {
+            allow_unauthenticated: true,
+            ..ServerConfig::default().host("0.0.0.0")
+        };
+        assert!(opted_in.check_startup_auth().is_ok());
+    }
+
+    #[tokio::test]
+    async fn serving_beyond_loopback_without_a_key_does_not_bind() {
+        let server = Server::new(
+            ServerConfig::default()
+                .host("0.0.0.0")
+                .enable_runtime(false)
+                .enable_events(false),
+        );
+        assert!(server.serve_rest().await.is_err());
+        assert!(server.serve_all().await.is_err());
     }
 
     // ── Server Construction ───────────────────────────────────────────

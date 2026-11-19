@@ -326,7 +326,14 @@ fn cors_handler(
 #[derive(Debug, Clone)]
 pub struct ApiKeyConfig {
     /// Valid API keys. If empty, all requests are rejected when auth is on.
+    ///
+    /// A key listed here is an unscoped administrator: every route, and no
+    /// tenant, so a request carrying one is trusted to name any tenant in
+    /// `X-Tenant-Id`. Use [`Self::scoped_keys`] to give a key a role and a
+    /// tenant.
     pub keys: Vec<String>,
+    /// Keys with a role and, optionally, a tenant. See [`ScopedKey`].
+    pub scoped_keys: Vec<ScopedKey>,
     /// Path prefixes excluded from authentication (e.g. `/health`).
     ///
     /// For safe methods only: GET, HEAD and OPTIONS. A POST, PUT, PATCH or
@@ -344,13 +351,182 @@ impl Default for ApiKeyConfig {
     fn default() -> Self {
         Self {
             keys: vec![],
+            scoped_keys: vec![],
             excluded_paths: vec!["/health".to_string(), "/agentic".to_string()],
             header_name: "authorization".to_string(),
         }
     }
 }
 
+/// What a key is allowed to do.
+///
+/// Authorization here is by method and route prefix, not per resource:
+///
+/// | Role       | Reads (GET/HEAD/OPTIONS) | Writes                                   |
+/// |------------|--------------------------|------------------------------------------|
+/// | `viewer`   | everywhere               | nowhere                                  |
+/// | `operator` | everywhere               | everywhere except the admin-only routes  |
+/// | `admin`    | everywhere               | everywhere                               |
+///
+/// The admin-only write routes are `/api/v1/images` (the image allowlist),
+/// `/api/v1/runtime` (the fleet) and `/api/v1/gpu-fabric` apart from capacity
+/// reservations, which belong to a tenant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum KeyRole {
+    /// Reads only.
+    Viewer,
+    /// Reads, and writes outside the admin-only routes.
+    Operator,
+    /// Everything.
+    Admin,
+}
+
+impl KeyRole {
+    /// Parse `viewer`, `operator` or `admin`.
+    pub fn parse(text: &str) -> Option<Self> {
+        match text {
+            "viewer" => Some(Self::Viewer),
+            "operator" => Some(Self::Operator),
+            "admin" => Some(Self::Admin),
+            _ => None,
+        }
+    }
+}
+
+/// A key bound to a role and, optionally, a tenant.
+///
+/// A key with a tenant *is* that tenant to the routes that scope by tenant
+/// (agents, GPU reservations): the `X-Tenant-Id` header is set to it, and a
+/// request naming another tenant is refused, so the header cannot be used to
+/// act as someone else.
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct ScopedKey {
+    /// The secret presented as `Authorization: Bearer <key>`.
+    pub key: String,
+    /// What the key may do.
+    pub role: KeyRole,
+    /// The tenant the key acts as. `None` leaves the header to the caller.
+    #[serde(default)]
+    pub tenant: Option<String>,
+}
+
+impl std::fmt::Debug for ScopedKey {
+    // Never print the secret.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScopedKey")
+            .field("key", &"<redacted>")
+            .field("role", &self.role)
+            .field("tenant", &self.tenant)
+            .finish()
+    }
+}
+
+/// Whether `tenant` is usable as a tenant name carried in a header.
+pub fn is_valid_tenant_name(tenant: &str) -> bool {
+    !tenant.is_empty()
+        && tenant.len() <= 128
+        && tenant
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+}
+
+/// Who an authenticated request is, stored in the request's extensions by the
+/// API key middleware for handlers to read (see [`Caller`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CallerIdentity {
+    /// What the key may do.
+    pub role: KeyRole,
+    /// The tenant the key is bound to, if any.
+    pub tenant: Option<String>,
+}
+
+impl CallerIdentity {
+    /// An administrator not bound to a tenant: the only caller allowed to act
+    /// across tenants.
+    pub fn is_unscoped_admin(&self) -> bool {
+        self.role == KeyRole::Admin && self.tenant.is_none()
+    }
+}
+
+/// Extractor for the caller's identity: `None` when the request was not
+/// authenticated by an API key (auth off, or an excluded read-only path).
+#[derive(Debug, Clone)]
+pub struct Caller(pub Option<CallerIdentity>);
+
+impl<S: Send + Sync> axum::extract::FromRequestParts<S> for Caller {
+    type Rejection = std::convert::Infallible;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        Ok(Caller(parts.extensions.get::<CallerIdentity>().cloned()))
+    }
+}
+
+/// `true` if `path` is `prefix` or below it, on a segment boundary.
+fn under(path: &str, prefix: &str) -> bool {
+    path.strip_prefix(prefix)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+}
+
+/// Whether `role` may send `method` to `path`. See [`KeyRole`].
+pub fn role_allows(role: KeyRole, method: &axum::http::Method, path: &str) -> bool {
+    use axum::http::Method;
+    if role == KeyRole::Admin {
+        return true;
+    }
+    if matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS) {
+        return true;
+    }
+    if role == KeyRole::Viewer {
+        return false;
+    }
+    // Operator: a write, so keep it out of the admin-only routes.
+    let tenant_owned = under(path, "/api/v1/gpu-fabric/capacity/reservations");
+    !(under(path, "/api/v1/images")
+        || under(path, "/api/v1/runtime")
+        || (under(path, "/api/v1/gpu-fabric") && !tenant_owned))
+}
+
 impl ApiKeyConfig {
+    /// `true` if any key is configured, so auth is not a closed door.
+    pub fn has_keys(&self) -> bool {
+        !self.keys.is_empty() || !self.scoped_keys.is_empty()
+    }
+
+    /// Who the presented key is, if it is one of ours. Constant-time per key.
+    pub fn identify(&self, auth_value: &str) -> Option<CallerIdentity> {
+        use subtle::ConstantTimeEq;
+        let key = auth_value
+            .strip_prefix("Bearer ")
+            .unwrap_or(auth_value)
+            .as_bytes();
+        let matches = |configured: &str| -> bool {
+            let c = configured.as_bytes();
+            c.len() == key.len() && bool::from(c.ct_eq(key))
+        };
+        let mut found: Option<CallerIdentity> = None;
+        for configured in &self.keys {
+            if matches(configured) && found.is_none() {
+                found = Some(CallerIdentity {
+                    role: KeyRole::Admin,
+                    tenant: None,
+                });
+            }
+        }
+        for scoped in &self.scoped_keys {
+            if matches(&scoped.key) && found.is_none() {
+                found = Some(CallerIdentity {
+                    role: scoped.role,
+                    tenant: scoped.tenant.clone(),
+                });
+            }
+        }
+        found
+    }
+
     /// Check if a path is excluded from authentication.
     fn is_excluded(&self, path: &str) -> bool {
         self.excluded_paths.iter().any(|p| path.starts_with(p))
@@ -363,21 +539,7 @@ impl ApiKeyConfig {
     /// Uses constant-time comparison to prevent timing attacks that could
     /// leak the length of a matching prefix of any configured key.
     fn validate(&self, auth_value: &str) -> bool {
-        use subtle::ConstantTimeEq;
-        let key = auth_value
-            .strip_prefix("Bearer ")
-            .unwrap_or(auth_value)
-            .as_bytes();
-        // Iterate all configured keys (do not short-circuit on length mismatch) so
-        // both the length comparison and the byte comparison are constant-time per key.
-        let mut matched = subtle::Choice::from(0u8);
-        for configured in &self.keys {
-            let c = configured.as_bytes();
-            if c.len() == key.len() {
-                matched |= c.ct_eq(key);
-            }
-        }
-        matched.into()
+        self.identify(auth_value).is_some()
     }
 }
 
@@ -408,9 +570,52 @@ fn api_key_handler(
             .get(&*config.header_name)
             .and_then(|v| v.to_str().ok());
 
-        match auth {
-            Some(value) if config.validate(value) => next.run(request).await,
-            Some(_) => {
+        let identity = auth.and_then(|value| config.identify(value));
+        match (auth, identity) {
+            (Some(_), Some(identity)) => {
+                let mut request = request;
+                if !role_allows(identity.role, request.method(), request.uri().path()) {
+                    let body = ErrorResponse {
+                        error: format!(
+                            "a key with the {} role may not {} {}",
+                            format!("{:?}", identity.role).to_lowercase(),
+                            request.method(),
+                            request.uri().path()
+                        ),
+                        code: "ROLE_DENIED".to_string(),
+                        request_id: req_id,
+                    };
+                    return (StatusCode::FORBIDDEN, Json(body)).into_response();
+                }
+                if let Some(tenant) = &identity.tenant {
+                    // The key is the tenant. A header naming a different one is
+                    // refused rather than quietly overridden, so a client
+                    // that believes it is someone else finds out.
+                    let named_other = request
+                        .headers()
+                        .get_all("x-tenant-id")
+                        .iter()
+                        .any(|v| v.as_bytes() != tenant.as_bytes());
+                    let value = axum::http::HeaderValue::from_str(tenant);
+                    match value {
+                        Ok(value) if !named_other => {
+                            request.headers_mut().insert("x-tenant-id", value);
+                        }
+                        _ => {
+                            let body = ErrorResponse {
+                                error: "X-Tenant-Id does not match the tenant this key is bound to"
+                                    .to_string(),
+                                code: "TENANT_MISMATCH".to_string(),
+                                request_id: req_id,
+                            };
+                            return (StatusCode::FORBIDDEN, Json(body)).into_response();
+                        }
+                    }
+                }
+                request.extensions_mut().insert(identity);
+                next.run(request).await
+            }
+            (Some(_), None) => {
                 let body = ErrorResponse {
                     error: "Invalid API key".to_string(),
                     code: "FORBIDDEN".to_string(),
@@ -418,7 +623,7 @@ fn api_key_handler(
                 };
                 (StatusCode::FORBIDDEN, Json(body)).into_response()
             }
-            None => {
+            (None, _) => {
                 let body = ErrorResponse {
                     error: "Missing API key".to_string(),
                     code: "UNAUTHORIZED".to_string(),
@@ -6790,6 +6995,22 @@ impl MiddlewareConfig {
     pub fn api_keys(mut self, keys: Vec<String>) -> Self {
         self.enable_api_key_auth = true;
         self.api_key.keys = keys;
+        self
+    }
+
+    /// Builder-style: add a key with a role and, optionally, a tenant.
+    pub fn scoped_api_key(
+        mut self,
+        key: impl Into<String>,
+        role: KeyRole,
+        tenant: Option<&str>,
+    ) -> Self {
+        self.enable_api_key_auth = true;
+        self.api_key.scoped_keys.push(ScopedKey {
+            key: key.into(),
+            role,
+            tenant: tenant.map(str::to_string),
+        });
         self
     }
 

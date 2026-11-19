@@ -17,6 +17,22 @@
 //! | `POST`   | `/api/v1/images/:reference/deprecate` | Deprecate an image        |
 //! | `POST`   | `/api/v1/images/check-admission`      | Check admission for an image |
 //! | `GET`    | `/api/v1/images/config`               | Get registry configuration |
+//!
+//! ## Lifecycle rules
+//!
+//! `approve` is refused (`409`) from `Denied` and `Revoked`: both are final for
+//! a reference. `deprecate` is refused (`409`) unless the image is `Approved`
+//! (or already `Deprecated`), because a deprecated image is admitted.
+//!
+//! ## Signatures cannot be verified over REST
+//!
+//! `POST /api/v1/images` records every submitted signature with
+//! `verified: false`, and nothing in this crate checks a signature against a
+//! trusted key. The registry, by default, requires a verified signature to
+//! approve, so with that default **`approve` always answers `422` over REST**.
+//! Starting the registry with `require_signature = false` makes approval a
+//! plain reviewer decision, with no cryptographic check behind it. No client
+//! flag can mark a signature verified; that is deliberate.
 
 use axum::{
     extract::{Path, Query, State},
@@ -27,7 +43,7 @@ use axum::{
 };
 use hv2_core::security::image_registry::{
     AdmissionDecision, ApprovalStatus, EnforcementMode, ImageEntry, ImageKind, ImageRegistry,
-    ImageSignature, RegistryConfig,
+    ImageSignature, RegistryConfig, RegistryError,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -370,10 +386,10 @@ async fn approve_image(
     match state.registry.approve(&reference, &req.reviewer) {
         Ok(()) => StatusCode::OK.into_response(),
         Err(e) => {
-            let status = if e.to_string().contains("not found") {
-                StatusCode::NOT_FOUND
-            } else {
-                StatusCode::UNPROCESSABLE_ENTITY
+            let status = match e {
+                RegistryError::NotFound(_) => StatusCode::NOT_FOUND,
+                RegistryError::InvalidTransition { .. } => StatusCode::CONFLICT,
+                _ => StatusCode::UNPROCESSABLE_ENTITY,
             };
             (
                 status,
@@ -440,7 +456,10 @@ async fn deprecate_image(
     {
         Ok(()) => StatusCode::OK.into_response(),
         Err(e) => (
-            StatusCode::NOT_FOUND,
+            match e {
+                RegistryError::InvalidTransition { .. } => StatusCode::CONFLICT,
+                _ => StatusCode::NOT_FOUND,
+            },
             Json(RegistryErrorResponse {
                 error: e.to_string(),
                 code: "DEPRECATE_FAILED".into(),
@@ -790,8 +809,21 @@ mod tests {
             .await
             .unwrap();
 
-        // Deprecate
+        // Approve, then deprecate (an unapproved image cannot be deprecated)
         let review = serde_json::json!({"reviewer": "admin", "reason": "EOL"});
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/images/old:1/approve")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&review).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
         let resp = app
             .clone()
             .oneshot(
@@ -824,5 +856,116 @@ mod tests {
             .unwrap();
         let result: AdmissionCheckResponse = serde_json::from_slice(&body).unwrap();
         assert_eq!(result.decision, "allowed_with_warning");
+    }
+
+    async fn post_json(app: &Router, uri: &str, body: serde_json::Value) -> StatusCode {
+        app.clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(uri)
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .status()
+    }
+
+    async fn admission(app: &Router, reference: &str) -> String {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/images/check-admission")
+                    .header("content-type", "application/json")
+                    .body(Body::from(
+                        serde_json::to_vec(&serde_json::json!({ "reference": reference })).unwrap(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        serde_json::from_slice::<AdmissionCheckResponse>(&body)
+            .unwrap()
+            .decision
+    }
+
+    #[tokio::test]
+    async fn a_revoked_or_denied_image_cannot_be_approved_again() {
+        let app = test_app();
+        let review = serde_json::json!({"reviewer": "admin", "reason": "CVE"});
+        for (image, verb) in [("rev:1", "revoke"), ("den:1", "deny")] {
+            let reg = serde_json::json!({"reference": image, "kind": "vm_image", "sha256": image});
+            assert_eq!(
+                post_json(&app, "/api/v1/images", reg).await,
+                StatusCode::CREATED
+            );
+            if verb == "revoke" {
+                let uri = format!("/api/v1/images/{image}/approve");
+                assert_eq!(post_json(&app, &uri, review.clone()).await, StatusCode::OK);
+            }
+            let uri = format!("/api/v1/images/{image}/{verb}");
+            assert_eq!(post_json(&app, &uri, review.clone()).await, StatusCode::OK);
+
+            let uri = format!("/api/v1/images/{image}/approve");
+            assert_eq!(
+                post_json(&app, &uri, review.clone()).await,
+                StatusCode::CONFLICT,
+                "{image} was {verb}d and must stay blocked"
+            );
+            assert_eq!(admission(&app, image).await, "denied");
+        }
+    }
+
+    #[tokio::test]
+    async fn deprecating_an_unapproved_or_revoked_image_does_not_admit_it() {
+        let app = test_app();
+        let review = serde_json::json!({"reviewer": "admin", "reason": "x"});
+        let reg = serde_json::json!({"reference": "p:1", "kind": "vm_image", "sha256": "p1"});
+        assert_eq!(
+            post_json(&app, "/api/v1/images", reg).await,
+            StatusCode::CREATED
+        );
+        assert_eq!(
+            post_json(&app, "/api/v1/images/p:1/deprecate", review.clone()).await,
+            StatusCode::CONFLICT
+        );
+        assert_eq!(admission(&app, "p:1").await, "denied");
+
+        let reg = serde_json::json!({"reference": "r:1", "kind": "vm_image", "sha256": "r1"});
+        post_json(&app, "/api/v1/images", reg).await;
+        post_json(&app, "/api/v1/images/r:1/approve", review.clone()).await;
+        post_json(&app, "/api/v1/images/r:1/revoke", review.clone()).await;
+        assert_eq!(
+            post_json(&app, "/api/v1/images/r:1/deprecate", review).await,
+            StatusCode::CONFLICT
+        );
+        assert_eq!(admission(&app, "r:1").await, "denied");
+    }
+
+    #[tokio::test]
+    async fn approve_with_a_submitted_signature_is_422_because_nothing_verifies_it() {
+        // Documents the standing limitation: the REST layer records signatures
+        // unverified, so a registry that requires one cannot approve anything.
+        let app = signed_app();
+        let reg = serde_json::json!({
+            "reference": "s:1", "kind": "vm_image", "sha256": "s1",
+            "signatures": [{"signer": "ci", "algorithm": "ed25519", "signature_hex": "00"}]
+        });
+        assert_eq!(
+            post_json(&app, "/api/v1/images", reg).await,
+            StatusCode::CREATED
+        );
+        let review = serde_json::json!({"reviewer": "admin"});
+        assert_eq!(
+            post_json(&app, "/api/v1/images/s:1/approve", review).await,
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
     }
 }

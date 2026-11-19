@@ -15,8 +15,15 @@
 //!
 //! Each request is scoped to the tenant in the `X-Tenant-Id` header (default
 //! `"default"`). An agent is owned by the tenant that spawned it: `list` and
-//! `fleet` only show that tenant's agents, and only the owning tenant may
-//! release one.
+//! `fleet` only show that tenant's agents, only the owning tenant may release
+//! one, and `reap` only reaps the requesting tenant's idle agents.
+//!
+//! **The header is a claim, not a proof.** Where the caller's API key is bound
+//! to a tenant (`ScopedKey::tenant`, see `crate::middleware`), the key
+//! middleware sets the header from the key and refuses a different one, so the
+//! tenant is the key's. Where it is not (no API key, or an unscoped key), the
+//! header is whatever the caller sent: run those deployments only behind a
+//! proxy that sets it from its own authentication.
 //!
 //! ## Auth
 //!
@@ -390,9 +397,21 @@ async fn reap_idle(
     if let Some(resp) = check_auth(&state, &headers) {
         return resp;
     }
+    // Only the requesting tenant's agents: a reap that ignored ownership let
+    // any tenant end every other tenant's idle agents.
+    let tenant = tenant_of(&headers);
+    let owned: HashSet<String> = state
+        .tenants
+        .lock()
+        .iter()
+        .filter(|(_, t)| **t == tenant)
+        .map(|(session, _)| session.clone())
+        .collect();
     let reaped = state
         .runtime
-        .reap_idle(Duration::from_secs(req.max_idle_secs));
+        .reap_idle_where(Duration::from_secs(req.max_idle_secs), |id| {
+            owned.contains(id)
+        });
     state.reconcile();
     Json(ReapResponse { reaped }).into_response()
 }
@@ -655,6 +674,40 @@ mod tests {
         let (_, bl) = send(&app, get_req("/api/v1/agents", None)).await;
         let list: AgentListResponse = serde_json::from_slice(&bl).unwrap();
         assert_eq!(list.total, 0);
+    }
+
+    #[tokio::test]
+    async fn reap_only_releases_the_requesting_tenants_agents() {
+        let app = test_app();
+        for (tenant, id) in [("acme", "a"), ("globex", "g")] {
+            send(
+                &app,
+                post_req(
+                    "/api/v1/agents",
+                    Some(tenant),
+                    None,
+                    json!({ "agent_id": id }),
+                ),
+            )
+            .await;
+        }
+        let (s, b) = send(
+            &app,
+            post_req(
+                "/api/v1/agents/reap",
+                Some("acme"),
+                None,
+                json!({"max_idle_secs":0}),
+            ),
+        )
+        .await;
+        assert_eq!(s, StatusCode::OK);
+        let reap: ReapResponse = serde_json::from_slice(&b).unwrap();
+        assert_eq!(reap.reaped, 1, "only acme's agent");
+
+        let (_, bl) = send(&app, get_req("/api/v1/agents", Some("globex"))).await;
+        let list: AgentListResponse = serde_json::from_slice(&bl).unwrap();
+        assert_eq!(list.total, 1, "globex's agent survives acme's reap");
     }
 
     #[tokio::test]

@@ -11,7 +11,17 @@
 //! | `/api/v1/gpu-fabric/topology`              | GPU topology & placement             |
 //! | `/api/v1/gpu-fabric/fleet`                 | Fleet hosts & rollouts               |
 //! | `/api/v1/gpu-fabric/capacity`              | VM classes & reservations            |
+//!
+//! ## Reservation ownership
+//!
+//! A reservation belongs to the tenant that created it. Cancelling one needs
+//! the same tenant: from the caller's API key when it is bound to a tenant,
+//! otherwise from the `X-Tenant-Id` header, which is then only as trustworthy
+//! as whatever sets it (see `crate::agent_runtime_routes`). An unscoped
+//! administrator key may cancel any tenant's. Anyone else naming a reservation
+//! that is not theirs gets `404`, as if it did not exist.
 
+use crate::middleware::Caller;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -509,8 +519,22 @@ async fn class_placement(
 /// POST /api/v1/gpu-fabric/capacity/reservations
 async fn create_reservation(
     State(state): State<Arc<GpuFabricAppState>>,
+    Caller(caller): Caller,
     Json(req): Json<CreateReservationRequest>,
 ) -> impl IntoResponse {
+    // A key bound to a tenant reserves for that tenant only.
+    if let Some(bound) = caller.as_ref().and_then(|c| c.tenant.as_deref()) {
+        if bound != req.tenant_id {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(FabricErrorResponse {
+                    error: "this key cannot reserve capacity for another tenant".into(),
+                    code: "TENANT_MISMATCH".into(),
+                }),
+            )
+                .into_response();
+        }
+    }
     let duration = std::time::Duration::from_secs(req.duration_hours * 3600);
     match state
         .capacity
@@ -535,8 +559,36 @@ async fn create_reservation(
 /// DELETE /api/v1/gpu-fabric/capacity/reservations/:id
 async fn cancel_reservation(
     State(state): State<Arc<GpuFabricAppState>>,
+    Caller(caller): Caller,
+    headers: axum::http::HeaderMap,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
+    let not_found = |reason: String| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(FabricErrorResponse {
+                error: reason,
+                code: "RESERVATION_NOT_FOUND".into(),
+            }),
+        )
+            .into_response()
+    };
+    let Some(reservation) = state.capacity.get_reservation(&id) else {
+        return not_found(format!("Reservation not found: {id}"));
+    };
+    // The key's tenant if it has one, else the header (see the module docs).
+    let caller_tenant = caller.as_ref().and_then(|c| c.tenant.clone()).or_else(|| {
+        headers
+            .get("x-tenant-id")
+            .and_then(|v| v.to_str().ok())
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+    });
+    let is_admin = caller.as_ref().is_some_and(|c| c.is_unscoped_admin());
+    if !is_admin && caller_tenant.as_deref() != Some(reservation.tenant_id.as_str()) {
+        // Not theirs: indistinguishable from absent.
+        return not_found(format!("Reservation not found: {id}"));
+    }
     match state.capacity.cancel_reservation(&id) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => (
@@ -594,6 +646,97 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    async fn reserve_as(app: &Router, tenant: &str) -> String {
+        let body = serde_json::json!({
+            "tenant_id": tenant, "vm_class": "gpu-a100-2x", "count": 1, "duration_hours": 1
+        });
+        let class = serde_json::json!({
+            "name": "gpu-a100-2x", "sla_tier": "premium", "vcpus": 32,
+            "memory_bytes": 274877906944_u64, "gpu_count": 2, "gpu_model": "A100",
+            "max_instances": 50
+        });
+        let _ = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/gpu-fabric/capacity/classes")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&class).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/v1/gpu-fabric/capacity/reservations")
+                    .header("content-type", "application/json")
+                    .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        v["reservation_id"].as_str().unwrap().to_string()
+    }
+
+    async fn cancel_as(app: &Router, id: &str, tenant: Option<&str>) -> StatusCode {
+        let mut b = Request::builder()
+            .method("DELETE")
+            .uri(format!("/api/v1/gpu-fabric/capacity/reservations/{id}"));
+        if let Some(t) = tenant {
+            b = b.header("x-tenant-id", t);
+        }
+        app.clone()
+            .oneshot(b.body(Body::empty()).unwrap())
+            .await
+            .unwrap()
+            .status()
+    }
+
+    #[tokio::test]
+    async fn only_the_owning_tenant_can_cancel_a_reservation() {
+        let app = test_app();
+        let id = reserve_as(&app, "acme").await;
+
+        // Another tenant, and a caller naming no tenant at all: not theirs.
+        assert_eq!(
+            cancel_as(&app, &id, Some("globex")).await,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(cancel_as(&app, &id, None).await, StatusCode::NOT_FOUND);
+        // The owner can.
+        assert_eq!(
+            cancel_as(&app, &id, Some("acme")).await,
+            StatusCode::NO_CONTENT
+        );
+    }
+
+    #[tokio::test]
+    async fn an_unscoped_admin_can_cancel_any_tenants_reservation() {
+        use crate::middleware::{CallerIdentity, KeyRole};
+        let app = test_app();
+        let id = reserve_as(&app, "acme").await;
+        let mut req = Request::builder()
+            .method("DELETE")
+            .uri(format!("/api/v1/gpu-fabric/capacity/reservations/{id}"))
+            .body(Body::empty())
+            .unwrap();
+        req.extensions_mut().insert(CallerIdentity {
+            role: KeyRole::Admin,
+            tenant: None,
+        });
+        let resp = app.clone().oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NO_CONTENT);
     }
 
     #[tokio::test]

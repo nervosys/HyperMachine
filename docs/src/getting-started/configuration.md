@@ -76,6 +76,11 @@ keys = ["GENERATE_WITH_openssl_rand_base64_32"]
 `[middleware]` is much larger than this excerpt — CORS, body limits, idempotency,
 circuit breaking, response caching and more. `hv2 config init` writes them all.
 
+`server.host` defaults to `127.0.0.1`. With no API key the server refuses to
+listen on any other address unless `server.allow_unauthenticated = true` (or
+`hv2 serve --allow-unauthenticated`); see
+[Access Control](../security/access-control.md).
+
 ## Environment variables
 
 Read by `hv2` at startup, after the file and before the CLI flags. Every one is
@@ -92,6 +97,7 @@ prefixed `HV2_`:
 | `HV2_SHUTDOWN_TIMEOUT`  | `server.shutdown_timeout_secs`    |
 | `HV2_INSTANCE_ID`       | `runtime.instance_id`             |
 | `HV2_API_KEYS`          | `middleware.api_key.keys`, comma-separated; also turns API-key auth on |
+| `HV2_API_SCOPED_KEYS`   | `middleware.api_key.scoped_keys`, comma-separated `role:tenant:key` (empty tenant = none); also turns API-key auth on |
 | `HV2_CORS_ORIGINS`      | `middleware.cors.allowed_origins`, comma-separated |
 | `HV2_BODY_LIMIT`        | `middleware.body_limit.max_bytes` |
 

@@ -11,13 +11,15 @@
 //!
 //! ```toml
 //! [server]
-//! host = "0.0.0.0"
+//! host = "127.0.0.1"
 //! rest_port = 8080
 //! grpc_port = 50051
 //! enable_runtime = true
 //! enable_events = true
 //! pre_warm_count = 2
 //! shutdown_timeout_secs = 30
+//! # Required to listen beyond loopback with no API key (see "Authentication").
+//! allow_unauthenticated = false
 //!
 //! [runtime]
 //! instance_id = "my-runtime-01"
@@ -48,6 +50,8 @@
 //!
 //! [middleware.api_key]
 //! keys = []
+//! # Keys with a role (viewer, operator, admin) and optionally a tenant:
+//! # scoped_keys = [{ key = "...", role = "operator", tenant = "acme" }]
 //! excluded_paths = ["/health", "/agentic"]
 //!
 //! [middleware.body_limit]
@@ -67,9 +71,21 @@
 //! | `HV2_ENABLE_EVENTS`     | `server.enable_events`     |
 //! | `HV2_INSTANCE_ID`       | `runtime.instance_id`      |
 //! | `HV2_API_KEYS`          | `middleware.api_key.keys`   |
+//! | `HV2_API_SCOPED_KEYS`   | `middleware.api_key.scoped_keys` (`role:tenant:key,...`; empty tenant = none) |
 //! | `HV2_CORS_ORIGINS`      | `middleware.cors.origins`   |
 //! | `HV2_SHUTDOWN_TIMEOUT`  | `server.shutdown_timeout_secs` |
 //! | `HV2_BODY_LIMIT`        | `middleware.body_limit.max_bytes` |
+
+//!
+//! ## Authentication
+//!
+//! With no API key the server listens on loopback only (`127.0.0.1`, the
+//! default). Binding anywhere else without a key is refused at startup unless
+//! `server.allow_unauthenticated` (`--allow-unauthenticated`) is set, in which
+//! case every caller who can reach the port is an administrator. A key in
+//! `keys` is an unscoped administrator; a `scoped_keys` entry carries a role
+//! and, optionally, a tenant that the tenant-scoped routes take from the key
+//! rather than from the `X-Tenant-Id` header.
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -164,12 +180,24 @@ pub struct ServerSection {
     /// `enforce` once the catalogue is populated.
     #[serde(default)]
     pub image_admission_mode: ImageAdmissionModeSection,
+
+    /// Allow webhook URLs that point at loopback, private, link-local or
+    /// other non-public addresses. Default false; see
+    /// `ServerConfig::allow_private_webhooks`.
+    #[serde(default)]
+    pub allow_private_webhooks: bool,
+
+    /// Listen beyond loopback with no API key configured. Default false: the
+    /// server then refuses to start rather than hand every route to anyone
+    /// who can reach the port. See `ServerConfig::allow_unauthenticated`.
+    #[serde(default)]
+    pub allow_unauthenticated: bool,
 }
 
 impl Default for ServerSection {
     fn default() -> Self {
         Self {
-            host: "0.0.0.0".to_string(),
+            host: "127.0.0.1".to_string(),
             rest_port: 8080,
             grpc_port: 50051,
             enable_runtime: true,
@@ -178,6 +206,8 @@ impl Default for ServerSection {
             shutdown_timeout_secs: 30,
             enforce_image_admission: false,
             image_admission_mode: ImageAdmissionModeSection::default(),
+            allow_private_webhooks: false,
+            allow_unauthenticated: false,
             tls_cert_path: None,
             tls_key_path: None,
         }
@@ -630,8 +660,10 @@ impl Default for CorsSection {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ApiKeySection {
-    /// Valid API keys
+    /// Valid API keys. Each is an unscoped administrator.
     pub keys: Vec<String>,
+    /// Keys with a role and, optionally, a tenant.
+    pub scoped_keys: Vec<crate::middleware::ScopedKey>,
     /// Path prefixes excluded from authentication
     pub excluded_paths: Vec<String>,
 }
@@ -640,6 +672,7 @@ impl Default for ApiKeySection {
     fn default() -> Self {
         Self {
             keys: vec![],
+            scoped_keys: vec![],
             excluded_paths: vec!["/health".to_string(), "/agentic".to_string()],
         }
     }
@@ -852,6 +885,19 @@ impl ConfigFile {
                 self.middleware.enable_api_key_auth = true;
             }
         }
+        if let Ok(val) = std::env::var("HV2_API_SCOPED_KEYS") {
+            for entry in val.split(',').map(str::trim).filter(|e| !e.is_empty()) {
+                // A malformed entry is dropped, but auth stays on: the
+                // alternative is a deployment that believes it is protected.
+                self.middleware.enable_api_key_auth = true;
+                match parse_scoped_key(entry) {
+                    Some(key) => self.middleware.api_key.scoped_keys.push(key),
+                    None => eprintln!(
+                        "HV2_API_SCOPED_KEYS: ignoring an entry that is not role:tenant:key"
+                    ),
+                }
+            }
+        }
         if let Ok(val) = std::env::var("HV2_CORS_ORIGINS") {
             self.middleware.cors.allowed_origins =
                 val.split(',').map(|s| s.trim().to_string()).collect();
@@ -902,9 +948,24 @@ impl ConfigFile {
         if self.middleware.cors.max_age == 0 {
             errors.push("middleware.cors.max_age must be > 0".to_string());
         }
-        if self.middleware.enable_api_key_auth && self.middleware.api_key.keys.is_empty() {
+        if self.middleware.enable_api_key_auth
+            && self.middleware.api_key.keys.is_empty()
+            && self.middleware.api_key.scoped_keys.is_empty()
+        {
             errors
                 .push("middleware.api_key.keys must not be empty when auth is enabled".to_string());
+        }
+        for scoped in &self.middleware.api_key.scoped_keys {
+            if scoped.key.is_empty() {
+                errors.push("middleware.api_key.scoped_keys: a key is empty".to_string());
+            }
+            if let Some(tenant) = &scoped.tenant {
+                if !crate::middleware::is_valid_tenant_name(tenant) {
+                    errors.push(format!(
+                        "middleware.api_key.scoped_keys: tenant {tenant:?} must be 1-128 of A-Z a-z 0-9 . _ -"
+                    ));
+                }
+            }
         }
 
         if errors.is_empty() {
@@ -959,6 +1020,7 @@ impl ConfigFile {
         // Build API key config
         let api_key = ApiKeyConfig {
             keys: self.middleware.api_key.keys,
+            scoped_keys: self.middleware.api_key.scoped_keys,
             excluded_paths: self.middleware.api_key.excluded_paths,
             header_name: "authorization".to_string(),
         };
@@ -1207,6 +1269,8 @@ impl ConfigFile {
             shutdown_timeout_secs: self.server.shutdown_timeout_secs,
             enforce_image_admission: self.server.enforce_image_admission,
             image_admission_mode: self.server.image_admission_mode.into(),
+            allow_private_webhooks: self.server.allow_private_webhooks,
+            allow_unauthenticated: self.server.allow_unauthenticated,
             tls: match (self.server.tls_cert_path, self.server.tls_key_path) {
                 (Some(cert), Some(key)) => Some(crate::tls::TlsConfig {
                     cert_path: cert,
@@ -1216,6 +1280,24 @@ impl ConfigFile {
             },
         }
     }
+}
+
+/// Parse one `role:tenant:key` entry of `HV2_API_SCOPED_KEYS`. An empty tenant
+/// means the key is not bound to one; the key is everything after the second
+/// colon, so it may itself contain colons.
+fn parse_scoped_key(entry: &str) -> Option<crate::middleware::ScopedKey> {
+    let mut parts = entry.splitn(3, ':');
+    let role = crate::middleware::KeyRole::parse(parts.next()?)?;
+    let tenant = parts.next()?;
+    let key = parts.next()?;
+    if key.is_empty() || (!tenant.is_empty() && !crate::middleware::is_valid_tenant_name(tenant)) {
+        return None;
+    }
+    Some(crate::middleware::ScopedKey {
+        key: key.to_string(),
+        role,
+        tenant: (!tenant.is_empty()).then(|| tenant.to_string()),
+    })
 }
 
 /// Load configuration with layered merging: file → env → validate.
@@ -1246,7 +1328,7 @@ mod tests {
     #[test]
     fn test_config_file_default() {
         let config = ConfigFile::default();
-        assert_eq!(config.server.host, "0.0.0.0");
+        assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.rest_port, 8080);
         assert_eq!(config.server.grpc_port, 50051);
         assert!(config.server.enable_runtime);
@@ -1257,7 +1339,7 @@ mod tests {
     #[test]
     fn test_server_section_default() {
         let section = ServerSection::default();
-        assert_eq!(section.host, "0.0.0.0");
+        assert_eq!(section.host, "127.0.0.1");
         assert_eq!(section.rest_port, 8080);
         assert_eq!(section.grpc_port, 50051);
     }
@@ -1399,7 +1481,7 @@ mod tests {
         let config = ConfigFile::parse(toml).unwrap();
         assert_eq!(config.server.rest_port, 9999);
         // All other fields should be defaults
-        assert_eq!(config.server.host, "0.0.0.0");
+        assert_eq!(config.server.host, "127.0.0.1");
         assert_eq!(config.server.grpc_port, 50051);
         assert!(config.server.enable_runtime);
         assert_eq!(config.runtime.pool.max_size, 64);
@@ -1549,8 +1631,9 @@ mod tests {
     fn test_into_server_config_defaults() {
         let config = ConfigFile::default();
         let server = config.into_server_config();
-        assert_eq!(server.host, "0.0.0.0");
+        assert_eq!(server.host, "127.0.0.1");
         assert_eq!(server.rest_port, 8080);
+        assert!(!server.allow_unauthenticated);
         assert_eq!(server.grpc_port, 50051);
         assert!(server.enable_runtime);
         assert!(server.enable_events);

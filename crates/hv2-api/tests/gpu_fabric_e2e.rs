@@ -167,6 +167,8 @@ async fn gpu_fabric_full_lifecycle() {
                 .uri(format!(
                     "/api/v1/gpu-fabric/capacity/reservations/{reservation_id}"
                 ))
+                // Cancelling is the owning tenant's act.
+                .header("x-tenant-id", "tenant-abc")
                 .body(Body::empty())
                 .unwrap(),
         )

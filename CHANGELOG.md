@@ -367,6 +367,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 
 ### Security
+- **`hv2 serve` listened on `0.0.0.0` with no authentication by default, and an API key could not
+  be told from any other.** The REST and gRPC servers now bind `127.0.0.1` unless told otherwise,
+  and with no API key they refuse to start on any other address unless `--allow-unauthenticated`
+  (`server.allow_unauthenticated`) is given, as the node and control plane already did. New
+  `--host ADDR` overrides the bind. gRPC, which no key ever covered, now checks the same keys. A key
+  in `keys` is still an unscoped administrator, but `scoped_keys` (or `HV2_API_SCOPED_KEYS`,
+  `role:tenant:key,...`) gives a key a role (`viewer`: reads only; `operator`: writes except the
+  image allowlist, the runtime fleet and the GPU fabric apart from reservations; `admin`) and an
+  optional tenant. `permission_middleware.rs` is still installed nowhere: its table leaves most
+  routes unmapped and nothing maps a key to a principal, so installing it would have allowed most
+  of the API without checking. **Existing deployments listening on `0.0.0.0` with no key will not
+  start** until a key or `--allow-unauthenticated` is set.
+- **Any tenant could end every tenant's agents, and the tenant was whatever the caller wrote.**
+  `POST /api/v1/agents/reap` reaped the whole fleet; it now reaps only the requesting tenant's idle
+  agents. A key bound to a tenant now sets `X-Tenant-Id` itself and gets `403 TENANT_MISMATCH` for a
+  different one; with no key, or an unscoped one, the header is still the caller's word and is
+  documented as trusted only behind a proxy that authenticates.
+- **Any caller could cancel any tenant's GPU capacity reservation.**
+  `DELETE /api/v1/gpu-fabric/capacity/reservations/{id}` now needs the reservation's tenant (from the
+  key, else `X-Tenant-Id`), or an unscoped admin key; anyone else gets `404`. A tenant-bound key
+  can no longer create a reservation for another tenant.
+- **A revoked or denied image could be approved again, and `deprecate` admitted an image that was
+  never approved.** `approve` is now refused (`409`) from `Denied` and `Revoked`, both final for a
+  reference. `deprecate` is refused (`409`) unless the image is `Approved` or already `Deprecated`,
+  and a deprecated image must now pass the same signature and trusted-signer checks as an approved
+  one. Admission by digest refuses a digest if any entry carrying it is denied or revoked; it used
+  whichever entry the map yielded first. Still true, and documented: `POST /api/v1/images` records
+  every submitted signature as unverified and nothing verifies one, so with the default
+  `require_signature` the REST `approve` answers `422` always.
+- **The `hv2-api` event webhooks are signed with a real HMAC and no longer a request relay.**
+  `X-HyperMachine-Signature` was a 64-bit `DefaultHasher` of secret and body written as `sha256=<hex>`:
+  unverifiable by any receiver and forgeable. It is now `sha256=<hex>` of HMAC-SHA256 (IronCrypto) over
+  the exact body bytes, keyed by the webhook's secret, the same form as GitHub's `X-Hub-Signature-256`
+  (known-answer test on RFC 4231 case 2, and a test that a delivered header verifies against its
+  delivered body). Webhook URLs were unvalidated and redirects were followed, so anyone who could register
+  one could make the server POST to its own network (cloud metadata, internal services). Registration now
+  answers 400 for a scheme other than http/https or a host that is or resolves to a loopback, private,
+  link-local, CGNAT, multicast, unspecified, documentation, benchmarking or tunnel-prefix address (IPv4,
+  IPv6, IPv4-mapped); delivery re-checks and connects only to the addresses it checked, so DNS rebinding
+  cannot swap one in; redirects are not followed and a system proxy is not used. Operators who need
+  internal receivers set `server.allow_private_webhooks` (`ServerConfig::allow_private_webhooks`, default
+  off). Custom webhook headers can no longer override `X-HyperMachine-*`, `Host` or the framing headers,
+  and their values (often credentials) are returned as `[redacted]` by the read routes. `failure_count`
+  (consecutive failures) and `last_triggered` are now updated, and a non-2xx answer counts as a failure.
 - **The shipped deployments now use the per-role Redis users (O12).** The compose file and the
   `hypermachine-sandbox` Helm chart no longer give the control plane and the nodes one shared
   `requirepass`. The store gets an ACL file with `hv2-control-plane`, `hv2-node` and `hv2-gateway`

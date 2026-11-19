@@ -41,6 +41,16 @@ pub enum RegistryError {
     /// Invalid configuration
     #[error("Invalid config: {0}")]
     InvalidConfig(String),
+
+    /// The requested status change is not allowed from the image's current
+    /// status. Denial and revocation are final, and an image that was never
+    /// approved cannot be deprecated, because deprecated images are admitted.
+    #[error("Image {image} is {from:?}; it cannot be moved to {to:?}")]
+    InvalidTransition {
+        image: String,
+        from: ApprovalStatus,
+        to: ApprovalStatus,
+    },
 }
 
 /// Kind of image being registered
@@ -245,12 +255,30 @@ impl ImageRegistry {
         Ok(())
     }
 
-    /// Approve an image (set status to Approved)
+    /// Approve an image (set status to Approved).
+    ///
+    /// Refused from [`ApprovalStatus::Denied`] and [`ApprovalStatus::Revoked`]:
+    /// those are decisions someone made to block the image, and a second
+    /// `approve` call must not silently undo them. They are final for a
+    /// reference; to use the bytes again, register them under a new reference.
+    /// (Admission by digest refuses a digest that any denied or revoked entry
+    /// carries, so re-registering the same bytes does not help.)
     pub fn approve(&self, reference: &str, reviewer: &str) -> RegistryResult<()> {
         let mut images = self.images.write();
         let entry = images
             .get_mut(reference)
             .ok_or_else(|| RegistryError::NotFound(reference.to_string()))?;
+
+        if matches!(
+            entry.status,
+            ApprovalStatus::Denied | ApprovalStatus::Revoked
+        ) {
+            return Err(RegistryError::InvalidTransition {
+                image: reference.to_string(),
+                from: entry.status,
+                to: ApprovalStatus::Approved,
+            });
+        }
 
         if self.config.require_signature && !entry.has_verified_signature() {
             return Err(RegistryError::SignatureInvalid {
@@ -293,12 +321,28 @@ impl ImageRegistry {
         Ok(())
     }
 
-    /// Deprecate an image
+    /// Deprecate an image.
+    ///
+    /// Only an approved (or already deprecated) image can be deprecated. A
+    /// deprecated image is *admitted*, with a warning, so deprecating a
+    /// pending, denied or revoked image would grant admission that `approve`
+    /// withholds.
     pub fn deprecate(&self, reference: &str, reviewer: &str, reason: &str) -> RegistryResult<()> {
         let mut images = self.images.write();
         let entry = images
             .get_mut(reference)
             .ok_or_else(|| RegistryError::NotFound(reference.to_string()))?;
+
+        if !matches!(
+            entry.status,
+            ApprovalStatus::Approved | ApprovalStatus::Deprecated
+        ) {
+            return Err(RegistryError::InvalidTransition {
+                image: reference.to_string(),
+                from: entry.status,
+                to: ApprovalStatus::Deprecated,
+            });
+        }
 
         entry.status = ApprovalStatus::Deprecated;
         entry.reviewed_by = Some(reviewer.to_string());
@@ -339,11 +383,29 @@ impl ImageRegistry {
         let images = self.images.read();
         // Digests are not the map key, so this is a scan. Fleet registries hold
         // tens of images, and it runs once per VM provision.
-        match images
+        //
+        // Several entries can carry one digest (the same bytes under two
+        // references). The map has no order, so taking "the first" would let
+        // a revoked image be admitted by a sibling entry on some runs: a
+        // refusal by any entry wins, otherwise the most permissive other
+        // decision is used.
+        let decisions: Vec<AdmissionDecision> = images
             .values()
-            .find(|entry| entry.sha256.eq_ignore_ascii_case(digest))
+            .filter(|entry| entry.sha256.eq_ignore_ascii_case(digest))
+            .map(|entry| self.decide(entry))
+            .collect();
+        if let Some(denied) = decisions
+            .iter()
+            .find(|d| matches!(d, AdmissionDecision::Denied(_)))
         {
-            Some(entry) => self.decide(entry),
+            return denied.clone();
+        }
+        match decisions
+            .iter()
+            .find(|d| matches!(d, AdmissionDecision::Allowed))
+            .or_else(|| decisions.first())
+        {
+            Some(decision) => decision.clone(),
             None => self.unknown_image(&format!("No registry entry for digest {digest}")),
         }
     }
@@ -357,34 +419,45 @@ impl ImageRegistry {
         }
     }
 
+    /// `Some(Denied)` if the entry fails the configured signature requirements.
+    fn signature_gate(&self, entry: &ImageEntry) -> Option<AdmissionDecision> {
+        let reference = &entry.reference;
+        if self.config.require_signature && !entry.has_verified_signature() {
+            return Some(AdmissionDecision::Denied(format!(
+                "No verified signature for {reference}"
+            )));
+        }
+        if !self.config.trusted_signers.is_empty() {
+            let trusted = entry
+                .signatures
+                .iter()
+                .any(|s| s.verified && self.config.trusted_signers.contains(&s.signer));
+            if !trusted {
+                return Some(AdmissionDecision::Denied(format!(
+                    "No trusted signer for {reference}"
+                )));
+            }
+        }
+        None
+    }
+
     /// The admission rule for an entry that exists, shared by every lookup.
     fn decide(&self, entry: &ImageEntry) -> AdmissionDecision {
         let reference = &entry.reference;
         match entry.status {
-            ApprovalStatus::Approved => {
-                // Verify signature trust if configured
-                if self.config.require_signature && !entry.has_verified_signature() {
-                    return AdmissionDecision::Denied(format!(
-                        "No verified signature for {reference}"
-                    ));
-                }
-                if !self.config.trusted_signers.is_empty() {
-                    let trusted = entry
-                        .signatures
-                        .iter()
-                        .any(|s| s.verified && self.config.trusted_signers.contains(&s.signer));
-                    if !trusted {
-                        return AdmissionDecision::Denied(format!(
-                            "No trusted signer for {reference}"
-                        ));
-                    }
-                }
-                AdmissionDecision::Allowed
-            }
-            ApprovalStatus::Deprecated => AdmissionDecision::AllowedWithWarning(format!(
-                "Image {reference} is deprecated: {}",
-                entry.notes
-            )),
+            ApprovalStatus::Approved => match self.signature_gate(entry) {
+                Some(denied) => denied,
+                None => AdmissionDecision::Allowed,
+            },
+            // Deprecated images are admitted, so they pass the same signature
+            // gate as approved ones; deprecation must not be a way around it.
+            ApprovalStatus::Deprecated => match self.signature_gate(entry) {
+                Some(denied) => denied,
+                None => AdmissionDecision::AllowedWithWarning(format!(
+                    "Image {reference} is deprecated: {}",
+                    entry.notes
+                )),
+            },
             ApprovalStatus::PendingReview => {
                 if self.config.mode == EnforcementMode::Enforce {
                     AdmissionDecision::Denied(format!("Image pending review: {reference}"))
@@ -552,6 +625,94 @@ mod tests {
                 assert!(msg.contains("deprecated"));
             }
             other => panic!("Expected AllowedWithWarning, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn approve_refuses_revoked_and_denied_images() {
+        let reg = test_registry();
+        for r in ["rev:1", "den:1"] {
+            reg.register(ImageEntry::new(r, ImageKind::VmImage, r).signature(verified_sig()))
+                .unwrap();
+        }
+        reg.approve("rev:1", "admin").unwrap();
+        reg.revoke("rev:1", "admin", "CVE").unwrap();
+        reg.deny("den:1", "admin", "no").unwrap();
+        for r in ["rev:1", "den:1"] {
+            assert!(
+                matches!(
+                    reg.approve(r, "other"),
+                    Err(RegistryError::InvalidTransition { .. })
+                ),
+                "{r} must not be re-approvable"
+            );
+            assert!(matches!(
+                reg.check_admission(r),
+                AdmissionDecision::Denied(_)
+            ));
+        }
+    }
+
+    #[test]
+    fn deprecate_does_not_grant_admission() {
+        let reg = test_registry();
+        // Never approved, and unsigned: deprecating it must not admit it.
+        reg.register(ImageEntry::new("new:1", ImageKind::VmImage, "s1"))
+            .unwrap();
+        assert!(matches!(
+            reg.deprecate("new:1", "admin", "x"),
+            Err(RegistryError::InvalidTransition { .. })
+        ));
+        assert!(matches!(
+            reg.check_admission("new:1"),
+            AdmissionDecision::Denied(_)
+        ));
+        // A revoked image cannot be deprecated back into admission either.
+        reg.register(ImageEntry::new("rev:1", ImageKind::VmImage, "s2").signature(verified_sig()))
+            .unwrap();
+        reg.approve("rev:1", "admin").unwrap();
+        reg.revoke("rev:1", "admin", "CVE").unwrap();
+        assert!(reg.deprecate("rev:1", "admin", "x").is_err());
+        assert!(matches!(
+            reg.check_admission("rev:1"),
+            AdmissionDecision::Denied(_)
+        ));
+    }
+
+    #[test]
+    fn deprecated_image_still_needs_its_signature() {
+        let reg = ImageRegistry::new(RegistryConfig {
+            mode: EnforcementMode::Enforce,
+            require_signature: true,
+            trusted_signers: vec!["someone-else".to_string()],
+        });
+        reg.register(ImageEntry::new("old:1", ImageKind::VmImage, "s3").signature(verified_sig()))
+            .unwrap();
+        // The status a registry reached before `deprecate` had a precondition.
+        reg.images.write().get_mut("old:1").unwrap().status = ApprovalStatus::Deprecated;
+        assert!(matches!(
+            reg.check_admission("old:1"),
+            AdmissionDecision::Denied(_)
+        ));
+    }
+
+    #[test]
+    fn digest_admission_is_denied_when_any_entry_for_it_is_revoked() {
+        let reg = test_registry();
+        for r in ["a:1", "b:1"] {
+            reg.register(
+                ImageEntry::new(r, ImageKind::VmImage, "samebytes").signature(verified_sig()),
+            )
+            .unwrap();
+        }
+        reg.approve("a:1", "admin").unwrap();
+        reg.approve("b:1", "admin").unwrap();
+        reg.revoke("a:1", "admin", "CVE").unwrap();
+        for _ in 0..20 {
+            assert!(matches!(
+                reg.check_admission_by_digest("samebytes"),
+                AdmissionDecision::Denied(_)
+            ));
         }
     }
 

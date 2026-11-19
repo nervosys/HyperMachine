@@ -110,6 +110,16 @@ enum Commands {
         /// Graceful shutdown timeout in seconds (overrides config file)
         #[arg(long)]
         shutdown_timeout: Option<u64>,
+
+        /// Address to listen on (overrides config file). Default 127.0.0.1.
+        #[arg(long)]
+        host: Option<String>,
+
+        /// Listen beyond loopback with no API key. Without this (and without
+        /// HV2_API_KEYS) the server refuses a non-loopback address, because
+        /// every route would be open to anyone who can reach the port.
+        #[arg(long)]
+        allow_unauthenticated: bool,
     },
 
     /// Configuration file management
@@ -258,6 +268,8 @@ async fn main() -> Result<()> {
             no_events,
             pre_warm,
             shutdown_timeout,
+            host,
+            allow_unauthenticated,
         } => {
             println!("{}", "Starting HyperMachine API server...".cyan().bold());
 
@@ -313,6 +325,12 @@ async fn main() -> Result<()> {
             if let Some(secs) = shutdown_timeout {
                 cfg.server.shutdown_timeout_secs = secs;
             }
+            if let Some(host) = host {
+                cfg.server.host = host;
+            }
+            if allow_unauthenticated {
+                cfg.server.allow_unauthenticated = true;
+            }
 
             let mut config = cfg.into_server_config();
 
@@ -332,6 +350,11 @@ async fn main() -> Result<()> {
                     config.middleware.enable_audit_log = true;
                 }
                 config.middleware.audit_log.chain = Some(chain);
+            }
+
+            // Refuse before building anything or printing a banner.
+            if let Err(reason) = config.check_startup_auth() {
+                anyhow::bail!(reason);
             }
 
             let server = hv2_api::server::Server::new(config);
@@ -626,7 +649,17 @@ mod tests {
                 no_events,
                 pre_warm,
                 shutdown_timeout,
+                host,
+                allow_unauthenticated,
             } => {
+                assert!(
+                    host.is_none(),
+                    "no host given: the config's loopback default stands"
+                );
+                assert!(
+                    !allow_unauthenticated,
+                    "unauthenticated listening is opt-in"
+                );
                 assert!(config.is_none());
                 assert!(grpc_port.is_none());
                 assert!(rest_port.is_none());
@@ -656,6 +689,9 @@ mod tests {
             "5",
             "--shutdown-timeout",
             "30",
+            "--host",
+            "0.0.0.0",
+            "--allow-unauthenticated",
         ])
         .unwrap();
         match cli.command {
@@ -667,7 +703,11 @@ mod tests {
                 no_events,
                 pre_warm,
                 shutdown_timeout,
+                host,
+                allow_unauthenticated,
             } => {
+                assert_eq!(host.as_deref(), Some("0.0.0.0"));
+                assert!(allow_unauthenticated);
                 assert_eq!(config.unwrap().to_str().unwrap(), "custom.toml");
                 assert_eq!(rest_port, Some(9090));
                 assert_eq!(grpc_port, Some(50051));

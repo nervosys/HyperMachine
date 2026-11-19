@@ -311,10 +311,47 @@ impl VmService for VMServiceImpl {
     }
 }
 
-/// Start gRPC server
+/// Start gRPC server with no authentication. Only for a loopback listener.
 pub async fn serve(addr: impl Into<std::net::SocketAddr>) -> Result<()> {
+    serve_with_auth(addr, None).await
+}
+
+/// Check the `authorization` metadata of a gRPC call against the API keys.
+///
+/// A `viewer` key is refused: this service has no read-only methods to tell
+/// apart, and a call that can start or stop a VM is a write.
+fn check_key(
+    keys: &crate::middleware::ApiKeyConfig,
+    request: &Request<()>,
+) -> std::result::Result<(), Status> {
+    let presented = request
+        .metadata()
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| Status::unauthenticated("missing API key"))?;
+    match keys.identify(presented) {
+        Some(identity) if identity.role != crate::middleware::KeyRole::Viewer => Ok(()),
+        Some(_) => Err(Status::permission_denied(
+            "a viewer key cannot call this service",
+        )),
+        None => Err(Status::permission_denied("invalid API key")),
+    }
+}
+
+/// Start the gRPC server, requiring an API key on every call when `keys` is
+/// `Some` (the keys that guard the REST surface).
+pub async fn serve_with_auth(
+    addr: impl Into<std::net::SocketAddr>,
+    keys: Option<crate::middleware::ApiKeyConfig>,
+) -> Result<()> {
     let addr = addr.into();
-    let service = VMServiceImpl::new().into_service();
+    let service = tonic::service::interceptor::InterceptedService::new(
+        VMServiceImpl::new().into_service(),
+        move |request: Request<()>| match &keys {
+            Some(keys) => check_key(keys, &request).map(|()| request),
+            None => Ok(request),
+        },
+    );
 
     tracing::info!("Starting gRPC server on {}", addr);
 
@@ -345,5 +382,38 @@ mod tests {
     fn test_vm_service_into_service() {
         let service = VMServiceImpl::new();
         let _grpc_service = service.into_service();
+    }
+
+    #[test]
+    fn grpc_calls_need_a_key_that_may_write() {
+        use crate::middleware::{ApiKeyConfig, KeyRole, ScopedKey};
+        let keys = ApiKeyConfig {
+            keys: vec!["admin-key".to_string()],
+            scoped_keys: vec![ScopedKey {
+                key: "view-key".to_string(),
+                role: KeyRole::Viewer,
+                tenant: None,
+            }],
+            ..ApiKeyConfig::default()
+        };
+        let call = |auth: Option<&str>| {
+            let mut request = Request::new(());
+            if let Some(auth) = auth {
+                request
+                    .metadata_mut()
+                    .insert("authorization", auth.parse().unwrap());
+            }
+            check_key(&keys, &request)
+        };
+        assert!(call(Some("Bearer admin-key")).is_ok());
+        assert_eq!(call(None).unwrap_err().code(), tonic::Code::Unauthenticated);
+        assert_eq!(
+            call(Some("Bearer nope")).unwrap_err().code(),
+            tonic::Code::PermissionDenied
+        );
+        assert_eq!(
+            call(Some("Bearer view-key")).unwrap_err().code(),
+            tonic::Code::PermissionDenied
+        );
     }
 }

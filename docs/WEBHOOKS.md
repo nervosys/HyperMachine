@@ -48,3 +48,29 @@ A machine that stops or crashes by itself, or that a node starts again after its
 daemon restarted, sends no event; nor does a snapshot. [Checked on
 KVM](benchmarks/2026-10-23/machine-webhooks-kvm/README.md) through a control plane
 with two teams.
+
+## The node API's event webhooks (`/api/v1/events/webhooks`)
+
+The `hv2-api` server's own event webhooks (not the control plane's, above) sign
+with one header, **`X-HyperMachine-Signature: sha256=<hex>`**: HMAC-SHA256,
+keyed by the webhook's `secret`, over the exact request body, in the form of
+GitHub's `X-Hub-Signature-256`. A webhook registered without a `secret` is
+sent unsigned (an empty secret is refused). It signs no timestamp, so it does
+not stop a replay.
+
+A URL must be `http` or `https`, and its host must be, or resolve only to,
+public addresses: loopback, private, link-local (the cloud metadata service),
+CGNAT, multicast, unspecified and tunnel-prefix addresses are refused, IPv4
+and IPv6 alike (an IPv4-mapped IPv6 address counts as the IPv4 address).
+Registration answers 400; delivery checks again and connects only to the
+addresses it checked, so a name cannot be re-pointed in between. Redirects are
+not followed and a system proxy is not used. To deliver to an internal
+receiver, set `allow_private_webhooks = true` in the `[server]` section (or
+`ServerConfig::allow_private_webhooks`); it defaults to off and still requires
+http or https.
+
+Custom `headers` cannot set `X-HyperMachine-*`, `Host`, `Content-Type`,
+`Content-Length`, `Transfer-Encoding` or `Connection`. Their values are
+returned as `[redacted]` by every read (names are kept). `failure_count`
+counts consecutive failed deliveries (a non-2xx answer or no answer) and resets
+on a success; `last_triggered` is the time of the latest attempt.

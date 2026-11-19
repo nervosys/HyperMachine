@@ -184,9 +184,14 @@ openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -node
 
 ### API Authentication
 
-A flat list of accepted keys, sent as `X-API-Key`. A key is accepted or
-refused; there are no per-key permissions, so a "readonly" key is not something
-this layer can issue.
+A list of accepted keys, sent as `Authorization: Bearer <key>`. A `keys` entry is
+an unscoped administrator. A `scoped_keys` entry carries a role (`viewer`,
+`operator`, `admin`) and optionally a tenant; see
+[Access Control](src/security/access-control.md).
+
+The server listens on `127.0.0.1` unless `server.host` says otherwise, and with
+no API key it **refuses to start** on any other address unless
+`server.allow_unauthenticated = true` (`hv2 serve --allow-unauthenticated`).
 
 ```toml
 [middleware]

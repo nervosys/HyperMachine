@@ -5,7 +5,9 @@ Get your AI agents managing virtual machines in under 5 minutes.
 ## Prerequisites
 
 - HyperMachine server running (default: `http://localhost:8080`)
-- API key (for production deployments)
+- API key (for production deployments). With no key the server listens on loopback only and
+  refuses to start on another address unless started with `--allow-unauthenticated`. A key
+  can carry a role and a tenant; see `docs/src/security/access-control.md`.
 
 ## Quick Start
 
