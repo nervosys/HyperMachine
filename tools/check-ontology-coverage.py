@@ -278,7 +278,11 @@ def methods_of(m, a, b, where):
                 base = word[:-8] if word.endswith("_service") else word
                 if base in METHODS:
                     found.append("ANY" if base == "any" else base.upper())
-                elif word in ("on", "on_service", "route_service", "fallback", "nest_service"):
+                elif word == "fallback":
+                    # `put(h).fallback(f)`: f answers the methods the route
+                    # does not serve (405); it adds none to the route.
+                    pass
+                elif word in ("on", "on_service", "route_service", "nest_service"):
                     raise ExtractError("%s: `%s(` in a route is not understood" % (where, word))
             k = mm.end()
             continue

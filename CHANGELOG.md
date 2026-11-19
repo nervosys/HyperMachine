@@ -222,6 +222,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seventh, Gitleaks, is now a real gate; see Security.)
 
 ### Added
+- **hv2-api's own routes are in the agent ontology.** 71 operations in nine capabilities (VM console and exec, image admission, agent sessions, runtime, GPU fabric, VM snapshot records, events and webhooks, health and metrics, `/agentic` discovery and plans), each with its auth, status codes and, where a handler is a stub, simulation or in-memory only, a plain statement of it, and eight guardrails sourced from the security docs. The hv2-api allowlist is empty (174 to 103 overall), and the coverage tool now accepts `.fallback(` after a method handler.
 - **The agentic ontology describes sandbox networking, ports, domains, names,
   metrics, logs, events and registration recovery, on the control plane and
   the node.** 28 control plane operations and 22 node operations (egress

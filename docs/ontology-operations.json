@@ -2,6 +2,366 @@
   "operations": [
     {
       "component": "hv2-api",
+      "id": "get_agent_card",
+      "method": "GET",
+      "path": "/.well-known/agent.json"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_ai_plugin_manifest",
+      "method": "GET",
+      "path": "/.well-known/ai-plugin.json"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_affordances",
+      "method": "GET",
+      "path": "/agentic/affordances/{resource_type}/{state}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_composition_rules",
+      "method": "GET",
+      "path": "/agentic/compose"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_operation_contracts",
+      "method": "GET",
+      "path": "/agentic/contracts"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_resource_graph",
+      "method": "GET",
+      "path": "/agentic/graph"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_mcp_manifest",
+      "method": "GET",
+      "path": "/agentic/mcp"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_ontology",
+      "method": "GET",
+      "path": "/agentic/ontology"
+    },
+    {
+      "component": "hv2-api",
+      "id": "execute_plan",
+      "method": "POST",
+      "path": "/agentic/plans/execute"
+    },
+    {
+      "component": "hv2-api",
+      "id": "validate_plan",
+      "method": "POST",
+      "path": "/agentic/plans/validate"
+    },
+    {
+      "component": "hv2-api",
+      "id": "list_plan_templates",
+      "method": "GET",
+      "path": "/agentic/templates"
+    },
+    {
+      "component": "hv2-api",
+      "id": "instantiate_plan_template",
+      "method": "POST",
+      "path": "/agentic/templates"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_plan_template",
+      "method": "GET",
+      "path": "/agentic/templates/{id}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_anthropic_tools",
+      "method": "GET",
+      "path": "/agentic/tools/anthropic"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_gemini_tools",
+      "method": "GET",
+      "path": "/agentic/tools/gemini"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_openai_tools",
+      "method": "GET",
+      "path": "/agentic/tools/openai"
+    },
+    {
+      "component": "hv2-api",
+      "id": "list_agents",
+      "method": "GET",
+      "path": "/api/v1/agents"
+    },
+    {
+      "component": "hv2-api",
+      "id": "spawn_agent",
+      "method": "POST",
+      "path": "/api/v1/agents"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_agent_fleet",
+      "method": "GET",
+      "path": "/api/v1/agents/fleet"
+    },
+    {
+      "component": "hv2-api",
+      "id": "reap_agents",
+      "method": "POST",
+      "path": "/api/v1/agents/reap"
+    },
+    {
+      "component": "hv2-api",
+      "id": "release_agent",
+      "method": "DELETE",
+      "path": "/api/v1/agents/{session_id}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "publish_event",
+      "method": "POST",
+      "path": "/api/v1/events/publish"
+    },
+    {
+      "component": "hv2-api",
+      "id": "stream_events",
+      "method": "GET",
+      "path": "/api/v1/events/stream"
+    },
+    {
+      "component": "hv2-api",
+      "id": "list_webhooks",
+      "method": "GET",
+      "path": "/api/v1/events/webhooks"
+    },
+    {
+      "component": "hv2-api",
+      "id": "create_webhook",
+      "method": "POST",
+      "path": "/api/v1/events/webhooks"
+    },
+    {
+      "component": "hv2-api",
+      "id": "delete_webhook",
+      "method": "DELETE",
+      "path": "/api/v1/events/webhooks/{id}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_webhook",
+      "method": "GET",
+      "path": "/api/v1/events/webhooks/{id}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "stream_events_websocket",
+      "method": "GET",
+      "path": "/api/v1/events/ws"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_gpu_capacity",
+      "method": "GET",
+      "path": "/api/v1/gpu-fabric/capacity"
+    },
+    {
+      "component": "hv2-api",
+      "id": "register_gpu_vm_class",
+      "method": "POST",
+      "path": "/api/v1/gpu-fabric/capacity/classes"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_gpu_class_placement",
+      "method": "GET",
+      "path": "/api/v1/gpu-fabric/capacity/classes/{name}/placement"
+    },
+    {
+      "component": "hv2-api",
+      "id": "create_gpu_reservation",
+      "method": "POST",
+      "path": "/api/v1/gpu-fabric/capacity/reservations"
+    },
+    {
+      "component": "hv2-api",
+      "id": "cancel_gpu_reservation",
+      "method": "DELETE",
+      "path": "/api/v1/gpu-fabric/capacity/reservations/{id}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_gpu_fleet",
+      "method": "GET",
+      "path": "/api/v1/gpu-fabric/fleet"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_gpu_topology",
+      "method": "GET",
+      "path": "/api/v1/gpu-fabric/topology"
+    },
+    {
+      "component": "hv2-api",
+      "id": "add_gpu_device",
+      "method": "POST",
+      "path": "/api/v1/gpu-fabric/topology/devices"
+    },
+    {
+      "component": "hv2-api",
+      "id": "add_gpu_link",
+      "method": "POST",
+      "path": "/api/v1/gpu-fabric/topology/links"
+    },
+    {
+      "component": "hv2-api",
+      "id": "find_gpu_placement",
+      "method": "POST",
+      "path": "/api/v1/gpu-fabric/topology/placement"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_full_health",
+      "method": "GET",
+      "path": "/api/v1/health/full"
+    },
+    {
+      "component": "hv2-api",
+      "id": "list_images",
+      "method": "GET",
+      "path": "/api/v1/images"
+    },
+    {
+      "component": "hv2-api",
+      "id": "register_image",
+      "method": "POST",
+      "path": "/api/v1/images"
+    },
+    {
+      "component": "hv2-api",
+      "id": "check_image_admission",
+      "method": "POST",
+      "path": "/api/v1/images/check-admission"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_image_registry_config",
+      "method": "GET",
+      "path": "/api/v1/images/config"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_image",
+      "method": "GET",
+      "path": "/api/v1/images/{reference}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "approve_image",
+      "method": "POST",
+      "path": "/api/v1/images/{reference}/approve"
+    },
+    {
+      "component": "hv2-api",
+      "id": "deny_image",
+      "method": "POST",
+      "path": "/api/v1/images/{reference}/deny"
+    },
+    {
+      "component": "hv2-api",
+      "id": "deprecate_image",
+      "method": "POST",
+      "path": "/api/v1/images/{reference}/deprecate"
+    },
+    {
+      "component": "hv2-api",
+      "id": "revoke_image",
+      "method": "POST",
+      "path": "/api/v1/images/{reference}/revoke"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_runtime_health",
+      "method": "GET",
+      "path": "/api/v1/runtime/health"
+    },
+    {
+      "component": "hv2-api",
+      "id": "run_runtime_maintenance",
+      "method": "POST",
+      "path": "/api/v1/runtime/maintenance"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_runtime_metrics",
+      "method": "GET",
+      "path": "/api/v1/runtime/metrics"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_runtime_metrics_prometheus",
+      "method": "GET",
+      "path": "/api/v1/runtime/metrics/prometheus"
+    },
+    {
+      "component": "hv2-api",
+      "id": "create_runtime_session",
+      "method": "POST",
+      "path": "/api/v1/runtime/sessions"
+    },
+    {
+      "component": "hv2-api",
+      "id": "destroy_runtime_session",
+      "method": "DELETE",
+      "path": "/api/v1/runtime/sessions/{id}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_runtime_status",
+      "method": "GET",
+      "path": "/api/v1/runtime/status"
+    },
+    {
+      "component": "hv2-api",
+      "id": "run_runtime_workflow",
+      "method": "POST",
+      "path": "/api/v1/runtime/workflows"
+    },
+    {
+      "component": "hv2-api",
+      "id": "cancel_runtime_workflow",
+      "method": "DELETE",
+      "path": "/api/v1/runtime/workflows/{id}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "advance_runtime_workflow_step",
+      "method": "POST",
+      "path": "/api/v1/runtime/workflows/{id}/steps/{step}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "submit_runtime_workload",
+      "method": "POST",
+      "path": "/api/v1/runtime/workloads"
+    },
+    {
+      "component": "hv2-api",
+      "id": "schedule_runtime_workloads",
+      "method": "POST",
+      "path": "/api/v1/runtime/workloads/schedule"
+    },
+    {
+      "component": "hv2-api",
       "id": "list_vms",
       "method": "GET",
       "path": "/api/v1/vms"
@@ -23,6 +383,18 @@
       "id": "get_vm",
       "method": "GET",
       "path": "/api/v1/vms/{id}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_vm_console",
+      "method": "GET",
+      "path": "/api/v1/vms/{id}/console"
+    },
+    {
+      "component": "hv2-api",
+      "id": "exec_in_vm",
+      "method": "POST",
+      "path": "/api/v1/vms/{id}/exec"
     },
     {
       "component": "hv2-api",
@@ -59,6 +431,60 @@
       "id": "stop_vm",
       "method": "POST",
       "path": "/api/v1/vms/{id}/stop"
+    },
+    {
+      "component": "hv2-api",
+      "id": "list_vm_snapshots",
+      "method": "GET",
+      "path": "/api/v1/vms/{vm_id}/snapshots"
+    },
+    {
+      "component": "hv2-api",
+      "id": "create_vm_snapshot",
+      "method": "POST",
+      "path": "/api/v1/vms/{vm_id}/snapshots"
+    },
+    {
+      "component": "hv2-api",
+      "id": "delete_vm_snapshot",
+      "method": "DELETE",
+      "path": "/api/v1/vms/{vm_id}/snapshots/{snap_id}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_vm_snapshot",
+      "method": "GET",
+      "path": "/api/v1/vms/{vm_id}/snapshots/{snap_id}"
+    },
+    {
+      "component": "hv2-api",
+      "id": "restore_vm_snapshot",
+      "method": "POST",
+      "path": "/api/v1/vms/{vm_id}/snapshots/{snap_id}/restore"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_health",
+      "method": "GET",
+      "path": "/health"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_liveness",
+      "method": "GET",
+      "path": "/health/live"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_readiness",
+      "method": "GET",
+      "path": "/health/ready"
+    },
+    {
+      "component": "hv2-api",
+      "id": "get_prometheus_metrics",
+      "method": "GET",
+      "path": "/metrics"
     },
     {
       "component": "hv2-cluster",
@@ -501,7 +927,7 @@
     {
       "component": "hv2-cluster",
       "id": "update_sandbox_network",
-      "method": "ANY",
+      "method": "PUT",
       "path": "/sandboxes/{id}/network"
     },
     {

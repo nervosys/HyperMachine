@@ -323,7 +323,7 @@ are refused with no credential, so an open control plane does not serve them.
 
 | Operation | Method and path | Notes |
 | --------- | --------------- | ----- |
-| `update_sandbox_network` | `PUT /sandboxes/{id}/network` (the control plane registers every method; the node serves PUT) | The whole new policy, not a patch: what is left out is cleared. `allowOut`, `denyOut` (no names), `allow_internet_access` (snake case), `rules`, `egressProxy`; `allowOut` alone restricts nothing on a node whose default is allow |
+| `update_sandbox_network` | `PUT /sandboxes/{id}/network` (both serve PUT only; the control plane answers any other method with a JSON 405 and `Allow: PUT` itself) | The whole new policy, not a patch: what is left out is cleared. `allowOut`, `denyOut` (no names), `allow_internet_access` (snake case), `rules`, `egressProxy`; `allowOut` alone restricts nothing on a node whose default is allow |
 | `get_sandbox_network_decisions` | `GET .../network/decisions` | First and last 256 decisions of the gateway; 400 with no network |
 | `open_sandbox_tcp_tunnel`, `open_sandbox_udp_tunnel`, `open_sandbox_udp6_tunnel`, `open_sandbox_reverse_tunnel` | `GET .../ports/{port}/tcp`, `/udp`, `/udp6`, `/reverse` | Upgrade to `hv2-tcp/1`, `hv2-udp/1`, `hv2-udp6/1`, `hv2-reverse/1`; no TLS or login added; paused is 409 on the control plane and 404 on a node; reverse holds at most 64 waiting |
 | `list_sandbox_public_ports`, `reserve_sandbox_public_port`, `remove_sandbox_public_port` | `.../public-ports[/{port}]` | Control plane only, needs `--native-port-range`; 202 means stored, not bound; 16 per sandbox |
@@ -339,6 +339,47 @@ are refused with no credential, so an open control plane does not serve them.
 
 **Permissions Required:** `sandboxes` scope, `events` for events, `admin` for
 registration recovery (control plane); the cluster token (node).
+
+### hv2-api's Own Routes (`vm_guest_access`, `image_admission`, `agent_runtime`, `fleet_runtime`, `gpu_fabric`, `vm_snapshot_records`, `event_delivery`, `health_and_metrics`, `agent_discovery_and_plans`)
+
+71 operations, all served by `hv2-api` (the `/api/v1` REST server). Read these
+first:
+
+- **Authentication.** None by default. With API keys configured the check is a
+  static `Authorization: Bearer <key>` comparison (401 missing, 403 wrong),
+  with no per-route rights: the permission middleware in the crate is not
+  installed. GET/HEAD/OPTIONS under `/health` and `/agentic` need no key;
+  `/metrics`, `/api/v1/health/full` and `/.well-known/*` do. Every POST, PUT
+  and PATCH outside `/health` and `/agentic` needs `Content-Type:
+  application/json` (415), even without a body.
+- **`vm_guest_access`.** `exec_in_vm` answers 503 for every VM made through
+  `create_vm` (no guest-agent channel, no `GuestExec` capability), and the
+  console reports `attached: false` (no serial device is registered).
+- **`image_admission`.** In-memory registry; the launch check is off by
+  default and hashes the kernel only. `register_image` stores signatures as
+  unverified, so `approve_image` is 422 for all; `deprecate_image` admits.
+  Approval has no state precondition.
+- **`agent_runtime`.** Tenant is the caller's `X-Tenant-Id`; `reap_agents`
+  is not tenant-scoped; the baseline is a placeholder.
+- **`fleet_runtime`.** Bookkeeping only: nothing starts a process;
+  `pending_workloads` is always 0; destroy of an unknown session is 200;
+  maintenance runs only when called.
+- **`gpu_fabric`.** Caller-declared topology, no discovery; reservations
+  hold no GPU and check no capacity; the fleet has no register route.
+- **`vm_snapshot_records`.** Catalogue entries only; restore changes no VM.
+- **`event_delivery`.** Only `publish_event` puts events on the bus. Webhook
+  URLs are not validated, signatures are a 64-bit hash, delivery is not
+  retried.
+- **`health_and_metrics`.** `/health/ready` and `/api/v1/health/full` cannot
+  report failure; `/metrics` renders two series on the shipped server.
+- **`agent_discovery_and_plans`.** `execute_plan` runs `create_vm`,
+  `start_vm`, `stop_vm`, `pause_vm`, `resume_vm`, `delete_vm`, `get_vm`,
+  `list_vms` and `get_metrics` against this server's VMs; every other step
+  fails. `validate_plan` and failed executions answer 200. The plugin
+  manifest points at `/agentic/openapi.yaml`, which is not routed, and the
+  agent card claims auth schemes the server does not check.
+
+**Permissions Required:** an API key when the server has keys configured.
 
 ### Cluster Store Configuration (`cluster_store_configuration`)
 
@@ -409,6 +450,14 @@ its source; the first two are finding O12 in
 - **`private-network-source-trust`** (warning; private networks): the source node label is trusted on the cluster's shared credential, and support is documented as Partial ([PRIVATE_VM_NETWORKS.md](PRIVATE_VM_NETWORKS.md#receiving-node-tcp-route)).
 - **`registration-reconcile-returns-access-token`** (warning; registration recovery): the answer is credential-bearing, and a retry may duplicate an event ([NATIVE_PORT_GATEWAY.md](NATIVE_PORT_GATEWAY.md#recovering-uncertain-guest-registration)).
 - **`sandbox-events-carry-metadata`** (info; events): metadata travels in every event, and a node does not filter by team (`crates/hv2-cluster/src/events.rs`).
+- **`api-unauthenticated-unless-key-configured`** (critical; hv2-api's routes): no authentication by default and no per-route rights with keys (`crates/hv2-api/src/middleware.rs`).
+- **`guest-exec-runs-programs-in-the-guest`** (warning; `exec_in_vm`): the guest agent authenticates nothing and runs as whoever started it ([GUEST_AGENT.md](GUEST_AGENT.md)).
+- **`image-admission-off-by-default-and-unsatisfiable`** (warning; image routes): admission is off by default and approval cannot succeed over REST ([SECURITY_AUDIT.md](SECURITY_AUDIT.md)).
+- **`agent-runtime-tenant-is-caller-asserted`** (warning; agent sessions): the tenant is a caller-written header ([SECURITY_AUDIT.md](SECURITY_AUDIT.md)).
+- **`webhooks-post-to-any-url-with-a-non-hmac-signature`** (warning; webhooks): unvalidated URLs and a forgeable signature ([security/SECURITY_AUDIT_2026-11-16.md](security/SECURITY_AUDIT_2026-11-16.md)).
+- **`event-publish-injects-events`** (warning; events): any caller can publish (`crates/hv2-api/src/events.rs`).
+- **`probes-exempt-from-api-key`** (info; health and `/agentic`): reads need no key (`crates/hv2-api/src/middleware.rs`).
+- **`snapshot-routes-record-no-vm-state`** (warning; VM snapshot records): nothing is captured (`crates/hv2-api/src/snapshot_routes.rs`).
 - **`sso-session-not-revocable`** (warning; applies to `sso_logout`,
   `sso_callback`, `sso_cli_token`). A session is a stateless signed token;
   signing out only clears the cookie, and a copied token works until it

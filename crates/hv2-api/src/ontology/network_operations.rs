@@ -148,7 +148,7 @@ impl HyperMachineOntology {
             Spec::new(
                 "update_sandbox_network",
                 "Replace A Running Sandbox's Egress Rules",
-                if node { "PUT" } else { "ANY" },
+                "PUT",
                 "/sandboxes/{SB}/network",
             )
             .about(if node {
@@ -178,10 +178,9 @@ impl HyperMachineOntology {
                  Replacing with the same body is harmless."
             } else {
                 "Replace the egress rules of a running sandbox, without restarting it, \
-                 through the node that runs it. The route is registered for every HTTP \
-                 method and relays whichever it is given, but the node serves PUT only and \
-                 answers any other 405 (its empty body arrives with a JSON content type); \
-                 use PUT. The body is E2B's `SandboxNetworkUpdateConfig` and it is the \
+                 through the node that runs it. Only PUT is served: the control plane \
+                 answers any other method 405 itself, as JSON with `Allow: PUT`, after the \
+                 key and ownership checks and without contacting the node. The body is E2B's `SandboxNetworkUpdateConfig` and it is the \
                  whole new policy, not a patch: what it leaves out is cleared, so a \
                  `denyOut` set when the sandbox was made is gone unless it is sent again. \
                  `allowOut` takes names, addresses and CIDRs; `denyOut` takes addresses and \
@@ -224,6 +223,11 @@ impl HyperMachineOntology {
                  does not parse (the first one is named), including a name in `denyOut` and \
                  a bad header; or an `egressProxy` that does not resolve or resolves into a \
                  private or internal range",
+            ))
+            .answers(fail(
+                405,
+                "a method other than PUT (the control plane answers it itself, as JSON \
+                 with `Allow: PUT`; a node answers with an empty body)",
             ))
             .answers(body_rejection())
             .answers(no_such_sandbox())

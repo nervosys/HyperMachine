@@ -534,7 +534,7 @@ async fn test_served_ontology_carries_guardrails_and_key_interface() {
     };
     let (operations, capabilities) = (ids("operations"), ids("capabilities"));
     let guardrails = json["guardrails"].as_array().expect("guardrails list");
-    assert_eq!(guardrails.len(), 19);
+    assert_eq!(guardrails.len(), 27);
     for id in ["redis-shared-user-revocation", "pre-tombstone-revocations"] {
         let g = guardrails
             .iter()
@@ -1212,7 +1212,7 @@ fn network_and_exposure_operations_are_described_for_both_components() {
         ("assign_sandbox_name", "PUT", "/sandboxes/{id}/names/{name}"),
         ("resolve_sandbox_name", "GET", "/sandbox-names/{name}"),
         ("refresh_sandbox", "POST", "/sandboxes/{id}/refreshes"),
-        ("update_sandbox_network", "ANY", "/sandboxes/{id}/network"),
+        ("update_sandbox_network", "PUT", "/sandboxes/{id}/network"),
         (
             "list_node_pending_registrations",
             "GET",
@@ -1354,4 +1354,78 @@ fn network_and_exposure_operations_are_described_for_both_components() {
         .unwrap();
     assert!(refresh.responses.iter().any(|r| r.status_code == 404));
     assert!(!refresh.responses.iter().any(|r| r.status_code == 200));
+}
+
+/// hv2-api's own routes (image admission, agent runtime, runtime, GPU fabric,
+/// snapshots, events, health, `/agentic`): 71 operations in nine capabilities,
+/// each described in full for hv2-api, with its path parameters declared.
+#[test]
+fn hv2_api_own_routes_are_described() {
+    use hv2_api::ontology::HyperMachineOntology;
+
+    let onto = HyperMachineOntology::build();
+    let caps = [
+        ("vm_guest_access", 2),
+        ("image_admission", 9),
+        ("agent_runtime", 5),
+        ("fleet_runtime", 12),
+        ("gpu_fabric", 10),
+        ("vm_snapshot_records", 5),
+        ("event_delivery", 7),
+        ("health_and_metrics", 5),
+        ("agent_discovery_and_plans", 16),
+    ];
+    let mut total = 0;
+    for (cap_id, count) in caps {
+        let cap = onto
+            .capabilities
+            .iter()
+            .find(|c| c.id == cap_id)
+            .unwrap_or_else(|| panic!("missing capability {cap_id}"));
+        assert_eq!(cap.operations.len(), count, "{cap_id}");
+        total += count;
+        for id in &cap.operations {
+            let op = onto
+                .operations
+                .iter()
+                .find(|o| &o.id == id)
+                .unwrap_or_else(|| panic!("{cap_id} names missing operation {id}"));
+            assert_eq!(HyperMachineOntology::operation_component(id), "hv2-api");
+            assert!(op.description.len() > 150, "{id} needs a full description");
+            assert!(!op.responses.is_empty(), "{id} lists no responses");
+            for name in op
+                .path
+                .split('{')
+                .skip(1)
+                .map(|s| s.split('}').next().unwrap())
+            {
+                assert!(
+                    op.parameters.iter().any(|p| p.name == name),
+                    "{id} does not declare path parameter {name}"
+                );
+            }
+        }
+    }
+    assert_eq!(total, 71);
+    let exec = onto
+        .operations
+        .iter()
+        .find(|o| o.id == "exec_in_vm")
+        .unwrap();
+    assert_eq!(
+        (exec.http_method.as_str(), exec.path.as_str()),
+        ("POST", "/api/v1/vms/{id}/exec")
+    );
+    assert!(exec.responses.iter().any(|r| r.status_code == 503));
+    for id in [
+        "exec_in_vm",
+        "approve_image",
+        "execute_plan",
+        "create_webhook",
+    ] {
+        assert!(
+            !onto.guardrails_for(id).is_empty(),
+            "{id} is named by no guardrail"
+        );
+    }
 }

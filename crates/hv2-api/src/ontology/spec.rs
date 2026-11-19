@@ -57,6 +57,66 @@ pub(super) fn fail(status_code: u16, description: &str) -> OperationResponse {
     }
 }
 
+/// A response in the `{"error", "code", "request_id"}` shape `hv2-api` uses.
+pub(super) fn api_fail(status_code: u16, description: &str) -> OperationResponse {
+    OperationResponse {
+        status_code,
+        description: description.to_string(),
+        schema: Some(json!({
+            "type": "object",
+            "properties": {
+                "error": { "type": "string" },
+                "code": { "type": "string" },
+                "request_id": { "type": "string", "description": "present when the request carried X-Request-Id" }
+            }
+        })),
+    }
+}
+
+/// The two answers the API key middleware gives, when one is configured.
+pub(super) fn api_key_failures() -> Vec<OperationResponse> {
+    vec![
+        api_fail(
+            401,
+            "an API key is configured and the request carried none (`UNAUTHORIZED`); never returned when no key is configured, which is the default",
+        ),
+        api_fail(
+            403,
+            "an API key is configured and the one sent is not among them (`FORBIDDEN`)",
+        ),
+    ]
+}
+
+/// What the content-type middleware answers a POST, PUT or PATCH that is not
+/// `application/json`, even one with no body.
+pub(super) fn json_content_type_required() -> OperationResponse {
+    api_fail(
+        415,
+        "the request does not carry `Content-Type: application/json` (`UNSUPPORTED_MEDIA_TYPE`); the middleware checks every POST, PUT and PATCH outside /health and /agentic, whether or not it has a body, while content-type validation is on (the default)",
+    )
+}
+
+/// A capability of `hv2-api`'s own routes, in `category`.
+pub(super) fn api_capability(
+    id: &str,
+    name: &str,
+    description: &str,
+    category: CapabilityCategory,
+    ids: &[&str],
+    prerequisites: &[&str],
+    permissions: &[&str],
+) -> Capability {
+    Capability {
+        id: id.to_string(),
+        name: name.to_string(),
+        description: description.to_string(),
+        category,
+        operations: ids.iter().map(|op| op.to_string()).collect(),
+        prerequisites: prerequisites.iter().map(|p| p.to_string()).collect(),
+        permissions_required: permissions.iter().map(|p| p.to_string()).collect(),
+    }
+}
+
 /// A response whose body the framework wrote, or that has none.
 pub(super) fn plain(status_code: u16, description: &str) -> OperationResponse {
     OperationResponse {

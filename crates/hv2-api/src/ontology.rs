@@ -13,6 +13,11 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
+mod api_agentic_operations;
+mod api_capabilities;
+mod api_event_operations;
+mod api_privileged_operations;
+mod api_runtime_operations;
 mod capabilities;
 mod checkpoint_operations;
 mod exposure_operations;
@@ -1667,6 +1672,7 @@ impl HyperMachineOntology {
         .chain(Self::build_checkpoint_capabilities(true))
         .chain(Self::build_network_capabilities(false))
         .chain(Self::build_network_capabilities(true))
+        .chain(Self::build_api_capabilities())
         .collect()
     }
 
@@ -2225,6 +2231,10 @@ impl HyperMachineOntology {
         .chain(Self::build_checkpoint_node_operations())
         .chain(Self::build_network_control_plane_operations())
         .chain(Self::build_network_node_operations())
+        .chain(Self::build_api_privileged_operations())
+        .chain(Self::build_api_runtime_operations())
+        .chain(Self::build_api_event_operations())
+        .chain(Self::build_api_agentic_operations())
         .collect()
     }
 
@@ -5062,6 +5072,220 @@ impl HyperMachineOntology {
                     returned) and keep node ports on a network only the control plane reaches."
                     .to_string(),
                 reference: "crates/hv2-cluster/src/events.rs".to_string(),
+            },
+            Guardrail {
+                id: "api-unauthenticated-unless-key-configured".to_string(),
+                severity: GuardrailSeverity::Critical,
+                title: "hv2-api answers every caller unless API keys are configured".to_string(),
+                description: "With the default configuration (`enable_api_key_auth` off, \
+                    listening on 0.0.0.0) the REST server authenticates nobody: any caller \
+                    who can reach the port can create and delete VMs, run programs through \
+                    `exec_in_vm`, approve images, spawn agents and execute plans. When keys \
+                    are configured the check is a static comparison of `Authorization: \
+                    Bearer <key>` (or a bare key): 401 without one, 403 for a wrong one. \
+                    There is no per-route or per-key permission: the permission middleware \
+                    exists in the crate and is not installed on any router, so a valid key \
+                    reaches every route. The agent card's claim of `Ed25519-JWT` and `mTLS` \
+                    is not enforced by this server."
+                    .to_string(),
+                applies_to: [
+                    "vm_guest_access",
+                    "image_admission",
+                    "agent_runtime",
+                    "fleet_runtime",
+                    "gpu_fabric",
+                    "event_delivery",
+                    "agent_discovery_and_plans",
+                    "exec_in_vm",
+                    "execute_plan",
+                    "approve_image",
+                    "spawn_agent",
+                ]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+                condition: "The server runs with no API key configured, or with a key that \
+                    several callers share, on a network not every host on it may be trusted."
+                    .to_string(),
+                mitigation: "Set `HV2_API_KEYS` (or the configured keys), enable API key \
+                    authentication, bind to loopback or a private interface, and put an \
+                    authenticating proxy in front where callers need different rights."
+                    .to_string(),
+                reference: "crates/hv2-api/src/middleware.rs".to_string(),
+            },
+            Guardrail {
+                id: "guest-exec-runs-programs-in-the-guest".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "Guest exec runs what it is given, as whoever started the agent"
+                    .to_string(),
+                description: "The guest agent runs whatever program the host asks, as the \
+                    user that started it, and does no authentication of its own: the vsock \
+                    channel to the VM is the boundary. A caller who can reach `exec_in_vm` \
+                    therefore has that user's rights in the guest. Output a command writes \
+                    is held by the agent up to 1 MiB per stream."
+                    .to_string(),
+                applies_to: ["exec_in_vm", "vm_guest_access"]
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
+                condition: "The VM has a guest agent attached; for VMs made through this \
+                    server's `create_vm` none is, and the route answers 503."
+                    .to_string(),
+                mitigation: "Treat access to the route as root in the guest (see \
+                    api-unauthenticated-unless-key-configured); run the agent as an \
+                    unprivileged user where programs need not be root."
+                    .to_string(),
+                reference: "docs/GUEST_AGENT.md".to_string(),
+            },
+            Guardrail {
+                id: "image-admission-off-by-default-and-unsatisfiable".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "Boot image admission does nothing by default, and over REST nothing \
+                    can be approved"
+                    .to_string(),
+                description: "Admission is a no-op unless the registry is installed and the \
+                    server enforces it at VM creation (off by default). When it is on, the \
+                    check is the SHA-256 of the VM's primary image (the kernel; an initrd is \
+                    not checked). The registry is held in memory and is empty after a \
+                    restart. This server requires a verified signature for approval, and \
+                    `register_image` records every signature as unverified, so `approve_image` \
+                    answers 422 for every image; `deprecate_image` is the route that admits \
+                    one, and it does so with a warning and no signature check. Approval has \
+                    no state precondition, so a denied or revoked image can be approved \
+                    again, and the reviewer is free text."
+                    .to_string(),
+                applies_to: [
+                    "image_admission",
+                    "register_image",
+                    "approve_image",
+                    "deprecate_image",
+                    "check_image_admission",
+                ]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+                condition: "Image admission is relied on to keep unreviewed images from \
+                    booting."
+                    .to_string(),
+                mitigation: "Confirm enforcement is on, treat the registry as advisory \
+                    until signatures can be verified, re-register after a restart, and \
+                    keep the routes behind an API key."
+                    .to_string(),
+                reference: "docs/SECURITY_AUDIT.md".to_string(),
+            },
+            Guardrail {
+                id: "agent-runtime-tenant-is-caller-asserted".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "An agent's tenant is the header the caller sends".to_string(),
+                description: "The agent routes scope sessions by the `X-Tenant-Id` header, \
+                    which the caller writes: another tenant's id reads, lists and releases \
+                    that tenant's sessions. The per-route bearer check is never active on \
+                    this server (it is built with no tokens), and `reap_agents` is not \
+                    scoped to a tenant. The `full` capability set includes guest and host \
+                    exec. Sessions do not outlive the process."
+                    .to_string(),
+                applies_to: ["agent_runtime", "spawn_agent", "list_agents", "release_agent", "reap_agents"]
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
+                condition: "Tenants are expected to be isolated from one another."
+                    .to_string(),
+                mitigation: "Put an authenticating proxy in front that sets the header from \
+                    the caller's identity and strips any the caller sent."
+                    .to_string(),
+                reference: "docs/SECURITY_AUDIT.md".to_string(),
+            },
+            Guardrail {
+                id: "webhooks-post-to-any-url-with-a-non-hmac-signature".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "This server's webhooks post to any URL and do not carry an HMAC"
+                    .to_string(),
+                description: "`create_webhook` does not validate the URL, so a caller can \
+                    make the server request an internal address; redirects are followed, \
+                    there is no retry, and any response counts as delivered. The \
+                    `X-HyperMachine-Signature` header (`sha256=...`) is a 64-bit hash from \
+                    the standard library's hasher, not HMAC-SHA256, and can be forged. \
+                    Custom headers, which may hold credentials, are returned by the read \
+                    routes. The control plane's webhooks are different: they pin DNS, do \
+                    not follow redirects and accept only global addresses."
+                    .to_string(),
+                applies_to: ["create_webhook", "list_webhooks", "get_webhook", "event_delivery"]
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
+                condition: "Webhooks are registered by callers who must not reach the \
+                    server's network, or the receiver relies on the signature."
+                    .to_string(),
+                mitigation: "Register webhooks only from trusted callers, do not put \
+                    secrets in headers, and use the control plane's webhooks where a real \
+                    HMAC is needed."
+                    .to_string(),
+                reference: "docs/security/SECURITY_AUDIT_2026-11-16.md".to_string(),
+            },
+            Guardrail {
+                id: "event-publish-injects-events".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "Any caller can put an event on the bus".to_string(),
+                description: "`publish_event` is a development route that is always \
+                    mounted: it broadcasts whatever event it is given to every SSE and \
+                    WebSocket subscriber and every matching webhook. Nothing else in this \
+                    server publishes events, so what subscribers see is what callers of \
+                    this route sent."
+                    .to_string(),
+                applies_to: ["publish_event", "stream_events", "stream_events_websocket"]
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
+                condition: "A subscriber treats an event as proof that something happened."
+                    .to_string(),
+                mitigation: "Do not rely on this server's events as evidence of a state \
+                    change; read the resource. Restrict the route with an API key."
+                    .to_string(),
+                reference: "crates/hv2-api/src/events.rs".to_string(),
+            },
+            Guardrail {
+                id: "probes-exempt-from-api-key".to_string(),
+                severity: GuardrailSeverity::Info,
+                title: "Health probes and /agentic reads answer without an API key"
+                    .to_string(),
+                description: "Even with API keys configured, GET, HEAD and OPTIONS under \
+                    `/health` and `/agentic` need no key, so the ontology, the tool lists \
+                    and the plan templates are readable by anyone who can reach the port. \
+                    `/metrics`, `/api/v1/health/full` and `/.well-known` are not exempt. \
+                    POST routes under `/agentic` (`execute_plan`) are not exempt."
+                    .to_string(),
+                applies_to: ["health_and_metrics", "get_health", "get_ontology", "get_liveness", "get_readiness"]
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
+                condition: "The server is reachable by parties who should not see the \
+                    ontology."
+                    .to_string(),
+                mitigation: "Keep the port on a private network or behind a proxy."
+                    .to_string(),
+                reference: "crates/hv2-api/src/middleware.rs".to_string(),
+            },
+            Guardrail {
+                id: "snapshot-routes-record-no-vm-state".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "VM snapshot records capture nothing".to_string(),
+                description: "The `/api/v1/vms/{id}/snapshots` routes keep catalogue \
+                    entries in memory. They do not touch a VM (any id string works), \
+                    capture no memory or disk, and `restore_vm_snapshot` reports the \
+                    snapshot restored without changing the VM. Size and vCPU count are \
+                    zero. When a VM id has 100 snapshots the oldest valid snapshot with no \
+                    child is deleted silently. Use the sandbox and machine checkpoint \
+                    routes for real state."
+                    .to_string(),
+                applies_to: ["vm_snapshot_records", "create_vm_snapshot", "restore_vm_snapshot"]
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect(),
+                condition: "A snapshot is relied on as a backup or a restore point."
+                    .to_string(),
+                mitigation: "Do not use these routes for recovery; use checkpoints."
+                    .to_string(),
+                reference: "crates/hv2-api/src/snapshot_routes.rs".to_string(),
             },
         ]
     }
@@ -8461,6 +8685,14 @@ mod tests {
             "private-network-source-trust",
             "registration-reconcile-returns-access-token",
             "sandbox-events-carry-metadata",
+            "api-unauthenticated-unless-key-configured",
+            "guest-exec-runs-programs-in-the-guest",
+            "image-admission-off-by-default-and-unsatisfiable",
+            "agent-runtime-tenant-is-caller-asserted",
+            "webhooks-post-to-any-url-with-a-non-hmac-signature",
+            "event-publish-injects-events",
+            "probes-exempt-from-api-key",
+            "snapshot-routes-record-no-vm-state",
         ];
         let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         for id in ids {
