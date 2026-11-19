@@ -381,6 +381,46 @@ first:
 
 **Permissions Required:** an API key when the server has keys configured.
 
+### Templates, Volumes, Platform Routes And The Local Servers
+
+The last 103 routes, plus the 12 the node serves by mounting the control
+plane's routers, so every interface the five components serve is described
+(115 operations; the allowlist is empty).
+
+- **Templates and builds** (`template_catalogue`, `template_builds`, their
+  `node_` twins, and `node_team_template_sharing`): list, alias lookup, build
+  from an image, delete, the v2/v3 build routes, the upload link and the
+  upload. The upload `PUT` sits outside the key check and the cluster-token
+  check; its `token` query parameter stands in, held per hash. The uploaded
+  hash is checked only with `--verify-upload-hash` (O8). Uploads, pulled
+  images and cached build steps are shared node-wide, and templates built
+  before scoping are visible to everyone (O14 residuals). The control plane
+  answers 502 to `POST /templates` unless a node answered 202.
+- **Volumes and disks** (`volume_management`, `volume_content`, `node_volume_management`,
+  `node_volume_content`, `node_block_disks`): `/volumecontent/*` is authenticated
+  by the volume's own bearer token alone, on both components, and the control
+  plane's operations are method `ANY`. Growth is bounded by a reserve guard
+  (5% of the filesystem capped at 2 GiB, plus 1% of inodes) that is on by
+  default; `--volume-max-bytes` and `--volume-max-inodes` are off (O7);
+  refusals are 507. Disks are node-local, have no team scope, and have no
+  control-plane route.
+- **Platform** (`sandbox_environments`, `sandbox_event_webhooks`,
+  `sandbox_usage_report`, `workload_identity_discovery`, `prometheus_exposition`,
+  `team_telemetry`, `cluster_inventory`, `node_warm_pool`): the node mounts
+  hv2-cluster's environments and events routers, so it serves environments,
+  webhooks and usage too, behind the cluster token only and with no team
+  context. On the control plane no key scope covers `/environments` or
+  `/usage`, so only an administrator (or an open plane) reaches them.
+- **hm-cli** (`hm_cli_local_vms`, `hm_cli_tool_calls`, `hm_cli_agent_discovery`,
+  `hm_cli_mcp_http`): `hm serve` binds `0.0.0.0` with no TLS and checks
+  `HM_API_KEY` on its six mutating routes only; its reads stay open.
+  `hm sandbox vm mcp-http` is loopback only and needs a token of 32 to 4096
+  bytes and an allowed `Origin`.
+- **hv2-jobs** (`jobs_queue`, `jobs_schedules`, `jobs_vm_receipts`): an optional
+  bearer token, loopback by default and refused beyond it without a token.
+  Submitting a job is remote execution; a receipt's claim token is readable by
+  any holder of the server token.
+
 ### Cluster Store Configuration (`cluster_store_configuration`)
 
 Where control planes, nodes and the native gateway keep shared state,
@@ -458,6 +498,24 @@ its source; the first two are finding O12 in
 - **`event-publish-injects-events`** (warning; events): any caller can publish (`crates/hv2-api/src/events.rs`).
 - **`probes-exempt-from-api-key`** (info; health and `/agentic`): reads need no key (`crates/hv2-api/src/middleware.rs`).
 - **`snapshot-routes-record-no-vm-state`** (warning; VM snapshot records): nothing is captured (`crates/hv2-api/src/snapshot_routes.rs`).
+- **`template-upload-hash-not-verified-by-default`** (warning; uploads): the hash is checked only with `--verify-upload-hash` ([security/SECURITY_AUDIT_2026-11-16.md](security/SECURITY_AUDIT_2026-11-16.md), O8).
+- **`template-upload-route-needs-no-api-key`** (info; uploads): a URL token stands in for the key.
+- **`template-build-scope-residuals`** (warning; builds): uploads, images and build cache are shared node-wide, and pre-scoping templates are visible to all (O14).
+- **`volume-growth-limits-and-defaults`** (warning; volumes): the reserve guard is on, the byte and inode limits are off (O7).
+- **`volume-content-token-is-the-only-credential`** (warning; volume content): [VOLUMES.md](VOLUMES.md).
+- **`volume-writes-are-not-atomic-and-delete-is-immediate`** (info; volumes): [VOLUMES.md](VOLUMES.md).
+- **`block-disks-are-node-local-and-unscoped`** (warning; disks): [DISKS.md](DISKS.md).
+- **`environments-keep-secrets-unencrypted`** (warning; environments): [ENVIRONMENTS.md](ENVIRONMENTS.md).
+- **`environments-and-usage-are-administrator-only-on-the-control-plane`** (warning): [TEAMS.md](TEAMS.md).
+- **`webhook-urls-are-checked-at-delivery`** (warning; the control plane's and node's webhooks): [WEBHOOKS.md](WEBHOOKS.md).
+- **`node-platform-routes-filter-by-no-team`** (warning; node): the node's environments, webhooks and usage routes see every team (`crates/hv2-cluster/src/events.rs`).
+- **`team-telemetry-leaves-the-platform`** (info): [TELEMETRY.md](TELEMETRY.md).
+- **`cluster-event-log-lists-every-team`** (info): [TEAMS.md](TEAMS.md).
+- **`platform-discovery-and-metrics-are-public`** (info): [TELEMETRY.md](TELEMETRY.md).
+- **`hm-serve-open-and-plain-by-default`** (critical; `hm serve`): [src/ai/mcp-server.md](src/ai/mcp-server.md).
+- **`mcp-http-single-shared-credential`** (warning; MCP over HTTP): [src/ai/mcp-server.md](src/ai/mcp-server.md).
+- **`jobs-serve-is-remote-execution`** (critical; hv2-jobs): [JOBS.md](JOBS.md).
+- **`schedule-receipts-trust-the-operator`** (warning; hv2-jobs): [JOBS.md](JOBS.md).
 - **`sso-session-not-revocable`** (warning; applies to `sso_logout`,
   `sso_callback`, `sso_cli_token`). A session is a stateless signed token;
   signing out only clears the cookie, and a copied token works until it
@@ -890,7 +948,9 @@ The ontology is meant to describe every HTTP interface. Until it does,
 `tools/check-ontology-coverage.py` (CI job "Unread Controls") extracts every
 route from the axum route tables of `hv2-api`, `hv2-cluster`, `hv2-sandboxd`,
 `hm-cli` and `hv2-jobs` and compares them with the operations declared here.
-A route that is neither declared nor listed in
+A `.merge(other_crate::module::f(..))` is followed into the other crate (the node
+mounts hv2-cluster's environments and events routers), so those routes count
+for the node. A route that is neither declared nor listed in
 `tools/ontology-coverage-allowlist.txt` fails the build, and so does an
 allowlisted route that is now declared or no longer exists, so the list only
 shrinks. The declared operations are read from

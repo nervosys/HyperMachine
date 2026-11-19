@@ -1,6 +1,138 @@
 {
   "operations": [
     {
+      "component": "hm-cli",
+      "id": "hm_get_agentic_capabilities",
+      "method": "GET",
+      "path": "/agentic/capabilities"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_get_agentic_ontology",
+      "method": "GET",
+      "path": "/agentic/ontology"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_get_provider_config",
+      "method": "GET",
+      "path": "/agentic/providers/{provider}"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_get_agentic_schema",
+      "method": "GET",
+      "path": "/agentic/schema"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_get_agentic_schema_compact",
+      "method": "GET",
+      "path": "/agentic/schema/compact"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_get_anthropic_tools",
+      "method": "GET",
+      "path": "/agentic/tools/anthropic"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_get_gemini_tools",
+      "method": "GET",
+      "path": "/agentic/tools/gemini"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_get_openai_tools",
+      "method": "GET",
+      "path": "/agentic/tools/openai"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_get_health",
+      "method": "GET",
+      "path": "/health"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_mcp_http_delete",
+      "method": "DELETE",
+      "path": "/mcp"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_mcp_http_get",
+      "method": "GET",
+      "path": "/mcp"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_mcp_http_post",
+      "method": "POST",
+      "path": "/mcp"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_call_tool",
+      "method": "POST",
+      "path": "/mcp/call"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_list_tools",
+      "method": "GET",
+      "path": "/mcp/tools"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_list_vms",
+      "method": "GET",
+      "path": "/vms"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_create_vm",
+      "method": "POST",
+      "path": "/vms"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_delete_vm",
+      "method": "DELETE",
+      "path": "/vms/{name}"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_get_vm",
+      "method": "GET",
+      "path": "/vms/{name}"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_get_vm_metrics",
+      "method": "GET",
+      "path": "/vms/{name}/metrics"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_execute_vm_script",
+      "method": "POST",
+      "path": "/vms/{name}/script"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_start_vm",
+      "method": "POST",
+      "path": "/vms/{name}/start"
+    },
+    {
+      "component": "hm-cli",
+      "id": "hm_stop_vm",
+      "method": "POST",
+      "path": "/vms/{name}/stop"
+    },
+    {
       "component": "hv2-api",
       "id": "get_agent_card",
       "method": "GET",
@@ -488,6 +620,18 @@
     },
     {
       "component": "hv2-cluster",
+      "id": "get_identity_jwks",
+      "method": "GET",
+      "path": "/.well-known/jwks.json"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_identity_openid_configuration",
+      "method": "GET",
+      "path": "/.well-known/openid-configuration"
+    },
+    {
+      "component": "hv2-cluster",
       "id": "sso_callback",
       "method": "GET",
       "path": "/auth/callback"
@@ -524,6 +668,18 @@
     },
     {
       "component": "hv2-cluster",
+      "id": "list_cluster_events",
+      "method": "GET",
+      "path": "/cluster/events"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_cluster_nodes",
+      "method": "GET",
+      "path": "/cluster/nodes"
+    },
+    {
+      "component": "hv2-cluster",
       "id": "list_node_pending_registrations",
       "method": "GET",
       "path": "/cluster/nodes/{node}/registrations/pending"
@@ -536,6 +692,30 @@
     },
     {
       "component": "hv2-cluster",
+      "id": "list_environments",
+      "method": "GET",
+      "path": "/environments"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "delete_environment",
+      "method": "DELETE",
+      "path": "/environments/{name}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_environment",
+      "method": "GET",
+      "path": "/environments/{name}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "put_environment",
+      "method": "PUT",
+      "path": "/environments/{name}"
+    },
+    {
+      "component": "hv2-cluster",
       "id": "list_sandbox_events",
       "method": "GET",
       "path": "/events/sandboxes"
@@ -545,6 +725,54 @@
       "id": "get_sandbox_events",
       "method": "GET",
       "path": "/events/sandboxes/{id}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_sandbox_webhooks",
+      "method": "GET",
+      "path": "/events/webhooks"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "create_sandbox_webhook",
+      "method": "POST",
+      "path": "/events/webhooks"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "delete_sandbox_webhook",
+      "method": "DELETE",
+      "path": "/events/webhooks/{id}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_sandbox_webhook",
+      "method": "GET",
+      "path": "/events/webhooks/{id}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "update_sandbox_webhook",
+      "method": "PATCH",
+      "path": "/events/webhooks/{id}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_webhook_deliveries",
+      "method": "GET",
+      "path": "/events/webhooks/{id}/deliveries"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_webhook_stats",
+      "method": "GET",
+      "path": "/events/webhooks/{id}/stats"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_control_plane_health",
+      "method": "GET",
+      "path": "/health"
     },
     {
       "component": "hv2-cluster",
@@ -773,6 +1001,12 @@
       "id": "control_machine",
       "method": "POST",
       "path": "/machines/{name}/{action}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_metrics_exposition",
+      "method": "GET",
+      "path": "/metrics"
     },
     {
       "component": "hv2-cluster",
@@ -1076,6 +1310,66 @@
     },
     {
       "component": "hv2-cluster",
+      "id": "delete_team_telemetry",
+      "method": "DELETE",
+      "path": "/telemetry"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_team_telemetry",
+      "method": "GET",
+      "path": "/telemetry"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "put_team_telemetry",
+      "method": "PUT",
+      "path": "/telemetry"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_templates",
+      "method": "GET",
+      "path": "/templates"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "build_template_from_image",
+      "method": "POST",
+      "path": "/templates"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_template_alias",
+      "method": "GET",
+      "path": "/templates/aliases/{alias}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "delete_template_snapshot",
+      "method": "DELETE",
+      "path": "/templates/{id}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_template_build_status",
+      "method": "GET",
+      "path": "/templates/{id}/builds/{build}/status"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_template_file_link",
+      "method": "GET",
+      "path": "/templates/{id}/files/{hash}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "upload_template_files",
+      "method": "PUT",
+      "path": "/templates/{id}/files/{hash}"
+    },
+    {
+      "component": "hv2-cluster",
       "id": "list_template_shares",
       "method": "GET",
       "path": "/templates/{id}/shares"
@@ -1091,6 +1385,18 @@
       "id": "share_template_snapshot",
       "method": "PUT",
       "path": "/templates/{id}/shares/{team}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_control_plane_ui",
+      "method": "GET",
+      "path": "/ui"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_usage",
+      "method": "GET",
+      "path": "/usage"
     },
     {
       "component": "hv2-cluster",
@@ -1117,6 +1423,198 @@
       "path": "/v2/sandboxes/{id}/logs"
     },
     {
+      "component": "hv2-cluster",
+      "id": "start_template_build",
+      "method": "POST",
+      "path": "/v2/templates/{id}/builds/{build}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "request_template_build",
+      "method": "POST",
+      "path": "/v3/templates"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "volume_content_dir",
+      "method": "ANY",
+      "path": "/volumecontent/{id}/dir"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "volume_content_file",
+      "method": "ANY",
+      "path": "/volumecontent/{id}/file"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "volume_content_path",
+      "method": "ANY",
+      "path": "/volumecontent/{id}/path"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_volumes",
+      "method": "GET",
+      "path": "/volumes"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "create_volume",
+      "method": "POST",
+      "path": "/volumes"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "delete_volume",
+      "method": "DELETE",
+      "path": "/volumes/{id}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_volume",
+      "method": "GET",
+      "path": "/volumes/{id}"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_list",
+      "method": "GET",
+      "path": "/api/v1/jobs"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_submit",
+      "method": "POST",
+      "path": "/api/v1/jobs"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_get",
+      "method": "GET",
+      "path": "/api/v1/jobs/{id}"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_cancel",
+      "method": "POST",
+      "path": "/api/v1/jobs/{id}/cancel"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_get_logs",
+      "method": "GET",
+      "path": "/api/v1/jobs/{id}/logs"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_list_schedules",
+      "method": "GET",
+      "path": "/api/v1/schedules"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_get_schedule",
+      "method": "GET",
+      "path": "/api/v1/schedules/{id}"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_create_schedule",
+      "method": "POST",
+      "path": "/api/v1/schedules/{id}"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_cancel_schedule",
+      "method": "POST",
+      "path": "/api/v1/schedules/{id}/cancel"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_list_occurrences",
+      "method": "GET",
+      "path": "/api/v1/schedules/{id}/occurrences"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_publish_schedule",
+      "method": "POST",
+      "path": "/api/v1/schedules/{id}/publish"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_get_receipt",
+      "method": "GET",
+      "path": "/api/v1/schedules/{id}/receipts/{scheduled_ms}"
+    },
+    {
+      "component": "hv2-jobs",
+      "id": "jobs_record_receipt",
+      "method": "POST",
+      "path": "/api/v1/schedules/{id}/receipts/{scheduled_ms}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_identity_jwks",
+      "method": "GET",
+      "path": "/.well-known/jwks.json"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_identity_openid_configuration",
+      "method": "GET",
+      "path": "/.well-known/openid-configuration"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_disks",
+      "method": "GET",
+      "path": "/disks"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_create_disk",
+      "method": "POST",
+      "path": "/disks"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_delete_disk",
+      "method": "DELETE",
+      "path": "/disks/{diskID}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_disk",
+      "method": "GET",
+      "path": "/disks/{diskID}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_environments",
+      "method": "GET",
+      "path": "/environments"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_delete_environment",
+      "method": "DELETE",
+      "path": "/environments/{name}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_environment",
+      "method": "GET",
+      "path": "/environments/{name}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_put_environment",
+      "method": "PUT",
+      "path": "/environments/{name}"
+    },
+    {
       "component": "hv2-sandboxd",
       "id": "node_list_sandbox_events",
       "method": "GET",
@@ -1127,6 +1625,48 @@
       "id": "node_get_sandbox_events",
       "method": "GET",
       "path": "/events/sandboxes/{id}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_sandbox_webhooks",
+      "method": "GET",
+      "path": "/events/webhooks"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_create_sandbox_webhook",
+      "method": "POST",
+      "path": "/events/webhooks"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_delete_sandbox_webhook",
+      "method": "DELETE",
+      "path": "/events/webhooks/{id}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_sandbox_webhook",
+      "method": "GET",
+      "path": "/events/webhooks/{id}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_update_sandbox_webhook",
+      "method": "PATCH",
+      "path": "/events/webhooks/{id}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_webhook_deliveries",
+      "method": "GET",
+      "path": "/events/webhooks/{id}/deliveries"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_webhook_stats",
+      "method": "GET",
+      "path": "/events/webhooks/{id}/stats"
     },
     {
       "component": "hv2-sandboxd",
@@ -1400,6 +1940,12 @@
     },
     {
       "component": "hv2-sandboxd",
+      "id": "node_get_metrics_exposition",
+      "method": "GET",
+      "path": "/metrics"
+    },
+    {
+      "component": "hv2-sandboxd",
       "id": "node_list_local_networks",
       "method": "GET",
       "path": "/networks"
@@ -1433,6 +1979,12 @@
       "id": "node_disconnect_sandbox_from_local_network",
       "method": "POST",
       "path": "/networks/{name}/disconnect"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_warm_pool",
+      "method": "GET",
+      "path": "/pool"
     },
     {
       "component": "hv2-sandboxd",
@@ -1676,6 +2228,66 @@
     },
     {
       "component": "hv2-sandboxd",
+      "id": "node_list_templates",
+      "method": "GET",
+      "path": "/templates"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_build_template_from_image",
+      "method": "POST",
+      "path": "/templates"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_template_alias",
+      "method": "GET",
+      "path": "/templates/aliases/{alias}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_delete_template_snapshot",
+      "method": "DELETE",
+      "path": "/templates/{templateID}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_template_build_status",
+      "method": "GET",
+      "path": "/templates/{templateID}/builds/{buildID}/status"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_template_file_link",
+      "method": "GET",
+      "path": "/templates/{templateID}/files/{hash}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_upload_template_files",
+      "method": "PUT",
+      "path": "/templates/{templateID}/files/{hash}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_unshare_template_snapshot",
+      "method": "DELETE",
+      "path": "/templates/{templateID}/shares/{team}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_share_template_snapshot",
+      "method": "PUT",
+      "path": "/templates/{templateID}/shares/{team}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_usage",
+      "method": "GET",
+      "path": "/usage"
+    },
+    {
+      "component": "hv2-sandboxd",
       "id": "node_list_sandboxes_v2",
       "method": "GET",
       "path": "/v2/sandboxes"
@@ -1697,6 +2309,84 @@
       "id": "node_get_sandbox_logs_v2",
       "method": "GET",
       "path": "/v2/sandboxes/{sandboxID}/logs"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_start_template_build",
+      "method": "POST",
+      "path": "/v2/templates/{templateID}/builds/{buildID}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_request_template_build",
+      "method": "POST",
+      "path": "/v3/templates"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_volume_dir",
+      "method": "GET",
+      "path": "/volumecontent/{volumeID}/dir"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_make_volume_dir",
+      "method": "POST",
+      "path": "/volumecontent/{volumeID}/dir"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_read_volume_file",
+      "method": "GET",
+      "path": "/volumecontent/{volumeID}/file"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_write_volume_file",
+      "method": "PUT",
+      "path": "/volumecontent/{volumeID}/file"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_remove_volume_path",
+      "method": "DELETE",
+      "path": "/volumecontent/{volumeID}/path"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_stat_volume_path",
+      "method": "GET",
+      "path": "/volumecontent/{volumeID}/path"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_update_volume_path",
+      "method": "PATCH",
+      "path": "/volumecontent/{volumeID}/path"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_volumes",
+      "method": "GET",
+      "path": "/volumes"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_create_volume",
+      "method": "POST",
+      "path": "/volumes"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_delete_volume",
+      "method": "DELETE",
+      "path": "/volumes/{volumeID}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_volume",
+      "method": "GET",
+      "path": "/volumes/{volumeID}"
     }
   ]
 }

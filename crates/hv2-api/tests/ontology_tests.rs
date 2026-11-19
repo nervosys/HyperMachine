@@ -534,7 +534,7 @@ async fn test_served_ontology_carries_guardrails_and_key_interface() {
     };
     let (operations, capabilities) = (ids("operations"), ids("capabilities"));
     let guardrails = json["guardrails"].as_array().expect("guardrails list");
-    assert_eq!(guardrails.len(), 27);
+    assert_eq!(guardrails.len(), 45);
     for id in ["redis-shared-user-revocation", "pre-tombstone-revocations"] {
         let g = guardrails
             .iter()
@@ -1422,6 +1422,117 @@ fn hv2_api_own_routes_are_described() {
         "approve_image",
         "execute_plan",
         "create_webhook",
+    ] {
+        assert!(
+            !onto.guardrails_for(id).is_empty(),
+            "{id} is named by no guardrail"
+        );
+    }
+}
+
+/// The remaining routes: templates and builds, volumes and disks, the
+/// platform routes (environments, webhooks, usage, telemetry, discovery), and
+/// the two local servers, `hm serve` / `hm sandbox vm mcp-http` and
+/// `hm jobs serve`. Every one is described in full, with its path parameters,
+/// by the component that serves it, and sits in a capability.
+#[test]
+fn remaining_routes_are_described_for_every_component() {
+    use hv2_api::ontology::HyperMachineOntology;
+
+    let onto = HyperMachineOntology::build();
+    // (capability, component, operation count)
+    let caps = [
+        ("template_catalogue", "hv2-cluster", 4),
+        ("template_builds", "hv2-cluster", 5),
+        ("node_template_catalogue", "hv2-sandboxd", 4),
+        ("node_template_builds", "hv2-sandboxd", 5),
+        ("node_team_template_sharing", "hv2-sandboxd", 2),
+        ("volume_management", "hv2-cluster", 4),
+        ("volume_content", "hv2-cluster", 3),
+        ("node_volume_management", "hv2-sandboxd", 4),
+        ("node_volume_content", "hv2-sandboxd", 7),
+        ("node_block_disks", "hv2-sandboxd", 4),
+        ("sandbox_environments", "hv2-cluster", 4),
+        ("node_sandbox_environments", "hv2-sandboxd", 4),
+        ("sandbox_event_webhooks", "hv2-cluster", 7),
+        ("node_sandbox_event_webhooks", "hv2-sandboxd", 7),
+        ("sandbox_usage_report", "hv2-cluster", 1),
+        ("node_sandbox_usage_report", "hv2-sandboxd", 1),
+        ("workload_identity_discovery", "hv2-cluster", 2),
+        ("node_workload_identity_discovery", "hv2-sandboxd", 2),
+        ("prometheus_exposition", "hv2-cluster", 1),
+        ("node_prometheus_exposition", "hv2-sandboxd", 1),
+        ("team_telemetry", "hv2-cluster", 3),
+        ("cluster_inventory", "hv2-cluster", 4),
+        ("node_warm_pool", "hv2-sandboxd", 1),
+        ("hm_cli_local_vms", "hm-cli", 8),
+        ("hm_cli_tool_calls", "hm-cli", 2),
+        ("hm_cli_agent_discovery", "hm-cli", 9),
+        ("hm_cli_mcp_http", "hm-cli", 3),
+        ("jobs_queue", "hv2-jobs", 5),
+        ("jobs_schedules", "hv2-jobs", 6),
+        ("jobs_vm_receipts", "hv2-jobs", 2),
+    ];
+    for (cap_id, component, count) in caps {
+        let cap = onto
+            .capabilities
+            .iter()
+            .find(|c| c.id == cap_id)
+            .unwrap_or_else(|| panic!("missing capability {cap_id}"));
+        assert_eq!(cap.operations.len(), count, "{cap_id}");
+        for id in &cap.operations {
+            let op = onto
+                .operations
+                .iter()
+                .find(|o| &o.id == id)
+                .unwrap_or_else(|| panic!("{cap_id} names missing operation {id}"));
+            assert_eq!(
+                HyperMachineOntology::operation_component(id),
+                component,
+                "{id}"
+            );
+            assert!(op.description.len() > 150, "{id} needs a full description");
+            assert!(!op.responses.is_empty(), "{id} lists no responses");
+            for name in op
+                .path
+                .split('{')
+                .skip(1)
+                .map(|s| s.split('}').next().unwrap())
+            {
+                assert!(
+                    op.parameters.iter().any(|p| p.name == name),
+                    "{id} does not declare path parameter {name}"
+                );
+            }
+        }
+    }
+    // Ids are unique across the whole ontology.
+    let mut seen = std::collections::HashSet::new();
+    for op in &onto.operations {
+        assert!(seen.insert(op.id.clone()), "duplicate operation {}", op.id);
+    }
+    // The routes the node serves because it mounts the control plane's routers.
+    for id in [
+        "node_list_environments",
+        "node_create_sandbox_webhook",
+        "node_get_usage",
+    ] {
+        assert_eq!(
+            HyperMachineOntology::operation_component(id),
+            "hv2-sandboxd"
+        );
+    }
+    // Guardrails reach the operations they are about.
+    for id in [
+        "upload_template_files",
+        "node_upload_template_files",
+        "create_volume",
+        "node_create_disk",
+        "put_environment",
+        "jobs_submit",
+        "hm_execute_vm_script",
+        "hm_mcp_http_post",
+        "jobs_record_receipt",
     ] {
         assert!(
             !onto.guardrails_for(id).is_empty(),

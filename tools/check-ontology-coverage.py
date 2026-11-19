@@ -31,8 +31,14 @@ call is parsed with balanced parentheses, so multi-line routes and
 nested router and its routes get the prefix. Anything this parser cannot read
 with certainty (a non-literal path, a `.route` with no recognisable method, a
 `.nest` it cannot resolve) is a hard error, never a silent skip. Path
-parameter names are ignored when comparing ({id} == {sandboxID}). `.merge(..)`
-needs no handling: a merged router's routes are in its own function.
+parameter names are ignored when comparing ({id} == {sandboxID}).
+`.merge(..)` of a router built in the same crate needs no handling: its
+routes are in its own function. `.merge(other_crate::module::f(..))`, a
+router another scanned crate builds (the node daemon mounts hv2-cluster's
+`environments::router` and `events::router`), is resolved like `.nest(..)`:
+the module path names the file, `f` the function, and that function's routes
+count for the merging component too. One that cannot be resolved is a hard
+error.
 
 Usage:
   python3 tools/check-ontology-coverage.py            # the gate
@@ -292,12 +298,17 @@ def methods_of(m, a, b, where):
     return found
 
 
+# A scanned crate's name as it appears in a path (`hv2_cluster::events::router`).
+CRATE_COMPONENT = {c.replace("-", "_"): c for c in COMPONENTS}
+
+
 def extract_file(src, relname):
-    """-> (routes, nests): routes = [(fn, path, METHOD, line)],
-    nests = [(prefix, ident_or_fn, line, enclosing_fn)]"""
+    """-> (routes, nests, test_mods, merges): routes = [(fn, path, METHOD,
+    line)], nests = [(prefix, ident_or_fn, line, enclosing_fn)], merges =
+    [(crate, [module.., fn], where)] for `.merge(other_crate::m::f(..))`."""
     m = mask(src)
     if re.search(r"#!\[\s*cfg\s*\(\s*test\s*\)\s*\]", m):
-        return [], [], []
+        return [], [], [], []
     m, test_mods = drop_test_items(src, m)
     spans = fn_spans(m)
     routes, nests = [], []
@@ -330,7 +341,20 @@ def extract_file(src, relname):
         if not lit:
             raise ExtractError("%s: nest prefix is not a plain string literal" % where)
         nests.append((lit.group(1), m[args[1][0]:args[1][1]].strip(), where, m))
-    return routes, nests, test_mods
+    merges = []
+    for hit in re.finditer(r"\.\s*merge\s*\(", m):
+        open_idx = hit.end() - 1
+        close = match_close(m, open_idx)
+        args = split_top(m, open_idx + 1, close)
+        if len(args) != 1:
+            continue
+        expr = m[args[0][0]:args[0][1]].strip()
+        call = re.match(r"([A-Za-z_]\w*)((?:\s*::\s*[A-Za-z_]\w*)+)\s*(?:::<[^>]*>)?\s*\(", expr)
+        if call and call.group(1) in CRATE_COMPONENT:
+            segments = [x.strip() for x in call.group(2).split("::") if x.strip()]
+            where = "%s:%d" % (relname, line_of(src, hit.start()))
+            merges.append((call.group(1), segments, where))
+    return routes, nests, test_mods, merges
 
 
 def resolve_nest_target(expr, file_mask):
@@ -367,11 +391,13 @@ def norm_path(path):
     return path
 
 
-def extract_component(component, rel_dir):
-    """-> {(METHOD, normalized path): (display path, 'file:line')}"""
+def load_component(rel_dir):
+    """-> (parsed, prefixes, merges): parsed = {file: (src, routes, nests)},
+    prefixes = {(file, fn): nest prefix}, merges = the cross-crate ones."""
     base = os.path.join(ROOT, *rel_dir.split("/"))
     files = source_files(base)
     parsed = {}
+    file_merges_of = {}
     test_only = set()
     for path in files:
         rel = os.path.relpath(path, ROOT).replace(os.sep, "/")
@@ -381,15 +407,17 @@ def extract_component(component, rel_dir):
             continue
         src = read(path)
         try:
-            routes, nests, test_mods = extract_file(src, rel)
+            routes, nests, test_mods, file_merges = extract_file(src, rel)
         except ExtractError as e:
             raise ExtractError("%s: %s" % (rel, e))
         parsed[path] = (src, routes, nests)
+        file_merges_of[path] = file_merges
         for mod in test_mods:
             test_only.add(os.path.join(os.path.dirname(path), mod + ".rs"))
             test_only.add(os.path.join(os.path.dirname(path), mod, "mod.rs"))
     for path in test_only:
         parsed.pop(path, None)
+    merges = [mg for path in parsed for mg in file_merges_of.get(path, [])]
 
     # fn name -> files defining a routed fn of that name
     fn_files = {}
@@ -412,8 +440,54 @@ def extract_component(component, rel_dir):
             if key in prefixes and prefixes[key] != prefix:
                 raise ExtractError("%s: router %s nested under two prefixes" % (where, target))
             prefixes[key] = prefix
+    return parsed, prefixes, merges
 
+
+def merged_routes(crate, segments, where, cache):
+    """The routes of the function `segments[-1]` in module `segments[:-1]` of
+    another scanned crate: [(full path, METHOD, 'file:line')]."""
+    other = CRATE_COMPONENT[crate]
+    if other not in cache:
+        cache[other] = load_component(COMPONENTS[other])
+    parsed, prefixes, _ = cache[other]
+    base = os.path.join(ROOT, *COMPONENTS[other].split("/"))
+    mods, fn = segments[:-1], segments[-1]
+    if not mods:
+        candidates = [os.path.join(base, "lib.rs")]
+    else:
+        stem = os.path.join(base, *mods)
+        candidates = [stem + ".rs", os.path.join(stem, "mod.rs")]
+    files = [c for c in candidates if c in parsed]
+    if len(files) != 1:
+        raise ExtractError(
+            "%s: cannot resolve .merge(%s::%s(..)) to a source file of %s"
+            % (where, crate, "::".join(segments), other)
+        )
+    path = files[0]
+    rel = os.path.relpath(path, ROOT).replace(os.sep, "/")
+    out = [
+        (prefixes.get((path, f), "") + rpath, method, "%s:%d" % (rel, line))
+        for f, rpath, method, line in parsed[path][1]
+        if f == fn
+    ]
+    if not out:
+        raise ExtractError("%s: %s::%s(..) builds no routes in %s" % (where, crate, "::".join(segments), rel))
+    return out
+
+
+def extract_component(component, rel_dir, cache=None):
+    """-> {(METHOD, normalized path): (display path, 'file:line')}"""
+    cache = {} if cache is None else cache
+    parsed, prefixes, merges = cache.get(component) or load_component(rel_dir)
+    cache[component] = (parsed, prefixes, merges)
     result = {}
+    for crate, segments, where in merges:
+        if CRATE_COMPONENT[crate] == component:
+            continue
+        for full, method, origin in merged_routes(crate, segments, where, cache):
+            key = (method, norm_path(full))
+            if key not in result or origin < result[key][1]:
+                result[key] = (full, origin)
     for path, (src, routes, _) in parsed.items():
         rel = os.path.relpath(path, ROOT).replace(os.sep, "/")
         for fn, rpath, method, line in routes:
@@ -426,7 +500,8 @@ def extract_component(component, rel_dir):
 
 
 def extract_all():
-    return {c: extract_component(c, d) for c, d in COMPONENTS.items()}
+    cache = {}
+    return {c: extract_component(c, d, cache) for c, d in COMPONENTS.items()}
 
 
 # ---------------------------------------------------------------------------
@@ -573,7 +648,7 @@ mod tests { fn t() { Router::new().route("/test-only", get(x)); } }
 #[tokio::test]
 async fn lone() { Router::new().route("/lone-test", get(x)); }
 '''
-    routes, nests, _ = extract_file(sample, "sample.rs")
+    routes, nests, _, merges = extract_file(sample, "sample.rs")
     got = sorted((p, m) for _, p, m, _ in routes)
     want = sorted([
         ("/one", "GET"), ("/multi/{id}", "GET"), ("/multi/{id}", "POST"),
@@ -583,6 +658,48 @@ async fn lone() { Router::new().route("/lone-test", get(x)); }
     assert len(nests) == 1 and nests[0][0] == "/pre"
     assert resolve_nest_target("r", nests[0][3]) == "nested"
     assert norm_path("/a/{id}/b/{name}/") == "/a/{}/b/{}"
+    assert merges == [], merges
+    # `.merge(other_crate::module::f(..))` is read; a local or same-crate merge is not.
+    _, _, _, merges = extract_file(
+        'fn app() -> Router { Router::new().route("/own", get(o))\n'
+        '    .merge(hv2_cluster::events::router(Arc::clone(&s)))\n'
+        '    .merge(local_router()).merge(crate::x::y()).merge(other) }',
+        "m.rs",
+    )
+    assert [(c, seg) for c, seg, _ in merges] == [("hv2_cluster", ["events", "router"])], merges
+    # ...and resolved to that module's function in the other crate (and only
+    # that function), in a scratch tree standing in for the repository.
+    import tempfile
+    global ROOT
+    saved = (ROOT, dict(COMPONENTS))
+    with tempfile.TemporaryDirectory() as tmp:
+        for sub, name, body in [
+            ("crates/hv2-cluster/src", "events.rs", 'pub fn router() -> Router { Router::new().route("/ev/{id}", get(a).post(b)) }\n'
+                                                   'pub fn other() -> Router { Router::new().route("/not-merged", get(c)) }'),
+            ("crates/hv2-sandboxd/src", "main.rs", 'fn app() { Router::new().route("/mine", get(m)).merge(hv2_cluster::events::router(s)); }'),
+        ]:
+            os.makedirs(os.path.join(tmp, *sub.split("/")), exist_ok=True)
+            with open(os.path.join(tmp, *sub.split("/"), name), "w", newline="") as f:
+                f.write(body)
+        ROOT = tmp
+        COMPONENTS.clear()
+        COMPONENTS.update({"hv2-cluster": "crates/hv2-cluster/src", "hv2-sandboxd": "crates/hv2-sandboxd/src"})
+        try:
+            cache = {}
+            got = sorted(extract_component("hv2-sandboxd", COMPONENTS["hv2-sandboxd"], cache))
+            assert got == [("GET", "/ev/{}"), ("GET", "/mine"), ("POST", "/ev/{}")], got
+            with open(os.path.join(tmp, "crates", "hv2-sandboxd", "src", "main.rs"), "w", newline="") as f:
+                f.write('fn app() { Router::new().merge(hv2_cluster::nowhere::router(s)); }')
+            try:
+                extract_component("hv2-sandboxd", COMPONENTS["hv2-sandboxd"], {})
+            except ExtractError:
+                pass
+            else:
+                raise AssertionError("an unresolvable cross-crate merge must be an error")
+        finally:
+            ROOT = saved[0]
+            COMPONENTS.clear()
+            COMPONENTS.update(saved[1])
     for bad in ['Router::new().route(P, get(x))', 'Router::new().route("/x", handler)']:
         try:
             extract_file(bad, "bad.rs")

@@ -21,11 +21,15 @@ mod api_runtime_operations;
 mod capabilities;
 mod checkpoint_operations;
 mod exposure_operations;
+mod local_server_operations;
 mod machine_operations;
 mod network_capabilities;
 mod network_operations;
+mod platform_operations;
 mod spec;
 mod telemetry_operations;
+mod template_operations;
+mod volume_operations;
 
 // ============================================================================
 // Core Ontology Types
@@ -1673,6 +1677,13 @@ impl HyperMachineOntology {
         .chain(Self::build_network_capabilities(false))
         .chain(Self::build_network_capabilities(true))
         .chain(Self::build_api_capabilities())
+        .chain(Self::build_template_capabilities(false))
+        .chain(Self::build_template_capabilities(true))
+        .chain(Self::build_volume_capabilities(false))
+        .chain(Self::build_volume_capabilities(true))
+        .chain(Self::build_platform_capabilities(false))
+        .chain(Self::build_platform_capabilities(true))
+        .chain(Self::build_local_server_capabilities())
         .collect()
     }
 
@@ -2235,6 +2246,14 @@ impl HyperMachineOntology {
         .chain(Self::build_api_runtime_operations())
         .chain(Self::build_api_event_operations())
         .chain(Self::build_api_agentic_operations())
+        .chain(Self::template_operations(false))
+        .chain(Self::template_operations(true))
+        .chain(Self::volume_operations(false))
+        .chain(Self::volume_operations(true))
+        .chain(Self::platform_operations(false))
+        .chain(Self::platform_operations(true))
+        .chain(Self::hm_cli_operations())
+        .chain(Self::jobs_operations())
         .collect()
     }
 
@@ -2252,8 +2271,17 @@ impl HyperMachineOntology {
             || on(Self::build_machine_node_operations())
             || on(Self::build_checkpoint_node_operations())
             || on(Self::build_network_node_operations())
+            || on(Self::template_operations(true))
+            || on(Self::volume_operations(true))
+            || on(Self::platform_operations(true))
         {
             return "hv2-sandboxd";
+        }
+        if Self::hm_cli_operations().iter().any(|op| op.id == id) {
+            return "hm-cli";
+        }
+        if Self::jobs_operations().iter().any(|op| op.id == id) {
+            return "hv2-jobs";
         }
         let control_plane = Self::build_key_operations()
             .into_iter()
@@ -2264,6 +2292,9 @@ impl HyperMachineOntology {
             .chain(Self::build_machine_control_plane_operations())
             .chain(Self::build_checkpoint_control_plane_operations())
             .chain(Self::build_network_control_plane_operations())
+            .chain(Self::template_operations(false))
+            .chain(Self::volume_operations(false))
+            .chain(Self::platform_operations(false))
             .any(|op| op.id == id);
         if control_plane {
             "hv2-cluster"
@@ -4483,6 +4514,13 @@ impl HyperMachineOntology {
                     "sandbox_events",
                     "sandbox_domains_and_names",
                     "sandbox_refreshes",
+                    "template_catalogue",
+                    "template_builds",
+                    "volume_management",
+                    "sandbox_environments",
+                    "sandbox_event_webhooks",
+                    "sandbox_usage_report",
+                    "team_telemetry",
                 ]
                 .into_iter()
                 .map(str::to_string)
@@ -4493,6 +4531,10 @@ impl HyperMachineOntology {
                         .chain(Self::build_machine_control_plane_operations())
                         .chain(Self::build_checkpoint_control_plane_operations())
                         .chain(Self::build_network_control_plane_operations())
+                        .chain(Self::template_operations(false))
+                        .chain(Self::volume_operations(false))
+                        .chain(Self::platform_operations(false))
+                        .filter(|op| !Self::answers_without_credential(&op.id))
                         .map(|op| op.id)
                         .filter(|id| id != "adopt_sandbox_owner")
                         .filter(|id| !Self::needs_creator_or_administrator(id)),
@@ -4621,6 +4663,15 @@ impl HyperMachineOntology {
                     "node_sandbox_telemetry",
                     "node_sandbox_events",
                     "node_local_networks",
+                    "node_template_catalogue",
+                    "node_template_builds",
+                    "node_team_template_sharing",
+                    "node_volume_management",
+                    "node_block_disks",
+                    "node_sandbox_environments",
+                    "node_sandbox_event_webhooks",
+                    "node_sandbox_usage_report",
+                    "node_warm_pool",
                 ]
                 .into_iter()
                 .map(str::to_string)
@@ -4631,6 +4682,10 @@ impl HyperMachineOntology {
                         .chain(Self::build_machine_node_operations())
                         .chain(Self::build_checkpoint_node_operations())
                         .chain(Self::build_network_node_operations())
+                        .chain(Self::template_operations(true))
+                        .chain(Self::volume_operations(true))
+                        .chain(Self::platform_operations(true))
+                        .filter(|op| !Self::answers_without_credential(&op.id))
                         .map(|op| op.id)
                         .filter(|id| !Self::needs_creator_or_administrator(id)),
                 )
@@ -5288,6 +5343,39 @@ impl HyperMachineOntology {
                 reference: "crates/hv2-api/src/snapshot_routes.rs".to_string(),
             },
         ]
+        .into_iter()
+        .chain(template_operations::template_guardrails())
+        .chain(Self::volume_guardrails())
+        .chain(platform_operations::platform_guardrails())
+        .chain(Self::local_server_guardrails())
+        .collect()
+    }
+
+    /// Routes outside the key and cluster-token checks, which answer every
+    /// caller whether or not the server is open: probes, the identity
+    /// documents, metrics, the console page, the template upload (a URL token
+    /// stands in) and the volume content routes (the volume's own token).
+    fn answers_without_credential(id: &str) -> bool {
+        let id = id.strip_prefix("node_").unwrap_or(id);
+        matches!(
+            id,
+            "get_identity_jwks"
+                | "get_identity_openid_configuration"
+                | "get_metrics_exposition"
+                | "get_control_plane_health"
+                | "get_control_plane_ui"
+                | "upload_template_files"
+                | "volume_content_file"
+                | "volume_content_dir"
+                | "volume_content_path"
+                | "read_volume_file"
+                | "write_volume_file"
+                | "list_volume_dir"
+                | "make_volume_dir"
+                | "stat_volume_path"
+                | "update_volume_path"
+                | "remove_volume_path"
+        )
     }
 
     /// Routes that an open control plane or node does not answer for a
@@ -8693,6 +8781,24 @@ mod tests {
             "event-publish-injects-events",
             "probes-exempt-from-api-key",
             "snapshot-routes-record-no-vm-state",
+            "template-upload-hash-not-verified-by-default",
+            "template-upload-route-needs-no-api-key",
+            "template-build-scope-residuals",
+            "volume-growth-limits-and-defaults",
+            "volume-content-token-is-the-only-credential",
+            "volume-writes-are-not-atomic-and-delete-is-immediate",
+            "block-disks-are-node-local-and-unscoped",
+            "environments-keep-secrets-unencrypted",
+            "environments-and-usage-are-administrator-only-on-the-control-plane",
+            "webhook-urls-are-checked-at-delivery",
+            "node-platform-routes-filter-by-no-team",
+            "team-telemetry-leaves-the-platform",
+            "cluster-event-log-lists-every-team",
+            "platform-discovery-and-metrics-are-public",
+            "hm-serve-open-and-plain-by-default",
+            "mcp-http-single-shared-credential",
+            "jobs-serve-is-remote-execution",
+            "schedule-receipts-trust-the-operator",
         ];
         let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         for id in ids {
