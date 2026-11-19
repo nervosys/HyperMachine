@@ -209,6 +209,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   seventh, Gitleaks, is now a real gate; see Security.)
 
 ### Added
+- **The agentic ontology describes `/machines` and a sandbox's fork,
+  checkpoints and snapshots, on the control plane and the node.** Machine
+  lifecycle, commands, runs and files, prompts, ports and disk snapshots
+  (35 control plane operations in five capabilities, `machine_*`) and the
+  node's 45 (`node_machine_*`, which add conversations and the desktop; the
+  control plane does not route them), plus `fork_sandbox`, the seven
+  checkpoint routes, `snapshot_sandbox` and `list_snapshots` (10 each, in
+  `sandbox_fork_and_snapshots` and `sandbox_checkpoints`). Request and
+  response shapes and status codes are read from the handlers, including what
+  the control plane drops (`content-disposition` and `x-hv2-archive-skipped`
+  on archives), its 64 KiB cap on a create body, a create that answers 503
+  with the machine already made, and a machine `exec` with no `timed_out`
+  flag. Three new guardrails (runs keeping command lines and output,
+  coding agents run with the caller's key and `unattended`, a desktop's noVNC
+  with no password) and the open-control-plane, open-node, `--proxy-open` and
+  shared-snapshot guardrails now name these routes. The coverage allowlist
+  shrinks from 322 to 222 routes.
 - **The agentic ontology describes the sandbox routes of the control plane
   and the node.** `sandbox_lifecycle` and `sandbox_commands` (control plane,
   19 operations) and `node_sandbox_lifecycle` and `node_sandbox_commands`

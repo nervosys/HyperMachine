@@ -116,6 +116,216 @@
     },
     {
       "component": "hv2-cluster",
+      "id": "list_machines",
+      "method": "GET",
+      "path": "/machines"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "create_machine",
+      "method": "POST",
+      "path": "/machines"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "delete_machine",
+      "method": "DELETE",
+      "path": "/machines/{name}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_machine",
+      "method": "GET",
+      "path": "/machines/{name}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "resize_machine",
+      "method": "PATCH",
+      "path": "/machines/{name}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_machine_console",
+      "method": "GET",
+      "path": "/machines/{name}/console"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "send_machine_console_input",
+      "method": "POST",
+      "path": "/machines/{name}/console"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "exec_in_machine",
+      "method": "POST",
+      "path": "/machines/{name}/exec"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "read_machine_file",
+      "method": "GET",
+      "path": "/machines/{name}/files"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "write_machine_file",
+      "method": "PUT",
+      "path": "/machines/{name}/files"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_machine_network_decisions",
+      "method": "GET",
+      "path": "/machines/{name}/network/decisions"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_machine_ports",
+      "method": "GET",
+      "path": "/machines/{name}/ports"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "publish_machine_port",
+      "method": "POST",
+      "path": "/machines/{name}/ports"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "unpublish_machine_port",
+      "method": "DELETE",
+      "path": "/machines/{name}/ports/{hostPort}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "open_machine_reverse_port",
+      "method": "GET",
+      "path": "/machines/{name}/ports/{hostPort}/reverse"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_machine_processes",
+      "method": "GET",
+      "path": "/machines/{name}/processes"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_machine_prompts",
+      "method": "GET",
+      "path": "/machines/{name}/prompts"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "start_machine_prompt",
+      "method": "POST",
+      "path": "/machines/{name}/prompts"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_machine_prompt",
+      "method": "GET",
+      "path": "/machines/{name}/prompts/{promptID}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "interrupt_machine_prompt",
+      "method": "POST",
+      "path": "/machines/{name}/prompts/{promptID}/interrupt"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_machine_runs",
+      "method": "GET",
+      "path": "/machines/{name}/runs"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "start_machine_run",
+      "method": "POST",
+      "path": "/machines/{name}/runs"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_machine_run",
+      "method": "GET",
+      "path": "/machines/{name}/runs/{runID}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "signal_machine_run",
+      "method": "POST",
+      "path": "/machines/{name}/runs/{runID}/signal"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "write_machine_run_stdin",
+      "method": "POST",
+      "path": "/machines/{name}/runs/{runID}/stdin"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_machine_snapshots",
+      "method": "GET",
+      "path": "/machines/{name}/snapshots"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "take_machine_snapshot",
+      "method": "POST",
+      "path": "/machines/{name}/snapshots"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "delete_machine_snapshot",
+      "method": "DELETE",
+      "path": "/machines/{name}/snapshots/{snapshotID}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "get_machine_snapshot",
+      "method": "GET",
+      "path": "/machines/{name}/snapshots/{snapshotID}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "archive_machine_snapshot_directory",
+      "method": "GET",
+      "path": "/machines/{name}/snapshots/{snapshotID}/archive"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "download_machine_snapshot_disk",
+      "method": "GET",
+      "path": "/machines/{name}/snapshots/{snapshotID}/disk"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "read_machine_snapshot_file",
+      "method": "GET",
+      "path": "/machines/{name}/snapshots/{snapshotID}/file"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_machine_snapshot_files",
+      "method": "GET",
+      "path": "/machines/{name}/snapshots/{snapshotID}/files"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "restore_machine_snapshot",
+      "method": "POST",
+      "path": "/machines/{name}/snapshots/{snapshotID}/restore"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "control_machine",
+      "method": "POST",
+      "path": "/machines/{name}/{action}"
+    },
+    {
+      "component": "hv2-cluster",
       "id": "list_sandboxes",
       "method": "GET",
       "path": "/sandboxes"
@@ -140,6 +350,48 @@
     },
     {
       "component": "hv2-cluster",
+      "id": "list_sandbox_checkpoints",
+      "method": "GET",
+      "path": "/sandboxes/{id}/checkpoints"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "create_sandbox_checkpoint",
+      "method": "POST",
+      "path": "/sandboxes/{id}/checkpoints"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "delete_sandbox_checkpoint",
+      "method": "DELETE",
+      "path": "/sandboxes/{id}/checkpoints/{name}"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "archive_sandbox_checkpoint_directory",
+      "method": "GET",
+      "path": "/sandboxes/{id}/checkpoints/{name}/archive"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "read_sandbox_checkpoint_file",
+      "method": "GET",
+      "path": "/sandboxes/{id}/checkpoints/{name}/file"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_sandbox_checkpoint_files",
+      "method": "GET",
+      "path": "/sandboxes/{id}/checkpoints/{name}/files"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "restore_sandbox_checkpoint",
+      "method": "POST",
+      "path": "/sandboxes/{id}/checkpoints/{name}/restore"
+    },
+    {
+      "component": "hv2-cluster",
       "id": "list_sandbox_commands",
       "method": "GET",
       "path": "/sandboxes/{id}/commands"
@@ -161,6 +413,12 @@
       "id": "exec_in_sandbox",
       "method": "POST",
       "path": "/sandboxes/{id}/exec"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "fork_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{id}/fork"
     },
     {
       "component": "hv2-cluster",
@@ -194,6 +452,12 @@
     },
     {
       "component": "hv2-cluster",
+      "id": "snapshot_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{id}/snapshots"
+    },
+    {
+      "component": "hv2-cluster",
       "id": "get_sandbox_standby",
       "method": "GET",
       "path": "/sandboxes/{id}/standby"
@@ -209,6 +473,12 @@
       "id": "set_sandbox_timeout",
       "method": "POST",
       "path": "/sandboxes/{id}/timeout"
+    },
+    {
+      "component": "hv2-cluster",
+      "id": "list_snapshots",
+      "method": "GET",
+      "path": "/snapshots"
     },
     {
       "component": "hv2-cluster",
@@ -254,6 +524,276 @@
     },
     {
       "component": "hv2-sandboxd",
+      "id": "node_list_machines",
+      "method": "GET",
+      "path": "/machines"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_create_machine",
+      "method": "POST",
+      "path": "/machines"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_delete_machine",
+      "method": "DELETE",
+      "path": "/machines/{name}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_machine",
+      "method": "GET",
+      "path": "/machines/{name}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_resize_machine",
+      "method": "PATCH",
+      "path": "/machines/{name}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_machine_console",
+      "method": "GET",
+      "path": "/machines/{name}/console"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_send_machine_console_input",
+      "method": "POST",
+      "path": "/machines/{name}/console"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_machine_conversations",
+      "method": "GET",
+      "path": "/machines/{name}/conversations"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_create_machine_conversation",
+      "method": "POST",
+      "path": "/machines/{name}/conversations"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_delete_machine_conversation",
+      "method": "DELETE",
+      "path": "/machines/{name}/conversations/{conversation}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_machine_conversation",
+      "method": "GET",
+      "path": "/machines/{name}/conversations/{conversation}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_interrupt_machine_conversation",
+      "method": "POST",
+      "path": "/machines/{name}/conversations/{conversation}/interrupt"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_send_machine_conversation_message",
+      "method": "POST",
+      "path": "/machines/{name}/conversations/{conversation}/messages"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_machine_conversation_transcript",
+      "method": "GET",
+      "path": "/machines/{name}/conversations/{conversation}/transcript"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_machine_desktop",
+      "method": "GET",
+      "path": "/machines/{name}/desktop"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_act_on_machine_desktop",
+      "method": "POST",
+      "path": "/machines/{name}/desktop/actions"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_machine_desktop_screenshot",
+      "method": "GET",
+      "path": "/machines/{name}/desktop/screenshot"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_exec_in_machine",
+      "method": "POST",
+      "path": "/machines/{name}/exec"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_read_machine_file",
+      "method": "GET",
+      "path": "/machines/{name}/files"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_write_machine_file",
+      "method": "PUT",
+      "path": "/machines/{name}/files"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_machine_network_decisions",
+      "method": "GET",
+      "path": "/machines/{name}/network/decisions"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_machine_ports",
+      "method": "GET",
+      "path": "/machines/{name}/ports"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_publish_machine_port",
+      "method": "POST",
+      "path": "/machines/{name}/ports"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_unpublish_machine_port",
+      "method": "DELETE",
+      "path": "/machines/{name}/ports/{hostPort}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_open_machine_reverse_port",
+      "method": "GET",
+      "path": "/machines/{name}/ports/{hostPort}/reverse"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_machine_processes",
+      "method": "GET",
+      "path": "/machines/{name}/processes"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_machine_prompts",
+      "method": "GET",
+      "path": "/machines/{name}/prompts"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_start_machine_prompt",
+      "method": "POST",
+      "path": "/machines/{name}/prompts"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_machine_prompt",
+      "method": "GET",
+      "path": "/machines/{name}/prompts/{promptID}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_interrupt_machine_prompt",
+      "method": "POST",
+      "path": "/machines/{name}/prompts/{promptID}/interrupt"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_machine_runs",
+      "method": "GET",
+      "path": "/machines/{name}/runs"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_start_machine_run",
+      "method": "POST",
+      "path": "/machines/{name}/runs"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_machine_run",
+      "method": "GET",
+      "path": "/machines/{name}/runs/{runID}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_signal_machine_run",
+      "method": "POST",
+      "path": "/machines/{name}/runs/{runID}/signal"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_write_machine_run_stdin",
+      "method": "POST",
+      "path": "/machines/{name}/runs/{runID}/stdin"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_machine_snapshots",
+      "method": "GET",
+      "path": "/machines/{name}/snapshots"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_take_machine_snapshot",
+      "method": "POST",
+      "path": "/machines/{name}/snapshots"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_delete_machine_snapshot",
+      "method": "DELETE",
+      "path": "/machines/{name}/snapshots/{snapshotID}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_get_machine_snapshot",
+      "method": "GET",
+      "path": "/machines/{name}/snapshots/{snapshotID}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_archive_machine_snapshot_directory",
+      "method": "GET",
+      "path": "/machines/{name}/snapshots/{snapshotID}/archive"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_download_machine_snapshot_disk",
+      "method": "GET",
+      "path": "/machines/{name}/snapshots/{snapshotID}/disk"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_read_machine_snapshot_file",
+      "method": "GET",
+      "path": "/machines/{name}/snapshots/{snapshotID}/file"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_machine_snapshot_files",
+      "method": "GET",
+      "path": "/machines/{name}/snapshots/{snapshotID}/files"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_restore_machine_snapshot",
+      "method": "POST",
+      "path": "/machines/{name}/snapshots/{snapshotID}/restore"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_control_machine",
+      "method": "POST",
+      "path": "/machines/{name}/{action}"
+    },
+    {
+      "component": "hv2-sandboxd",
       "id": "node_list_sandboxes",
       "method": "GET",
       "path": "/sandboxes"
@@ -278,6 +818,48 @@
     },
     {
       "component": "hv2-sandboxd",
+      "id": "node_list_sandbox_checkpoints",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/checkpoints"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_create_sandbox_checkpoint",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/checkpoints"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_delete_sandbox_checkpoint",
+      "method": "DELETE",
+      "path": "/sandboxes/{sandboxID}/checkpoints/{name}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_archive_sandbox_checkpoint_directory",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/checkpoints/{name}/archive"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_read_sandbox_checkpoint_file",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/checkpoints/{name}/file"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_sandbox_checkpoint_files",
+      "method": "GET",
+      "path": "/sandboxes/{sandboxID}/checkpoints/{name}/files"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_restore_sandbox_checkpoint",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/checkpoints/{name}/restore"
+    },
+    {
+      "component": "hv2-sandboxd",
       "id": "node_list_sandbox_commands",
       "method": "GET",
       "path": "/sandboxes/{sandboxID}/commands"
@@ -299,6 +881,12 @@
       "id": "node_exec_in_sandbox",
       "method": "POST",
       "path": "/sandboxes/{sandboxID}/exec"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_fork_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/fork"
     },
     {
       "component": "hv2-sandboxd",
@@ -338,6 +926,12 @@
     },
     {
       "component": "hv2-sandboxd",
+      "id": "node_snapshot_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/snapshots"
+    },
+    {
+      "component": "hv2-sandboxd",
       "id": "node_get_sandbox_standby",
       "method": "GET",
       "path": "/sandboxes/{sandboxID}/standby"
@@ -353,6 +947,12 @@
       "id": "node_set_sandbox_timeout",
       "method": "POST",
       "path": "/sandboxes/{sandboxID}/timeout"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_snapshots",
+      "method": "GET",
+      "path": "/snapshots"
     },
     {
       "component": "hv2-sandboxd",

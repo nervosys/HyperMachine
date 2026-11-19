@@ -260,9 +260,57 @@ and `create` answer with.
 
 **Permissions Required:** `sandboxes` scope (control plane); the cluster token
 (node).
-**Not yet described:** fork, checkpoints, snapshots, networking, ports,
-domains, web sharing, logs and metrics, `/sandboxes/{id}/names`, and all of
-`/machines`; these stay in the coverage allowlist.
+**Not yet described:** networking, ports, domains, web sharing, logs and
+metrics and `/sandboxes/{id}/names`; these stay in the coverage allowlist.
+
+### Machines (`machine_lifecycle`, `machine_commands`, `machine_agents`, `machine_ports`, `machine_snapshots`, their `node_` twins, and `node_machine_desktop`)
+
+Long-lived VMs with their own ext4 disk ([MACHINES.md](MACHINES.md)). The
+**control plane** needs the `machines` scope: an `inventory` key and an
+observer or viewer are refused (403). It asks every live node which holds the
+machine and relays; a machine of another team is a 404, and while a node is not
+answering the answer is 503 rather than 404. It lists by asking the nodes and
+leaves out one that does not answer. It routes 35 of the node's 45 routes:
+**conversations and the desktop are the node's only.** The **node** answers 501
+off Linux/KVM, takes the team from `x-hv2-sandbox-team` and checks the cluster
+token. Handlers: `crates/hv2-cluster/src/control.rs` (`list_machines`,
+`create_machine`, `to_machine_node`, `machine_reverse_tunnel`) and
+`crates/hv2-sandboxd/src/machines.rs` and `machines/`.
+
+| Operation (`id`, control plane / node) | Method and path | Notes |
+| -------------------------------------- | --------------- | ----- |
+| `list_machines`, `create_machine` | `GET`, `POST /machines` | Create: 201; 409 name exists; 503 when it was made and did not start (it stays, stopped). Control plane: the body is read to 64 KiB, `x-hv2-node` names the node, and the node is chosen by template even for an `image` machine |
+| `get_machine`, `resize_machine`, `delete_machine` | `GET`, `PATCH`, `DELETE /machines/{name}` | Resize and delete need it stopped (409); a disk only grows |
+| `control_machine` | `POST /machines/{name}/{action}` | `start`, `stop`, `restart`; any other action is 404 |
+| `get_machine_console`, `send_machine_console_input` | `GET`, `POST /machines/{name}/console` | `tail=N` bytes; input 1 to 4096 bytes |
+| `get_machine_network_decisions` | `GET /machines/{name}/network/decisions` | 400 if it has no network |
+| `exec_in_machine`, `list_machine_processes` | `POST .../exec`, `GET .../processes` | Needs the guest agent; the guest gets 80% of `timeout_secs`; the answer has no `timed_out` |
+| `read_machine_file`, `write_machine_file` | `GET`, `PUT .../files?path=` | Up to 64 MiB; 403, 404, 413 as the guest says |
+| `list_machine_runs`, `start_machine_run`, `get_machine_run`, `write_machine_run_stdin`, `signal_machine_run` | `.../runs[/{runID}[/stdin or /signal]]` | Newest 4 MiB per stream, kept on the node's disk; `cmd` is not masked, `env` is not kept |
+| `list_machine_prompts`, `start_machine_prompt`, `get_machine_prompt`, `interrupt_machine_prompt` | `.../prompts[/{promptID}[/interrupt]]` | `claude`, `codex` or `custom`; `unattended` adds the agent's dangerous flag |
+| `list_machine_ports`, `publish_machine_port`, `unpublish_machine_port`, `open_machine_reverse_port` | `.../ports[/{hostPort}[/reverse]]` | 16 a machine; `reverse` upgrades to `hv2-reverse/1` (101) |
+| `list_machine_snapshots` ... `archive_machine_snapshot_directory` | `.../snapshots[/{snapshotID}[/restore, /disk, /files, /file or /archive]]` | Disk only, taken stopped (409 running); the disk, files, file and archive routes read the snapshot without booting it; 32 a machine |
+| `node_*_machine_conversation*` | `.../conversations[/{conversation}[/messages, /transcript or /interrupt]]` | Node only; in memory; a message is 201 (new turn) or 202 (steered, Claude Code only) |
+| `node_get_machine_desktop`, `node_get_machine_desktop_screenshot`, `node_act_on_machine_desktop` | `.../desktop[/screenshot or /actions]` | Node only; 404 without a `desktop` |
+
+**Permissions Required:** `machines` scope (control plane); the cluster token
+(node).
+
+### Fork, Snapshots And Checkpoints (`sandbox_fork_and_snapshots`, `sandbox_checkpoints`, and their `node_` twins)
+
+Served by both components: the control plane forwards to the sandbox's node.
+Forwarding buffers the node's answer and keeps its status and `content-type`
+only, so a checkpoint archive reaches a control plane caller without
+`content-disposition` or `x-hv2-archive-skipped` (the list of what was
+skipped). The `sandboxes` scope; `list_snapshots` needs `templates` and
+refuses an observer or viewer.
+
+| Operation | Method and path | Notes |
+| --------- | --------------- | ----- |
+| `fork_sandbox` | `POST /sandboxes/{id}/fork` | `count` 1 to 100 (8 with a disk); always 201 with an array of `{sandbox}` or `{error}`; carries memory, so env and secrets |
+| `create_sandbox_checkpoint`, `list_sandbox_checkpoints`, `delete_sandbox_checkpoint`, `restore_sandbox_checkpoint` | `.../checkpoints[/{name}[/restore]]` | 10 held (`auto` not counted); a disk is copied with it (CHECKPOINTS.md says otherwise; the code, `checkpoints.rs`, does); restore is in place |
+| `list_sandbox_checkpoint_files`, `read_sandbox_checkpoint_file`, `archive_sandbox_checkpoint_directory` | `.../checkpoints/{name}/files, /file or /archive?path=` | Each restores into a throwaway guest (2 at a time, else 503); file 64 MiB; archive 64 MiB, 180 s (504) |
+| `snapshot_sandbox`, `list_snapshots` | `POST /sandboxes/{id}/snapshots`, `GET /snapshots` | A template that holds the sandbox's memory; 409 for a disk or a paused sandbox; the control plane merges nodes and filters by team |
 
 ### Cluster Store Configuration (`cluster_store_configuration`)
 
@@ -314,7 +362,8 @@ its source; the first two are finding O12 in
   written); only the key's expiry bounds it. Changing the managed-key secret
   is a blunt revoke-all.
 - **`control-plane-unauthenticated-mode`** (critical; applies to
-  `team_template_sharing`, `sandbox_lifecycle`, `sandbox_commands` and their
+  `team_template_sharing`, `sandbox_lifecycle`, `sandbox_commands`, the
+  machine, fork, snapshot and checkpoint capabilities and their
   operations, except owner adoption). A control plane started
   with `--allow-unauthenticated` has no key and no sign-on, so every caller who
   can reach it is an administrator with no team: any caller can read and change
@@ -342,8 +391,9 @@ its source; the first two are finding O12 in
   sandboxes and machines, read and write their files and reach what they
   publish. Mitigation: give it a token or mTLS, or keep it on loopback
   ([SANDBOXES.md](SANDBOXES.md#where-a-node-listens)).
-- **`node-proxy-open`** (warning; applies to `node_sandbox_lifecycle` and the
-  node's `connect` operations). `--proxy-open` turns off the check of the
+- **`node-proxy-open`** (warning; applies to `node_sandbox_lifecycle`, the
+  node's `connect` operations, `node_machine_ports` and
+  `node_publish_machine_port`). `--proxy-open` turns off the check of the
   cluster token on the node's proxy port, so any host that reaches it reaches
   every sandbox's envd and every port a machine publishes; even with the check
   a captured line can be replayed for 60 s. Finding O3 in
@@ -354,8 +404,23 @@ its source; the first two are finding O12 in
   not all) and the newest 64 KiB of each output stream, unscanned. Mitigation:
   `commandHistory: false`, `--no-command-history`, and `envVars` for secrets
   (`crates/hv2-sandboxd/src/history.rs`).
+- **`machine-runs-keep-command-and-output`** (warning; applies to the run,
+  prompt and conversation operations that keep or return them). A run keeps
+  its command line as given, unmasked, and the newest 4 MiB of each stream on
+  the node's disk until the machine is deleted; `env` is the one thing not
+  kept. Source: [MACHINES.md](MACHINES.md#runs).
+- **`machine-agents-act-with-the-callers-key`** (warning; applies to
+  `start_machine_prompt`, `create_machine_conversation` and
+  `send_machine_conversation_message`). A prompt runs a coding agent as root
+  unless a user is named, with the key it is given; `unattended` passes the
+  agent's dangerous flag so nothing asks for approval. Source:
+  [MACHINES.md](MACHINES.md#prompts).
+- **`machine-desktop-has-no-password`** (warning; applies to
+  `publish_machine_port` and the desktop operations). noVNC has no password;
+  a published port gives the desktop to whoever reaches it, and through the
+  node's own proxy there is no login. Source: [MACHINES.md](MACHINES.md#desktop).
 - **`shared-snapshot-contains-memory-and-secrets`** (warning; applies to
-  `share_template_snapshot`, `team_template_sharing`). A shared snapshot is
+  `share_template_snapshot`, `team_template_sharing`, `snapshot_sandbox`). A shared snapshot is
   the source sandbox as it was, memory included, and revoking cannot recall
   sandboxes already started. Take the snapshot from a sandbox that never held
   what the other team must not have

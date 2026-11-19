@@ -534,7 +534,7 @@ async fn test_served_ontology_carries_guardrails_and_key_interface() {
     };
     let (operations, capabilities) = (ids("operations"), ids("capabilities"));
     let guardrails = json["guardrails"].as_array().expect("guardrails list");
-    assert_eq!(guardrails.len(), 9);
+    assert_eq!(guardrails.len(), 12);
     for id in ["redis-shared-user-revocation", "pre-tombstone-revocations"] {
         let g = guardrails
             .iter()
@@ -796,4 +796,314 @@ fn sandbox_operations_are_described_for_both_components() {
     assert!(!onto.guardrails_for("node_connect_sandbox").is_empty());
     // Owner adoption is refused on an open control plane, so it is not named.
     assert!(onto.guardrails_for("adopt_sandbox_owner").is_empty());
+}
+
+/// Every route described for a machine, a fork, a snapshot or a checkpoint is
+/// one operation per component: the control plane's 35 machine routes and
+/// 10 sandbox routes, and the node's 45 and 10.
+#[test]
+fn machine_and_checkpoint_operations_are_described_for_both_components() {
+    use hv2_api::ontology::HyperMachineOntology;
+
+    let onto = HyperMachineOntology::build();
+    let m = "/machines/{name}";
+    let sb = "/sandboxes/{id}";
+    let shared: Vec<(&str, &str, String)> = vec![
+        ("list_machines", "GET", "/machines".into()),
+        ("create_machine", "POST", "/machines".into()),
+        ("get_machine", "GET", m.into()),
+        ("resize_machine", "PATCH", m.into()),
+        ("delete_machine", "DELETE", m.into()),
+        ("control_machine", "POST", format!("{m}/{{action}}")),
+        ("get_machine_console", "GET", format!("{m}/console")),
+        ("send_machine_console_input", "POST", format!("{m}/console")),
+        (
+            "get_machine_network_decisions",
+            "GET",
+            format!("{m}/network/decisions"),
+        ),
+        ("exec_in_machine", "POST", format!("{m}/exec")),
+        ("list_machine_processes", "GET", format!("{m}/processes")),
+        ("read_machine_file", "GET", format!("{m}/files")),
+        ("write_machine_file", "PUT", format!("{m}/files")),
+        ("list_machine_runs", "GET", format!("{m}/runs")),
+        ("start_machine_run", "POST", format!("{m}/runs")),
+        ("get_machine_run", "GET", format!("{m}/runs/{{runID}}")),
+        (
+            "write_machine_run_stdin",
+            "POST",
+            format!("{m}/runs/{{runID}}/stdin"),
+        ),
+        (
+            "signal_machine_run",
+            "POST",
+            format!("{m}/runs/{{runID}}/signal"),
+        ),
+        ("list_machine_prompts", "GET", format!("{m}/prompts")),
+        ("start_machine_prompt", "POST", format!("{m}/prompts")),
+        (
+            "get_machine_prompt",
+            "GET",
+            format!("{m}/prompts/{{promptID}}"),
+        ),
+        (
+            "interrupt_machine_prompt",
+            "POST",
+            format!("{m}/prompts/{{promptID}}/interrupt"),
+        ),
+        ("list_machine_ports", "GET", format!("{m}/ports")),
+        ("publish_machine_port", "POST", format!("{m}/ports")),
+        (
+            "unpublish_machine_port",
+            "DELETE",
+            format!("{m}/ports/{{hostPort}}"),
+        ),
+        (
+            "open_machine_reverse_port",
+            "GET",
+            format!("{m}/ports/{{hostPort}}/reverse"),
+        ),
+        ("list_machine_snapshots", "GET", format!("{m}/snapshots")),
+        ("take_machine_snapshot", "POST", format!("{m}/snapshots")),
+        (
+            "get_machine_snapshot",
+            "GET",
+            format!("{m}/snapshots/{{snapshotID}}"),
+        ),
+        (
+            "delete_machine_snapshot",
+            "DELETE",
+            format!("{m}/snapshots/{{snapshotID}}"),
+        ),
+        (
+            "restore_machine_snapshot",
+            "POST",
+            format!("{m}/snapshots/{{snapshotID}}/restore"),
+        ),
+        (
+            "download_machine_snapshot_disk",
+            "GET",
+            format!("{m}/snapshots/{{snapshotID}}/disk"),
+        ),
+        (
+            "list_machine_snapshot_files",
+            "GET",
+            format!("{m}/snapshots/{{snapshotID}}/files"),
+        ),
+        (
+            "read_machine_snapshot_file",
+            "GET",
+            format!("{m}/snapshots/{{snapshotID}}/file"),
+        ),
+        (
+            "archive_machine_snapshot_directory",
+            "GET",
+            format!("{m}/snapshots/{{snapshotID}}/archive"),
+        ),
+        ("fork_sandbox", "POST", format!("{sb}/fork")),
+        (
+            "create_sandbox_checkpoint",
+            "POST",
+            format!("{sb}/checkpoints"),
+        ),
+        (
+            "list_sandbox_checkpoints",
+            "GET",
+            format!("{sb}/checkpoints"),
+        ),
+        (
+            "delete_sandbox_checkpoint",
+            "DELETE",
+            format!("{sb}/checkpoints/{{name}}"),
+        ),
+        (
+            "restore_sandbox_checkpoint",
+            "POST",
+            format!("{sb}/checkpoints/{{name}}/restore"),
+        ),
+        (
+            "list_sandbox_checkpoint_files",
+            "GET",
+            format!("{sb}/checkpoints/{{name}}/files"),
+        ),
+        (
+            "read_sandbox_checkpoint_file",
+            "GET",
+            format!("{sb}/checkpoints/{{name}}/file"),
+        ),
+        (
+            "archive_sandbox_checkpoint_directory",
+            "GET",
+            format!("{sb}/checkpoints/{{name}}/archive"),
+        ),
+        ("snapshot_sandbox", "POST", format!("{sb}/snapshots")),
+        ("list_snapshots", "GET", "/snapshots".into()),
+    ];
+    // Only the node serves conversations and the desktop.
+    let node_only: Vec<(&str, &str, String)> = vec![
+        (
+            "list_machine_conversations",
+            "GET",
+            format!("{m}/conversations"),
+        ),
+        (
+            "create_machine_conversation",
+            "POST",
+            format!("{m}/conversations"),
+        ),
+        (
+            "get_machine_conversation",
+            "GET",
+            format!("{m}/conversations/{{conversation}}"),
+        ),
+        (
+            "delete_machine_conversation",
+            "DELETE",
+            format!("{m}/conversations/{{conversation}}"),
+        ),
+        (
+            "send_machine_conversation_message",
+            "POST",
+            format!("{m}/conversations/{{conversation}}/messages"),
+        ),
+        (
+            "get_machine_conversation_transcript",
+            "GET",
+            format!("{m}/conversations/{{conversation}}/transcript"),
+        ),
+        (
+            "interrupt_machine_conversation",
+            "POST",
+            format!("{m}/conversations/{{conversation}}/interrupt"),
+        ),
+        ("get_machine_desktop", "GET", format!("{m}/desktop")),
+        (
+            "get_machine_desktop_screenshot",
+            "GET",
+            format!("{m}/desktop/screenshot"),
+        ),
+        (
+            "act_on_machine_desktop",
+            "POST",
+            format!("{m}/desktop/actions"),
+        ),
+    ];
+    assert_eq!(shared.len(), 45);
+    let check = |id: &str, component: &str, method: &str, path: &str| {
+        let op = onto
+            .operations
+            .iter()
+            .find(|o| o.id == id)
+            .unwrap_or_else(|| panic!("missing operation {id}"));
+        assert_eq!(
+            (op.http_method.as_str(), op.path.as_str()),
+            (method, path),
+            "{id}"
+        );
+        assert_eq!(
+            HyperMachineOntology::operation_component(id),
+            component,
+            "{id}"
+        );
+        assert!(op.description.len() > 150, "{id} needs a full description");
+        assert!(!op.responses.is_empty(), "{id} lists no responses");
+        assert!(
+            onto.capabilities
+                .iter()
+                .any(|c| c.operations.iter().any(|o| o == id)),
+            "{id} belongs to no capability"
+        );
+        assert!(
+            !onto.guardrails_for(id).is_empty(),
+            "{id} is named by no guardrail (the unauthenticated modes name every one)"
+        );
+        // Every path parameter in the path is declared, and no other.
+        for name in path
+            .split('{')
+            .skip(1)
+            .map(|s| s.split('}').next().unwrap())
+        {
+            assert!(
+                op.parameters.iter().any(|p| p.name == name),
+                "{id} does not declare path parameter {name}"
+            );
+        }
+    };
+    for (id, method, path) in &shared {
+        // The control plane routes only the machine routes both have, so a
+        // node's path differs only in the sandbox's parameter name.
+        check(id, "hv2-cluster", method, path);
+        check(
+            &format!("node_{id}"),
+            "hv2-sandboxd",
+            method,
+            &path.replace("{id}", "{sandboxID}"),
+        );
+    }
+    for (id, method, path) in &node_only {
+        check(&format!("node_{id}"), "hv2-sandboxd", method, path);
+        assert!(
+            onto.operations.iter().all(|o| o.id != *id),
+            "the control plane does not route {id}"
+        );
+    }
+    let machine_ops = |prefix: &str| {
+        onto.operations
+            .iter()
+            .filter(|o| o.path.starts_with("/machines") && o.id.starts_with(prefix))
+            .count()
+    };
+    assert_eq!(machine_ops("node_"), 45);
+    assert_eq!(
+        onto.operations
+            .iter()
+            .filter(|o| o.path.starts_with("/machines") && !o.id.starts_with("node_"))
+            .count(),
+        35
+    );
+
+    // What each component's responses name.
+    let status = |id: &str, code: u16| {
+        onto.operations
+            .iter()
+            .find(|o| o.id == id)
+            .unwrap()
+            .responses
+            .iter()
+            .any(|r| r.status_code == code)
+    };
+    // The control plane refuses an inventory key; the node answers 501 off Linux.
+    assert!(
+        status("get_machine", 403) && status("get_machine", 503) && !status("get_machine", 501)
+    );
+    assert!(status("node_get_machine", 501) && status("node_get_machine", 401));
+    // Create answers 503 with the machine already made.
+    assert!(status("create_machine", 503) && status("node_create_machine", 503));
+    // A fork answers 201 whatever became of the forks.
+    assert!(status("fork_sandbox", 201) && !status("fork_sandbox", 200));
+    // Machine exec has no `timed_out` flag.
+    let exec = onto
+        .operations
+        .iter()
+        .find(|o| o.id == "exec_in_machine")
+        .unwrap();
+    let schema = serde_json::to_string(&exec.responses).unwrap();
+    assert!(
+        !schema.contains("timed_out\":"),
+        "exec reports no timed_out flag"
+    );
+    // The guardrails that are specific to machines.
+    for id in [
+        "node_start_machine_run",
+        "node_start_machine_prompt",
+        "node_create_machine_conversation",
+        "node_publish_machine_port",
+        "node_get_machine_desktop",
+        "snapshot_sandbox",
+    ] {
+        assert!(
+            onto.guardrails_for(id).len() >= 2,
+            "{id} needs its own guardrail"
+        );
+    }
 }

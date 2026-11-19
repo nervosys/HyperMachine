@@ -13,6 +13,11 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
+mod capabilities;
+mod checkpoint_operations;
+mod machine_operations;
+mod spec;
+
 // ============================================================================
 // Core Ontology Types
 // ============================================================================
@@ -1651,6 +1656,12 @@ impl HyperMachineOntology {
                 permissions_required: vec!["cluster token".to_string()],
             },
         ]
+        .into_iter()
+        .chain(Self::build_machine_capabilities(false))
+        .chain(Self::build_machine_capabilities(true))
+        .chain(Self::build_checkpoint_capabilities(false))
+        .chain(Self::build_checkpoint_capabilities(true))
+        .collect()
     }
 
     fn build_resources() -> Vec<ResourceType> {
@@ -2202,6 +2213,10 @@ impl HyperMachineOntology {
         .chain(Self::build_sandbox_exec_control_plane_operations())
         .chain(Self::build_sandbox_node_operations())
         .chain(Self::build_sandbox_exec_node_operations())
+        .chain(Self::build_machine_control_plane_operations())
+        .chain(Self::build_machine_node_operations())
+        .chain(Self::build_checkpoint_control_plane_operations())
+        .chain(Self::build_checkpoint_node_operations())
         .collect()
     }
 
@@ -2216,6 +2231,8 @@ impl HyperMachineOntology {
         let on = |ops: Vec<Operation>| ops.into_iter().any(|op| op.id == id);
         if on(Self::build_sandbox_node_operations())
             || on(Self::build_sandbox_exec_node_operations())
+            || on(Self::build_machine_node_operations())
+            || on(Self::build_checkpoint_node_operations())
         {
             return "hv2-sandboxd";
         }
@@ -2225,6 +2242,8 @@ impl HyperMachineOntology {
             .chain(Self::build_template_share_operations())
             .chain(Self::build_sandbox_control_plane_operations())
             .chain(Self::build_sandbox_exec_control_plane_operations())
+            .chain(Self::build_machine_control_plane_operations())
+            .chain(Self::build_checkpoint_control_plane_operations())
             .any(|op| op.id == id);
         if control_plane {
             "hv2-cluster"
@@ -4410,9 +4429,14 @@ impl HyperMachineOntology {
                     sandbox's memory, files and environment variables. The control plane \
                     logs a warning each time it starts this way. For the sandbox routes \
                     that means any caller can create sandboxes, run commands as root in any \
-                    sandbox and read its command history and output. (The key routes and \
-                    owner adoption still want an administrator or team-admin credential, so \
-                    an anonymous caller does not get them.)"
+                    sandbox and read its command history and output. The same holds for \
+                    machines (any caller can create, delete, run commands in, read files \
+                    from and prompt a coding agent in any team's machine, and read the disk \
+                    of its snapshots) and for a sandbox's fork, snapshots and checkpoints \
+                    (any caller can fork or checkpoint any sandbox and read the files of its \
+                    memory, or list every team's snapshots). (The key routes and owner \
+                    adoption still want an administrator or team-admin credential, so an \
+                    anonymous caller does not get them.)"
                     .to_string(),
                 applies_to: [
                     "team_template_sharing",
@@ -4421,6 +4445,13 @@ impl HyperMachineOntology {
                     "list_template_shares",
                     "sandbox_lifecycle",
                     "sandbox_commands",
+                    "machine_lifecycle",
+                    "machine_commands",
+                    "machine_agents",
+                    "machine_ports",
+                    "machine_snapshots",
+                    "sandbox_fork_and_snapshots",
+                    "sandbox_checkpoints",
                 ]
                 .into_iter()
                 .map(str::to_string)
@@ -4428,6 +4459,8 @@ impl HyperMachineOntology {
                     Self::build_sandbox_control_plane_operations()
                         .into_iter()
                         .chain(Self::build_sandbox_exec_control_plane_operations())
+                        .chain(Self::build_machine_control_plane_operations())
+                        .chain(Self::build_checkpoint_control_plane_operations())
                         .map(|op| op.id)
                         .filter(|id| id != "adopt_sandbox_owner"),
                 )
@@ -4509,8 +4542,13 @@ impl HyperMachineOntology {
                 applies_to: vec![
                     "share_template_snapshot".to_string(),
                     "team_template_sharing".to_string(),
+                    "snapshot_sandbox".to_string(),
+                    "node_snapshot_sandbox".to_string(),
                 ],
-                condition: "Any share of a team's snapshot with another team.".to_string(),
+                condition: "Any share of a team's snapshot with another team; and a snapshot \
+                    of a sandbox (`snapshot_sandbox`) is the thing that would be shared, \
+                    taken with the sandbox's memory in it."
+                    .to_string(),
                 mitigation: "Take the snapshot from a sandbox that never held what the other \
                     team must not have (secrets, tokens, customer data in memory or on \
                     disk). A Git credential held on the host (--team-git-credential, \
@@ -4532,16 +4570,29 @@ impl HyperMachineOntology {
                     not in front of it. The node prints a warning naming both ports every \
                     time it starts this way."
                     .to_string(),
-                applies_to: ["node_sandbox_lifecycle", "node_sandbox_commands"]
-                    .into_iter()
-                    .map(str::to_string)
-                    .chain(
-                        Self::build_sandbox_node_operations()
-                            .into_iter()
-                            .chain(Self::build_sandbox_exec_node_operations())
-                            .map(|op| op.id),
-                    )
-                    .collect(),
+                applies_to: [
+                    "node_sandbox_lifecycle",
+                    "node_sandbox_commands",
+                    "node_machine_lifecycle",
+                    "node_machine_commands",
+                    "node_machine_agents",
+                    "node_machine_desktop",
+                    "node_machine_ports",
+                    "node_machine_snapshots",
+                    "node_sandbox_fork_and_snapshots",
+                    "node_sandbox_checkpoints",
+                ]
+                .into_iter()
+                .map(str::to_string)
+                .chain(
+                    Self::build_sandbox_node_operations()
+                        .into_iter()
+                        .chain(Self::build_sandbox_exec_node_operations())
+                        .chain(Self::build_machine_node_operations())
+                        .chain(Self::build_checkpoint_node_operations())
+                        .map(|op| op.id),
+                )
+                .collect(),
                 condition: "The node was started with --bind ADDR beyond loopback and \
                     --allow-unauthenticated, with no --cluster-token (HV2_CLUSTER_TOKEN) and \
                     no mTLS. Without the flag a non-loopback --bind with neither is refused \
@@ -4574,6 +4625,8 @@ impl HyperMachineOntology {
                     "node_sandbox_lifecycle".to_string(),
                     "node_connect_sandbox".to_string(),
                     "node_connect_sandbox_v2".to_string(),
+                    "node_machine_ports".to_string(),
+                    "node_publish_machine_port".to_string(),
                 ],
                 condition: "The node has a cluster token and was started with --proxy-open."
                     .to_string(),
@@ -4611,6 +4664,124 @@ impl HyperMachineOntology {
                     `envVars`, which are never returned, rather than on a command line."
                     .to_string(),
                 reference: "crates/hv2-sandboxd/src/history.rs".to_string(),
+            },
+            Guardrail {
+                id: "machine-runs-keep-command-and-output".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "A machine keeps its runs' command lines and output on the node's disk"
+                    .to_string(),
+                description: "A run (and so a prompt, which is a run of a coding agent) keeps \
+                    its command line exactly as given, with no masking, and the newest 4 MiB \
+                    of each of its standard output and error, in the node's memory and on \
+                    its disk under the machine's directory, where they survive the run, a \
+                    stop of the machine and a restart of the node until the machine is \
+                    deleted. 256 runs are kept. Output is kept as printed and is not scanned \
+                    for secrets, and a prompt's text is kept and returned with it. Anyone \
+                    who may read the machine can read all of it. `env` is the exception: it \
+                    is not kept or returned."
+                    .to_string(),
+                applies_to: [
+                    "list_machine_runs",
+                    "start_machine_run",
+                    "get_machine_run",
+                    "list_machine_prompts",
+                    "start_machine_prompt",
+                    "get_machine_prompt",
+                ]
+                .into_iter()
+                .flat_map(|id| [id.to_string(), format!("node_{id}")])
+                .chain(
+                    [
+                        "list_machine_conversations",
+                        "get_machine_conversation",
+                        "get_machine_conversation_transcript",
+                    ]
+                    .into_iter()
+                    .map(|id| format!("node_{id}")),
+                )
+                .collect(),
+                condition: "A secret was in a run's command line or a prompt's text, or was \
+                    printed by it, in a machine."
+                    .to_string(),
+                mitigation: "Pass secrets in `env`, which is never kept or returned, not in \
+                    `cmd`, `stdin` or a prompt; do not print them; and delete the machine \
+                    (which deletes its runs) when it is done with."
+                    .to_string(),
+                reference: "docs/MACHINES.md#runs".to_string(),
+            },
+            Guardrail {
+                id: "machine-agents-act-with-the-callers-key".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "A prompt runs a coding agent with the key it is given, and can run it \
+                    unattended"
+                    .to_string(),
+                description: "A prompt or conversation message starts a coding agent in the \
+                    guest, as root unless a user is named, with the `env` it is given (the \
+                    agent's API key, which the machine does not otherwise have). The agent \
+                    then reads and writes the guest and uses its network as the model \
+                    directs. With `unattended` it is given the flag each agent calls \
+                    dangerous (`--dangerously-skip-permissions` for Claude Code, \
+                    `--dangerously-bypass-approvals-and-sandbox` for Codex), so it acts with \
+                    no approval step; the option is off unless given, and a conversation \
+                    fixes it for every turn. Claude Code refuses it as root. A caller who may \
+                    prompt a machine may do in it whatever the agent can be told to."
+                    .to_string(),
+                applies_to: [
+                    "start_machine_prompt",
+                    "create_machine_conversation",
+                    "send_machine_conversation_message",
+                ]
+                .into_iter()
+                .map(|id| format!("node_{id}"))
+                .chain(std::iter::once("start_machine_prompt".to_string()))
+                .collect(),
+                condition: "A prompt or a conversation is started with `unattended` true, or \
+                    in a machine that holds anything the agent must not read or send out, \
+                    with network access."
+                    .to_string(),
+                mitigation: "Prompt a machine that holds nothing the agent must not have; \
+                    give it a `user` with the access wanted rather than root; leave \
+                    `unattended` off unless the machine is disposable; and limit its egress \
+                    with the machine's `network` rules."
+                    .to_string(),
+                reference: "docs/MACHINES.md#prompts".to_string(),
+            },
+            Guardrail {
+                id: "machine-desktop-has-no-password".to_string(),
+                severity: GuardrailSeverity::Warning,
+                title: "A machine's desktop is open to whoever can reach its published port"
+                    .to_string(),
+                description: "noVNC, which serves a machine's desktop to a browser on guest \
+                    port 6080, has no password of its own. A published port gives it to \
+                    whoever can reach that port, and through a node's own proxy (`proxy`) \
+                    there is no login at all: anyone who can reach the node's proxy listener \
+                    sees and drives the desktop, and its screenshot can show anything on \
+                    screen. The desktop actions drive the display as the guest's user with \
+                    no further check. A login exists only through a control plane with the \
+                    operator's login in front, and (`--proxy-open` aside) a node's proxy is \
+                    reached with the cluster token."
+                    .to_string(),
+                applies_to: [
+                    "publish_machine_port",
+                    "get_machine_desktop",
+                    "get_machine_desktop_screenshot",
+                    "act_on_machine_desktop",
+                ]
+                .into_iter()
+                .map(|id| format!("node_{id}"))
+                .chain(std::iter::once("publish_machine_port".to_string()))
+                .collect(),
+                condition: "Guest port 6080 of a machine with a `desktop` is published, \
+                    especially with `proxy`, on a node whose port or proxy is reachable by \
+                    anyone who must not drive the desktop."
+                    .to_string(),
+                mitigation: "Do not publish the desktop's port unless every host that can \
+                    reach the node's port or proxy may use the desktop; keep the node's \
+                    ports on loopback or a private network; reach it through a control \
+                    plane with the operator-provisioned login in front. Use the screenshot \
+                    and actions routes instead, which sit behind the node's cluster token."
+                    .to_string(),
+                reference: "docs/MACHINES.md#desktop".to_string(),
             },
         ]
     }
@@ -7977,6 +8148,9 @@ mod tests {
             "node-unauthenticated-mode",
             "node-proxy-open",
             "command-history-keeps-output",
+            "machine-runs-keep-command-and-output",
+            "machine-agents-act-with-the-callers-key",
+            "machine-desktop-has-no-password",
         ];
         let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         for id in ids {
