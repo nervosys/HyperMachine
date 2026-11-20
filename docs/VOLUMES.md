@@ -68,6 +68,18 @@ Network-filesystem semantics, power-loss durability and an actual Kubernetes
 storage rollout remain unverified. The chart renders and references existing
 claims; it does not provision a storage service.
 
+## Volume tokens
+
+The content token is random. Creation (`POST /volumes`) and rotation (`POST /volumes/{id}/token`) return it once; `GET /volumes/{id}` returns `"token": null` and `GET /volumes` omits it. The node keeps only the token's SHA-256 in `meta.json` (`tokenSHA256`), so a copy of the metadata is not a credential.
+
+Rotation is management, authorised exactly as `GET` and `DELETE /volumes/{id}` are: the node's cluster-token gate, or through the control plane an API key with the `volumes` scope in the volume's team. The content token itself cannot rotate. The old token stops working once the new digest is published, before the rotation answer is sent. A key with the `volumes` scope can therefore obtain a working token for any volume of its team, as it could before.
+
+A volume written before tokens were hashed (`"token"` in `meta.json`) is migrated when it is first read: the token is hashed and the file is rewritten atomically (private temporary file, sync, rename, directory sync), so the plaintext is removed. Its token keeps working. If the rewrite fails the volume is still served from memory and the rewrite is retried on the next read; the plaintext then stays on disk until it succeeds. Backups of `meta.json` taken before the migration still hold plaintext tokens: rotate those volumes.
+
+A wrong or missing content token and a volume that does not exist give the same answer, `404` with body `no volume <id>`, so a caller cannot probe for volume IDs. (Earlier versions answered `401` for a wrong token.) The comparison is constant-time over digests.
+
+Deletion first renames the volume to a hidden `.deleted-*` directory, so it disappears from every listing and its name is free at once. If removing its files then fails part way, the API answers `500` and the hidden directory remains for an operator to clear.
+
 ## Metadata persistence and failed creation
 
 New token-bearing metadata files use mode `0600`. Creation flushes metadata and the data directory before publishing, then flushes the volume directory and store root before returning success. Provision the store root durably: automatically created ancestor directories are not recursively flushed. Filesystem support and durability guarantees vary.
@@ -131,7 +143,7 @@ hm sandbox vm --endpoint https://control.example volume inspect vol-your-volume
 hm sandbox vm --endpoint https://control.example volume delete vol-your-volume
 ```
 
-Creation and inspection print JSON including the content bearer token. Successful deletion prints nothing and removes the volume contents. Names and IDs accept 1–64 ASCII letters, digits, underscores or hyphens. Existing `--api-ca-cert` and `--request-timeout` options apply. Management responses are bounded to 64 KiB and listings to 1 MiB. Use the integrated streamed upload command below, or the Python helper, for atomic/create-only uploads. [Management CLI evidence](benchmarks/2026-10-03/volume-management-cli/README.md) verifies shipped-binary protocol behavior, existing CLI regressions, and real shared-storage operations through the control-plane router.
+Creation prints JSON including the content bearer token. Inspection prints the volume with `"token": null`: the token is shown once, by creation and by rotation (see [Volume tokens](#volume-tokens)). The CLI has no rotate command; rotation is the HTTP route `POST /volumes/{id}/token`. Successful deletion prints nothing and removes the volume contents. Names and IDs accept 1–64 ASCII letters, digits, underscores or hyphens. Existing `--api-ca-cert` and `--request-timeout` options apply. Management responses are bounded to 64 KiB and listings to 1 MiB. Use the integrated streamed upload command below, or the Python helper, for atomic/create-only uploads. [Management CLI evidence](benchmarks/2026-10-03/volume-management-cli/README.md) verifies shipped-binary protocol behavior, existing CLI regressions, and real shared-storage operations through the control-plane router.
 
 ## Streamed upload with hm
 

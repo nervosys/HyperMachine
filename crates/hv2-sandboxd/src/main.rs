@@ -7324,6 +7324,7 @@ async fn main() -> std::process::ExitCode {
             "/volumes/{volumeID}",
             get(volumes::get).delete(volumes::delete),
         )
+        .route("/volumes/{volumeID}/token", post(volumes::rotate_token))
         .route("/sandboxes/{sandboxID}/exec", post(exec))
         .route(
             "/machines/{name}/ports/{hostPort}/reverse",

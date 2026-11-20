@@ -55,6 +55,9 @@ pub(crate) fn set_max_inodes(_inodes: u64) {}
 pub(crate) async fn create() -> Response {
     refused()
 }
+pub(crate) async fn rotate_token() -> Response {
+    refused()
+}
 pub(crate) async fn list() -> Response {
     refused()
 }

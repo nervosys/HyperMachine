@@ -974,6 +974,12 @@ mod tests {
         let dev = preset_policy(r#""preset":"developer""#).unwrap();
         assert!(dev.permits(&Method::POST, "/v2/sandboxes"));
         assert!(dev.permits(&Method::POST, "/volumes"));
+        // Rotation is volume management: the same family, the same scope.
+        assert!(dev.permits(&Method::POST, "/volumes/id/token"));
+        assert!(!ro.permits(&Method::POST, "/volumes/id/token"));
+        assert!(!preset_policy(r#""preset":"machines""#)
+            .unwrap()
+            .permits(&Method::POST, "/volumes/id/token"));
         assert!(!dev.permits(&Method::GET, "/machines"));
         let machines = preset_policy(r#""preset":"machines""#).unwrap();
         assert!(machines.permits(&Method::POST, "/machines/web-01/exec"));

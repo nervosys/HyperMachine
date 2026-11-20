@@ -3,8 +3,10 @@
 //! volumes -- that sandboxes mount (`volumeMounts` on create), live and
 //! shared, and that outlives them.
 //!
-//! - `POST /volumes`, `GET /volumes`, `GET` and `DELETE /volumes/{id}`:
-//!   E2B's volume API, behind the API key.
+//! - `POST /volumes`, `GET /volumes`, `GET` and `DELETE /volumes/{id}`, and
+//!   `POST /volumes/{id}/token` (rotate): E2B's volume API, behind the API
+//!   key. The content token is returned by create and rotate only; the node
+//!   keeps just its SHA-256.
 //! - `/volumecontent/{id}/{file,dir,path}`: E2B's volume content API, which
 //!   the SDK's `Volume` calls with the volume's own bearer token.
 //! - A mount is a 9P2000.L server ([`crate::ninep`]) on a vsock connection
@@ -49,7 +51,14 @@ pub(crate) struct Meta {
     #[serde(rename = "volumeID")]
     id: String,
     name: String,
-    token: String,
+    /// SHA-256 of the content token, lowercase hex. The token itself is never
+    /// written: it is returned once, by create and by rotate.
+    #[serde(rename = "tokenSHA256", default)]
+    token_sha256: String,
+    /// The token of a volume made before tokens were hashed. Read only to
+    /// migrate it (see `read_meta`); never written back.
+    #[serde(rename = "token", default, skip_serializing)]
+    legacy_token: Option<String>,
     /// The team it belongs to; `None` outside a multi-tenant deployment.
     #[serde(rename = "teamID", default, skip_serializing_if = "Option::is_none")]
     team: Option<TeamId>,
@@ -119,24 +128,34 @@ async fn budget(dir: &std::path::Path) -> Arc<Budget> {
 }
 
 fn all(state: &AppState) -> Vec<Meta> {
-    let Ok(listing) = std::fs::read_dir(root(state)) else {
+    all_in(&root(state))
+}
+
+/// Every volume under `root`, by name. A directory whose name starts with a
+/// dot is not one: a deleted volume is renamed to such a name before its
+/// files go.
+fn all_in(root: &std::path::Path) -> Vec<Meta> {
+    let Ok(listing) = std::fs::read_dir(root) else {
         return Vec::new();
     };
     let mut volumes: Vec<Meta> = listing
         .flatten()
-        .filter_map(|e| std::fs::read(e.path().join("meta.json")).ok())
-        .filter_map(|b| serde_json::from_slice(&b).ok())
+        .filter(|e| !e.file_name().to_string_lossy().starts_with('.'))
+        .filter_map(|e| read_meta(&e.path()))
         .collect();
     volumes.sort_by(|a, b| a.name.cmp(&b.name));
     volumes
 }
 
 fn by_id(state: &AppState, id: &str) -> Option<Meta> {
+    by_id_in(&root(state), id)
+}
+
+fn by_id_in(root: &std::path::Path, id: &str) -> Option<Meta> {
     if !valid_name(id) {
         return None;
     }
-    let bytes = std::fs::read(root(state).join(id).join("meta.json")).ok()?;
-    serde_json::from_slice(&bytes).ok()
+    read_meta(&root.join(id))
 }
 
 /// `team`'s volume named `name`. Names are unique within a team, and the
@@ -156,8 +175,15 @@ fn valid_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
-fn with_token(meta: &Meta) -> Value {
-    json!({ "volumeID": meta.id, "name": meta.name, "token": meta.token })
+/// What create and rotate answer: the volume and its token, once.
+fn with_token(meta: &Meta, token: &str) -> Value {
+    json!({ "volumeID": meta.id, "name": meta.name, "token": token })
+}
+
+/// What get answers: the volume with no token. The key stays, because E2B's
+/// `VolumeAndToken` schema requires it; it is null.
+fn without_token(meta: &Meta) -> Value {
+    json!({ "volumeID": meta.id, "name": meta.name, "token": Value::Null })
 }
 
 /// Reserve the deterministic ID before publishing metadata. An existing
@@ -206,6 +232,110 @@ fn create_metadata_with_sync(
     result
 }
 
+/// SHA-256 of a content token, as lowercase hex: the only form of a token
+/// `meta.json` keeps. Tokens are random and long, so an unsalted digest is
+/// enough to make a leaked metadata file useless as a credential.
+fn token_digest(token: &str) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(token.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// A new volume's metadata, and its token, which only the caller keeps.
+fn new_meta(name: String, team: Option<TeamId>) -> (Meta, String) {
+    let token = new_access_token();
+    let meta = Meta {
+        id: hv2_cluster::model::team_volume_id(team.as_ref(), &name),
+        name,
+        token_sha256: token_digest(&token),
+        legacy_token: None,
+        team,
+    };
+    (meta, token)
+}
+
+/// The metadata of the volume in `directory`. A file written before tokens
+/// were hashed carries its token in the clear: the token is hashed here and
+/// the file rewritten, so the plaintext is gone after the first read. If the
+/// rewrite fails the volume is still served, from memory, and the next read
+/// tries again.
+///
+/// The rewrite happens under [`METADATA_WRITES`] and only if the file still
+/// holds a plaintext token when re-read there, so a read that began before a
+/// rotation cannot write the old token's digest back over the new one.
+fn read_meta(directory: &std::path::Path) -> Option<Meta> {
+    let parse = || -> Option<Meta> {
+        let bytes = std::fs::read(directory.join("meta.json")).ok()?;
+        serde_json::from_slice(&bytes).ok()
+    };
+    let meta = parse()?;
+    if meta.legacy_token.is_none() {
+        return Some(meta);
+    }
+    let _writing = METADATA_WRITES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut meta = parse()?;
+    if let Some(token) = meta.legacy_token.take() {
+        meta.token_sha256 = token_digest(&token);
+        if let Err(e) = publish_metadata(directory, &meta) {
+            tracing::warn!(
+                "volume {}: its token is not yet hashed on disk: {e}",
+                meta.id
+            );
+        }
+    }
+    Some(meta)
+}
+
+/// Held while a volume's `meta.json` is rewritten after creation (token
+/// migration and rotation), so the two cannot interleave.
+static METADATA_WRITES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Replace `directory`'s metadata atomically, as creation publishes it: a
+/// private temporary file is written and synced, renamed over `meta.json`,
+/// and the directory synced.
+fn publish_metadata(directory: &std::path::Path, meta: &Meta) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let bytes = serde_json::to_vec(meta).map_err(std::io::Error::other)?;
+    let temporary = directory.join(format!(".meta.json.{}", uuid::Uuid::new_v4()));
+    let result = (|| {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temporary)?;
+        file.write_all(&bytes)?;
+        file.sync_all()?;
+        std::fs::rename(&temporary, directory.join("meta.json"))?;
+        std::fs::File::open(directory)?.sync_all()
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&temporary);
+    }
+    result
+}
+
+/// Give `meta` a new token and publish it. The old token stops working when
+/// the new metadata is in place.
+fn rotate_in(root: &std::path::Path, meta: Meta) -> std::io::Result<(Meta, String)> {
+    let token = new_access_token();
+    let updated = Meta {
+        token_sha256: token_digest(&token),
+        legacy_token: None,
+        ..meta
+    };
+    let _writing = METADATA_WRITES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    publish_metadata(&root.join(&updated.id), &updated)?;
+    Ok((updated, token))
+}
+
 #[derive(Debug, Deserialize)]
 pub(crate) struct NewVolume {
     name: String,
@@ -230,12 +360,7 @@ pub(crate) async fn create(
     if by_name(&state, team.as_ref(), &req.name).is_some() {
         return api_error(StatusCode::CONFLICT, format!("volume {} exists", req.name));
     }
-    let meta = Meta {
-        id: hv2_cluster::model::team_volume_id(team.as_ref(), &req.name),
-        name: req.name,
-        token: new_access_token(),
-        team,
-    };
+    let (meta, token) = new_meta(req.name, team);
     let dir = root(&state).join(&meta.id);
     let made = create_metadata(&root(&state), &meta);
     if let Err(e) = made {
@@ -247,7 +372,7 @@ pub(crate) async fn create(
             format!("{}: {e}", dir.display()),
         );
     }
-    (StatusCode::CREATED, Json(with_token(&meta))).into_response()
+    (StatusCode::CREATED, Json(with_token(&meta, &token))).into_response()
 }
 
 #[cfg(test)]
@@ -365,7 +490,8 @@ mod creation_tests {
             let meta = Meta {
                 id: "vol-owned".into(),
                 name: "owned".into(),
-                token: "owned-token".into(),
+                token_sha256: token_digest("owned-token"),
+                legacy_token: None,
                 team: None,
             };
             let mut stage = 0;
@@ -407,11 +533,12 @@ mod creation_tests {
                     let meta = Meta {
                         id: "vol-owned".into(),
                         name: "owned".into(),
-                        token: index.to_string(),
+                        token_sha256: token_digest(&index.to_string()),
+                        legacy_token: None,
                         team: None,
                     };
                     barrier.wait();
-                    (meta.token.clone(), create_metadata(&root, &meta))
+                    (meta.token_sha256.clone(), create_metadata(&root, &meta))
                 })
             })
             .collect();
@@ -434,13 +561,14 @@ mod creation_tests {
         );
         let before = std::fs::read(&metadata).unwrap();
         let meta: Meta = serde_json::from_slice(&before).unwrap();
-        assert_eq!(Some(meta.token), winner);
+        assert_eq!(Some(meta.token_sha256), winner);
         let marker = root.join("vol-owned/data/marker");
         std::fs::write(&marker, b"owned bytes").unwrap();
         let duplicate = Meta {
             id: "vol-owned".into(),
             name: "owned".into(),
-            token: "replacement".into(),
+            token_sha256: token_digest("replacement"),
+            legacy_token: None,
             team: None,
         };
         assert_eq!(
@@ -461,7 +589,8 @@ mod creation_tests {
         let meta = Meta {
             id: "vol-owned".into(),
             name: "owned".into(),
-            token: "replacement".into(),
+            token_sha256: token_digest("replacement"),
+            legacy_token: None,
             team: None,
         };
         assert_eq!(
@@ -473,6 +602,112 @@ mod creation_tests {
             std::fs::read(reserved.join("marker")).unwrap(),
             b"existing reservation"
         );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod token_tests {
+    use super::*;
+
+    fn scratch(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("hm-volume-token-{name}-{}", uuid::Uuid::new_v4()))
+    }
+
+    /// Creation writes only the token's digest: the file holds no plaintext.
+    #[test]
+    fn meta_json_holds_no_plaintext_token_after_create() {
+        let root = scratch("create");
+        let (meta, token) = new_meta("workspace".into(), None);
+        create_metadata(&root, &meta).unwrap();
+        let on_disk = std::fs::read_to_string(root.join(&meta.id).join("meta.json")).unwrap();
+        assert!(!on_disk.contains(&token), "plaintext token on disk");
+        assert!(!on_disk.contains("\"token\""));
+        assert!(on_disk.contains(&token_digest(&token)));
+        assert!(authorize(&root, &meta.id, &token).is_ok());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// A volume written with a plaintext token keeps working, and its file is
+    /// rewritten without the token on first read.
+    #[test]
+    fn a_legacy_plaintext_token_is_migrated_and_still_works() {
+        let root = scratch("legacy");
+        let directory = root.join("vol-legacy");
+        std::fs::create_dir_all(directory.join("data")).unwrap();
+        let legacy = "t".repeat(32);
+        let old = json!({ "volumeID": "vol-legacy", "name": "legacy", "token": legacy });
+        std::fs::write(
+            directory.join("meta.json"),
+            serde_json::to_vec(&old).unwrap(),
+        )
+        .unwrap();
+        assert!(authorize(&root, "vol-legacy", &legacy).is_ok());
+        let on_disk = std::fs::read_to_string(directory.join("meta.json")).unwrap();
+        assert!(!on_disk.contains(&legacy), "plaintext survived migration");
+        assert!(on_disk.contains(&token_digest(&legacy)));
+        assert!(authorize(&root, "vol-legacy", &"u".repeat(32)).is_err());
+        assert!(directory.join("data").is_dir());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Get's answer carries no token; the key stays, as null.
+    #[test]
+    fn get_never_shows_the_token() {
+        let (meta, token) = new_meta("shown".into(), None);
+        let answer = serde_json::to_string(&without_token(&meta)).unwrap();
+        assert!(!answer.contains(&token));
+        assert!(without_token(&meta)["token"].is_null());
+    }
+
+    /// Rotation: the new token works, the old one stops, the volume and its
+    /// team stay.
+    #[test]
+    fn rotation_replaces_the_token_and_keeps_the_volume() {
+        let root = scratch("rotate");
+        let (meta, old) = new_meta("rotated".into(), None);
+        create_metadata(&root, &meta).unwrap();
+        assert!(authorize(&root, &meta.id, &old).is_ok());
+        let (updated, new) = rotate_in(&root, meta.clone()).unwrap();
+        assert_ne!(new, old);
+        assert_eq!(updated.team, meta.team);
+        assert_eq!(updated.id, meta.id);
+        assert!(authorize(&root, &meta.id, &old).is_err());
+        assert!(authorize(&root, &meta.id, &new).is_ok());
+        let on_disk = std::fs::read_to_string(root.join(&meta.id).join("meta.json")).unwrap();
+        assert!(!on_disk.contains(&new), "plaintext token on disk");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// A wrong token and a volume that does not exist are one refusal.
+    #[test]
+    fn a_wrong_token_and_a_missing_volume_are_the_same_refusal() {
+        let root = scratch("refusal");
+        let (meta, _) = new_meta("guarded".into(), None);
+        create_metadata(&root, &meta).unwrap();
+        let wrong = authorize(&root, &meta.id, &"w".repeat(64)).err().unwrap();
+        let empty = authorize(&root, &meta.id, "").err().unwrap();
+        let missing = authorize(&root, "vol-absent", &"w".repeat(64))
+            .err()
+            .unwrap();
+        assert_eq!(wrong.0, StatusCode::NOT_FOUND);
+        assert_eq!(empty.0, StatusCode::NOT_FOUND);
+        assert_eq!(missing.0, StatusCode::NOT_FOUND);
+        // The body names the ID asked for, so compare it with the ID removed.
+        assert_eq!(wrong.1.replace(&meta.id, "ID"), "no volume ID");
+        assert_eq!(empty.1.replace(&meta.id, "ID"), "no volume ID");
+        assert_eq!(missing.1.replace("vol-absent", "ID"), "no volume ID");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// A deleted volume waiting for its files to go is not listed.
+    #[test]
+    fn a_volume_being_deleted_is_not_listed() {
+        let root = scratch("tombstone");
+        let (meta, _) = new_meta("gone".into(), None);
+        create_metadata(&root, &meta).unwrap();
+        std::fs::rename(root.join(&meta.id), root.join(".deleted-x")).unwrap();
+        assert!(all_in(&root).is_empty());
         std::fs::remove_dir_all(root).unwrap();
     }
 }
@@ -509,7 +744,7 @@ pub(crate) async fn get(
     Path(id): Path<String>,
 ) -> Response {
     match reachable(&state, &headers, &id) {
-        Ok(meta) => Json(with_token(&meta)).into_response(),
+        Ok(meta) => Json(without_token(&meta)).into_response(),
         Err(response) => response,
     }
 }
@@ -524,11 +759,39 @@ pub(crate) async fn delete(
     if let Err(response) = reachable(&state, &headers, &id) {
         return response;
     }
-    match std::fs::remove_dir_all(root(&state).join(&id)) {
-        Ok(()) => {
-            quota::forget(&data_dir(&state, &id));
-            StatusCode::NO_CONTENT.into_response()
-        }
+    // Renamed out of the volume namespace first. Once that is done the volume
+    // is gone for every caller, and a failure part way through removing its
+    // files leaves only a hidden directory: never a name that is taken but
+    // not listed, which a new volume could not reuse.
+    let tombstone = root(&state).join(format!(".deleted-{}", uuid::Uuid::new_v4()));
+    if let Err(e) = std::fs::rename(root(&state).join(&id), &tombstone) {
+        return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
+    }
+    quota::forget(&data_dir(&state, &id));
+    match std::fs::remove_dir_all(&tombstone) {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => api_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("volume {id} is deleted, but not all its files were removed: {e}"),
+        ),
+    }
+}
+
+/// `POST /volumes/{id}/token`: a new content token, returned once. The old
+/// one stops working when the new metadata is published. Authorised exactly
+/// as `GET` and `DELETE` are, through `reachable`: the content token is not
+/// accepted here.
+pub(crate) async fn rotate_token(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let meta = match reachable(&state, &headers, &id) {
+        Ok(meta) => meta,
+        Err(response) => return response,
+    };
+    match rotate_in(&root(&state), meta) {
+        Ok((updated, token)) => Json(with_token(&updated, &token)).into_response(),
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
@@ -611,28 +874,46 @@ pub(crate) async fn mount(
 
 // ── The content API ─────────────────────────────────────────────────────────
 
+/// The bearer token a request carries, or "" when it carries none.
+fn bearer(headers: &HeaderMap) -> &str {
+    headers
+        .get("authorization")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .unwrap_or_default()
+}
+
+/// Whether `presented` is the token of `meta`, compared as digests in
+/// constant time. A missing volume is compared all the same, so the answer
+/// takes the same work whether or not the volume exists.
+fn token_matches(meta: Option<&Meta>, presented: &str) -> bool {
+    use subtle::ConstantTimeEq;
+    let digest = token_digest(presented);
+    let stored = meta.map_or("", |m| m.token_sha256.as_str());
+    bool::from(digest.as_bytes().ct_eq(stored.as_bytes())) && meta.is_some()
+}
+
+/// The volume `id` under `root`, if `token` is its token. A volume that does
+/// not exist and a wrong token are one refusal: 404 with the same body, so a
+/// caller cannot tell which volume IDs exist.
+fn authorize(root: &std::path::Path, id: &str, token: &str) -> Result<Meta, (StatusCode, String)> {
+    let meta = by_id_in(root, id);
+    let ok = token_matches(meta.as_ref(), token);
+    match meta {
+        Some(meta) if ok => Ok(meta),
+        _ => Err((StatusCode::NOT_FOUND, format!("no volume {id}"))),
+    }
+}
+
 /// The volume `id`, if the request carries its token.
-// The error is the reply, returned by the handler at once.
 #[allow(clippy::result_large_err)]
 fn authorized(
     state: &AppState,
     id: &str,
     headers: &HeaderMap,
 ) -> Result<(Meta, Beneath), Response> {
-    use subtle::ConstantTimeEq;
-    let meta = by_id(state, id)
-        .ok_or_else(|| api_error(StatusCode::NOT_FOUND, format!("no volume {id}")))?;
-    let sent = headers
-        .get("authorization")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.strip_prefix("Bearer "))
-        .unwrap_or_default();
-    if !bool::from(sent.as_bytes().ct_eq(meta.token.as_bytes())) {
-        return Err(api_error(
-            StatusCode::UNAUTHORIZED,
-            "not this volume's token",
-        ));
-    }
+    let meta = authorize(&root(state), id, bearer(headers))
+        .map_err(|(status, message)| api_error(status, message))?;
     let fs = Beneath::open(&data_dir(state, id))
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, e))?;
     Ok((meta, fs))
@@ -697,7 +978,7 @@ impl AtomicUpload {
         use std::os::fd::FromRawFd;
         match fs.entry(parts) {
             Ok(entry) if entry.stat.st_mode & libc::S_IFMT != libc::S_IFREG => {
-                return Err(std::io::Error::from_raw_os_error(libc::EINVAL))
+                return Err(std::io::Error::from_raw_os_error(libc::EINVAL));
             }
             Err(error) if error.raw_os_error() != Some(libc::ENOENT) => return Err(error),
             _ => {}

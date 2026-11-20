@@ -374,6 +374,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 
 ### Security
+- **Volume content tokens were stored in plaintext, returned by every `GET /volumes/{id}`, could not be rotated, and a wrong token was distinguishable from a missing volume.** `meta.json` now keeps only the token's SHA-256; volumes written before this are migrated on first read and keep their token. `GET` returns `"token": null`, and the token is shown once, by create and by the new `POST /volumes/{id}/token` (rotate, authorised as `GET`/`DELETE` are; the old token stops working at once). A wrong or missing content token now answers `404` with the same body as a missing volume, where it answered `401`. Deleting a volume renames it out of the namespace first, so a failure part way through removing its files no longer leaves a taken, unlisted name.
 - **`hm serve` listened on `0.0.0.0` with no TLS, left every read open without `HM_API_KEY`, and let
   a client evade its rate limit by changing `X-Forwarded-For`.** It now binds `127.0.0.1` by default
   (new `--bind ADDR`). With no `HM_API_KEY`, a non-loopback bind is refused unless

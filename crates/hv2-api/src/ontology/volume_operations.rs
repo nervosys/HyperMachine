@@ -36,6 +36,15 @@ fn volume_with_token_schema() -> Value {
         "token": { "type": "string", "description": "the volume's content bearer token, for `/volumecontent`" } } })
 }
 
+/// What `get_volume` answers: the volume, its `token` always null. The key is
+/// kept because E2B's `VolumeAndToken` requires it.
+fn volume_info_schema() -> Value {
+    json!({ "type": "object", "properties": {
+        "volumeID": { "type": "string" },
+        "name": { "type": "string" },
+        "token": { "type": "null", "description": "always null: the token is shown by `create_volume` and `rotate_volume_token` only" } } })
+}
+
 /// A listed volume: the token is not in a listing.
 fn volume_listed_schema() -> Value {
     json!({ "type": "object", "properties": {
@@ -111,12 +120,8 @@ fn relay_failures() -> Vec<OperationResponse> {
 fn content_failures() -> Vec<OperationResponse> {
     vec![
         fail(
-            401,
-            "`not this volume's token`: no `Authorization: Bearer <token>`, or not this volume's token (constant-time comparison)",
-        ),
-        fail(
             404,
-            "`no volume <id>`: no such volume, or the ID is not 1 to 64 letters, digits, `_` and `-`; asked before the token, so it tells a caller whether a volume exists",
+            "`no volume <id>`: no such volume, the ID is not 1 to 64 letters, digits, `_` and `-`, or the request carries no bearer token or not this volume's token. These are one answer with one body, so a caller cannot tell which volume IDs exist. The token is compared as a digest in constant time.",
         ),
         plain(
             400,
@@ -187,7 +192,8 @@ impl HyperMachineOntology {
         .about(if node {
             "List the volumes of this node's volume directory, sorted by name: each volume's \
              `volumeID`, `name` and `teamID` (null for a volume made outside a team). The \
-             content token is not in the listing; `get_volume` returns it. When the control \
+             content token is not in the listing, nor in `get_volume`; only `create_volume` \
+             and `rotate_volume_token` return it. When the control \
              plane relayed the call with a team, only that team's volumes are listed; a call \
              with no team context sees every volume, including those of every team. A \
              node on a shared volume directory lists what every node holds; a node whose \
@@ -277,20 +283,22 @@ impl HyperMachineOntology {
             },
         )
         .about(
-            "Read one volume: its `volumeID`, `name` and content bearer `token`. The token is \
-             the whole credential of the content API, so whoever may call this route can read \
-             and write every file of the volume. A volume of another team is not forbidden but \
-             missing: 404, the same as one that does not exist. A call with no team context \
-             reaches every volume. An ID that is not 1 to 64 letters, digits, `_` and `-` is \
-             404 too. The control plane relays the call to the node picked for the ID.",
+            "Read one volume: its `volumeID` and `name`. The `token` key is present and always \
+             null: the content token is returned once, by `create_volume` and by \
+             `rotate_volume_token`, and is stored only as a digest, so a caller who can read \
+             a volume's metadata cannot read its credential. A volume of another team is not \
+             forbidden but missing: 404, the same as one that does not exist. A call with no \
+             team context reaches every volume. An ID that is not 1 to 64 letters, digits, \
+             `_` and `-` is 404 too. The control plane relays the call to the node picked for \
+             the ID.",
         )
         .with(id(
             "The volume's ID (`vol-` and 16 hex digits), from `create_volume` or `list_volumes`",
         ))
         .answers(ok(
             200,
-            "The volume and its token.",
-            Some(volume_with_token_schema()),
+            "The volume, with `token` null.",
+            Some(volume_info_schema()),
         ))
         .answers(fail(
             404,
@@ -313,8 +321,10 @@ impl HyperMachineOntology {
             "Remove a volume and every file in it, at once (`remove_dir_all`), and forget its \
              quota counters. Sandboxes still mounting it are not stopped and are not refused: \
              they see an empty directory from then on. Nothing is kept, and the content token \
-             stops working with it. A volume of another team is 404, as for `get_volume`. A \
-             failure part way (500) can leave some files removed. On the control plane the \
+             stops working with it. A volume of another team is 404, as for `get_volume`. The \
+             volume is first renamed to a hidden name, so it is gone from every listing and \
+             its name is free at once; a failure part way through the removal (500) leaves \
+             some files in that hidden directory, for an operator to clear. On the control plane the \
              call is relayed to the node picked for the ID, so a node that does not hold the \
              volume's directory (nodes without a shared volume directory) answers 404 and \
              removes nothing.",
@@ -331,7 +341,57 @@ impl HyperMachineOntology {
         ))
         .answers_all(gate());
 
-        vec![list, create, get, delete]
+        let rotate = Spec::new(
+            "rotate_volume_token",
+            "Rotate A Volume's Token",
+            "POST",
+            if node {
+                "/volumes/{volumeID}/token"
+            } else {
+                "/volumes/{id}/token"
+            },
+        )
+        .about(if node {
+            "Replace a volume's content bearer token with a new one, returned once in the \
+             answer, with the volume's `volumeID` and `name`. The old token stops working at \
+             once: the new digest is published (temporary file, sync, rename) before the \
+             answer is sent, so a caller holding the old token is refused from then on. The \
+             volume, its files and its team are unchanged. Authorised as `get_volume` and \
+             `delete_volume` are: the node's gate and the team context, never the content \
+             token, which cannot rotate itself. A volume of another team, or none, is 404 \
+             with the same body. Two rotations racing leave the one published last in force; \
+             the other answer's token is then refused. A failure to publish answers 500 and \
+             leaves the old token in force."
+        } else {
+            "Replace a volume's content bearer token with a new one, returned once in the \
+             answer, from the node the control plane picks for the volume. The old token stops \
+             working once the node publishes the new one, before its answer is sent. The volume \
+             and its team are unchanged. Authorised as `get_volume` and `delete_volume` are: an \
+             API key with the `volumes` scope and the caller's team. The content bearer token \
+             is not accepted here and is not forwarded to the node. A volume of another team, \
+             or none, is 404 with the same body. Racing rotations leave the last one published \
+             in force."
+        })
+        .with(id(
+            "The volume's ID, from `create_volume` or `list_volumes`",
+        ))
+        .answers(ok(
+            200,
+            "The volume and its new token, once.",
+            Some(volume_with_token_schema()),
+        ))
+        .answers(fail(
+            404,
+            "`no volume <id>`: it does not exist, or belongs to another team",
+        ))
+        .answers(fail(
+            500,
+            "the new metadata could not be written or synced; the old token stays in force",
+        ))
+        .answers_all(gate())
+        .repeatable();
+
+        vec![list, create, get, delete, rotate]
     }
 
     /// The control plane's three content routes: every method is relayed.
@@ -361,12 +421,8 @@ impl HyperMachineOntology {
                     "Whatever the node answered, with its status and body (the node's per-method operations describe them).",
                 ))
                 .answers(fail(
-                    401,
-                    "`not this volume's token`, from the node: the request carried no bearer token or a wrong one",
-                ))
-                .answers(fail(
                     404,
-                    "`no volume <id>`, from the node: no such volume, or the node picked does not hold it (nodes without a shared volume directory), or the path inside it does not exist",
+                    "`no volume <id>`, from the node: no such volume, a wrong or missing bearer token (the same answer as a missing volume), the node picked does not hold it (nodes without a shared volume directory), or the path inside it does not exist",
                 ))
                 .answers(plain(
                     405,
@@ -720,22 +776,17 @@ impl HyperMachineOntology {
             ))
             .answers(super::spec::body_rejection())
             .answers_all(gate());
-        let get = Spec::new(
-            "get_disk",
-            "Get A Block Disk",
-            "GET",
-            "/disks/{diskID}",
-        )
-        .about(
-            "Read one disk: `diskID`, `name`, `sizeMiB` and `attachedTo` (the holding sandbox, \
+        let get = Spec::new("get_disk", "Get A Block Disk", "GET", "/disks/{diskID}")
+            .about(
+                "Read one disk: `diskID`, `name`, `sizeMiB` and `attachedTo` (the holding sandbox, \
              or null when free or when the claim is a dead daemon's). An ID that is not 1 to 64 \
              letters, digits, `_` and `-` is 404.",
-        )
-        .with(id())
-        .answers(ok(200, "The disk.", Some(disk_schema())))
-        .answers(fail(404, "`no disk <id>`"))
-        .answers_all(gate())
-        .repeatable();
+            )
+            .with(id())
+            .answers(ok(200, "The disk.", Some(disk_schema())))
+            .answers(fail(404, "`no disk <id>`"))
+            .answers_all(gate())
+            .repeatable();
         let delete = Spec::new(
             "delete_disk",
             "Delete A Block Disk",
@@ -797,8 +848,9 @@ impl HyperMachineOntology {
                 description: format!(
                     "Make, list, read and delete persistent shared volumes, through {who}. A \
                      volume is a host directory that sandboxes mount over 9P by name, that \
-                     outlives them and that is the content API's subject. {auth}. Creating and \
-                     reading a volume returns its content bearer token. See docs/VOLUMES.md"
+                     outlives them and that is the content API's subject. {auth}. Creating a \
+                     volume and rotating its token return the content bearer token, once; \
+                     reading a volume never does. See docs/VOLUMES.md"
                 ),
                 category: CapabilityCategory::Storage,
                 operations: ids(&[
@@ -806,6 +858,7 @@ impl HyperMachineOntology {
                     "create_volume",
                     "get_volume",
                     "delete_volume",
+                    "rotate_volume_token",
                 ]),
                 prerequisites: vec![running.to_string()],
                 permissions_required: perms,
@@ -924,18 +977,23 @@ impl HyperMachineOntology {
                     .to_string(),
                 description: "The content routes are outside the control plane's key check and \
                     outside the node's cluster-token gate: the volume's bearer token is the \
-                    only credential, compared in constant time. It is a random value kept in \
-                    the volume's `meta.json` (mode 0600) in the clear and is returned by \
-                    `create_volume` and by `get_volume` to any key or session with the \
-                    `volumes` scope in the volume's team, and never again by `list_volumes`. \
-                    There is no route to rotate it: the way to change it is to delete the \
-                    volume and make it again. The content routes do not look at a team, so the \
-                    token works for whoever has it. Because a volume that does not exist is \
-                    404 before the token is checked and a wrong token is 401, an \
-                    unauthenticated caller can tell which volume IDs exist (the IDs derive from \
-                    names with a non-cryptographic hash). The control plane repeats a caller's \
-                    `Authorization` header to the node for `/volumecontent` paths only, and \
-                    never a session token."
+                    only credential, compared as a SHA-256 digest in constant time. The token \
+                    is random and is returned once, by `create_volume` and by \
+                    `rotate_volume_token`; `meta.json` (mode 0600) keeps only its digest, and \
+                    volumes written before that were migrated when first read. `get_volume` \
+                    and `list_volumes` never return it (`get_volume` carries a null `token`). \
+                    `rotate_volume_token` replaces it, and the old token stops working when the \
+                    new digest is published. Rotation is management, authorised as \
+                    `get_volume` is: a key with the `volumes` scope in the volume's team, never \
+                    the content token itself. A key with that scope can therefore rotate a \
+                    volume's token and obtain a working one, so `volumes` keys still reach \
+                    every volume of their team. The content routes do not look at a team, so \
+                    the token works for whoever has it. A volume that does not exist and a \
+                    wrong or missing token are one 404 with one body, so an unauthenticated \
+                    caller cannot tell which volume IDs exist (the IDs derive from names with a \
+                    non-cryptographic hash, so a caller who knows a name can still derive its \
+                    ID). The control plane repeats a caller's `Authorization` header to the node \
+                    for `/volumecontent` paths only, and never a session token."
                     .to_string(),
                 applies_to: strings(&[
                     "volume_content",
@@ -954,15 +1012,20 @@ impl HyperMachineOntology {
                     "node_get_volume",
                     "create_volume",
                     "node_create_volume",
+                    "rotate_volume_token",
+                    "node_rotate_volume_token",
                 ]),
                 condition: "A volume's token is shared with a client, logged, or kept where \
                     others read it, or the content routes are reachable by parties who should \
                     not be able to probe for volumes."
                     .to_string(),
                 mitigation: "Treat the token as a password: do not log it, hand it only to the \
-                    one client that needs it, delete and recreate a volume whose token leaked, \
-                    use `volumes`-scoped keys sparingly (they can read tokens), and terminate TLS \
-                    in front of the control plane so the bearer token is not sent in clear."
+                    one client that needs it, rotate it with `rotate_volume_token` when it may \
+                    have leaked (the old one stops at once), use `volumes`-scoped keys sparingly \
+                    (they can rotate and so obtain any of their team's tokens), and terminate \
+                    TLS in front of the control plane so the bearer token is not sent in clear. \
+                    Tokens already printed by earlier versions, or kept in backups of \
+                    `meta.json` made before this change, are live until rotated."
                     .to_string(),
                 reference: "docs/VOLUMES.md".to_string(),
             },

@@ -436,6 +436,7 @@ pub fn router(control: Arc<ControlPlane>) -> Router {
         ))
         .route("/volumes", get(list_volumes).post(to_volume_node))
         .route("/volumes/{id}", get(to_volume_node).delete(to_volume_node))
+        .route("/volumes/{id}/token", post(to_volume_node))
         .route("/machines", get(list_machines).post(create_machine))
         .route(
             "/machines/{name}",

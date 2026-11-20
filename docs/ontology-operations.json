@@ -1477,6 +1477,12 @@
       "path": "/volumes/{id}"
     },
     {
+      "component": "hv2-cluster",
+      "id": "rotate_volume_token",
+      "method": "POST",
+      "path": "/volumes/{id}/token"
+    },
+    {
       "component": "hv2-jobs",
       "id": "jobs_list",
       "method": "GET",
@@ -2393,6 +2399,12 @@
       "id": "node_get_volume",
       "method": "GET",
       "path": "/volumes/{volumeID}"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_rotate_volume_token",
+      "method": "POST",
+      "path": "/volumes/{volumeID}/token"
     }
   ]
 }
