@@ -84,6 +84,54 @@ pub struct DispatchState {
     pub completion: Option<DispatchCompletion>,
 }
 
+/// A receipt as the HTTP API shows it: the claim without its token. The token
+/// is returned only by `claim_vm_occurrence`, to the caller that made the claim.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct DispatchReceipt {
+    pub claim: ReceiptClaim,
+    pub completion: Option<ReceiptCompletion>,
+}
+
+/// A completion without the claim token it was recorded under.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ReceiptCompletion {
+    pub origin: CompletionOrigin,
+    pub exit_code: Option<i32>,
+    pub timed_out: bool,
+    pub stdout: Option<String>,
+    pub stderr: Option<String>,
+    pub stdout_truncated: bool,
+    pub stderr_truncated: bool,
+}
+
+/// Who holds an occurrence, without the token that proves it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ReceiptClaim {
+    pub occurrence: Occurrence,
+    pub worker: String,
+}
+
+impl DispatchState {
+    /// The state with the claim token removed.
+    pub fn receipt(&self) -> DispatchReceipt {
+        DispatchReceipt {
+            claim: ReceiptClaim {
+                occurrence: self.claim.occurrence.clone(),
+                worker: self.claim.worker.clone(),
+            },
+            completion: self.completion.as_ref().map(|c| ReceiptCompletion {
+                origin: c.origin,
+                exit_code: c.exit_code,
+                timed_out: c.timed_out,
+                stdout: c.stdout.clone(),
+                stderr: c.stderr.clone(),
+                stdout_truncated: c.stdout_truncated,
+                stderr_truncated: c.stderr_truncated,
+            }),
+        }
+    }
+}
+
 impl Store {
     /// Select the oldest unclaimed VM occurrence. An unresolved predecessor
     /// blocks later work; completed receipts allow progress even after restart.

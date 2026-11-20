@@ -822,6 +822,17 @@ fn schedule_spec_schema() -> Value {
     })
 }
 
+// A receipt's completion: the result without the claim token it was recorded under.
+fn receipt_completion_schema() -> Value {
+    let mut schema = completion_schema();
+    schema["required"] = json!(["exit_code", "timed_out"]);
+    schema["properties"]
+        .as_object_mut()
+        .expect("completion properties")
+        .remove("claim_token");
+    schema
+}
+
 fn occurrence_schema() -> Value {
     json!({ "type": "object", "properties": {
         "schedule_id": { "type": "string" },
@@ -833,7 +844,7 @@ fn occurrence_schema() -> Value {
 fn completion_schema() -> Value {
     json!({ "type": "object", "required": ["claim_token", "exit_code", "timed_out"], "properties": {
         "origin": { "type": "string", "enum": ["unknown", "api_response", "operator_recorded"], "description": "on POST this is ignored and replaced with `operator_recorded`" },
-        "claim_token": { "type": "string", "description": "the token of the existing claim" },
+        "claim_token": { "type": "string", "description": "the token the claimer received when it claimed the occurrence. Receipts never show it, so the operator must already hold it" },
         "exit_code": { "type": ["integer", "null"], "minimum": 0, "maximum": 255 },
         "timed_out": { "type": "boolean" },
         "stdout": { "type": ["string", "null"], "description": "at most 65536 bytes" },
@@ -883,10 +894,10 @@ impl HyperMachineOntology {
                     "List every job's state, oldest first (sorted by id), optionally only those \
                      in one state. `state` is compared as text with `queued`, `running`, \
                      `succeeded`, `failed` or `cancelled`: any other value matches nothing \
-                     and gives an empty list, not a 400. Listing is not read-only: it first \
-                     checks for running jobs whose worker has lost its lease and requeues or \
-                     fails them, as every store operation does. The list is the whole store, \
-                     with no paging.",
+                     and gives an empty list, not a 400. This is a read: it changes nothing, so \
+                     a job whose worker has lost its lease is listed as stored (still \
+                     `running`) until a worker's claim requeues or fails it. The list is the \
+                     whole store, with no paging.",
                 )
                 .with(query_param(
                     "state",
@@ -1080,9 +1091,10 @@ impl HyperMachineOntology {
                  its time, then the watermark advances. This queues no job and runs \
                  nothing: it produces records that `hm jobs schedule dispatch` or `schedule \
                  worker` read. Repeating the call with the same clock returns nothing new \
-                 once the watermark has reached it. `now_ms` is the caller's to choose: a \
-                 value in the future commits occurrences that are not yet due, and a \
-                 committed record cannot be withdrawn. Publishers race with exclusive file \
+                 once the watermark has reached it. The horizon is always the server's wall \
+                 clock: the body has no clock field, and one that names `now_ms` is refused, \
+                 so a caller cannot commit occurrences early or skip them. A committed \
+                 record cannot be withdrawn. Publishers race with exclusive file \
                  creation, so a competing writer is a 409 to retry. An empty batch is 200 \
                  with `[]`. The body must be JSON (`{}` is enough) and unknown fields are \
                  refused.",
@@ -1093,7 +1105,6 @@ impl HyperMachineOntology {
                     "type": "object",
                     "additionalProperties": false,
                     "properties": {
-                        "now_ms": { "type": "integer", "description": "the horizon, Unix milliseconds; default the server's clock" },
                         "limit": { "type": "integer", "minimum": 1, "maximum": 1024, "default": 100 }
                     }
                 }),
@@ -1192,7 +1203,7 @@ impl HyperMachineOntology {
             )
             .about(
                 "Read the durable record of a VM occurrence's dispatch: the claim (the \
-                 occurrence, the worker that claimed it and the claim `token`) and the \
+                 occurrence and the worker that claimed it, but not the claim token) and the \
                  completion, which is null while the claim is unresolved. An unresolved \
                  claim means the guest command may be running, may have finished with no \
                  result recorded, or may never have started; the route does not execute or \
@@ -1201,8 +1212,11 @@ impl HyperMachineOntology {
                  with truncation flags, and an `origin` (`api_response` for a result the \
                  dispatcher observed, `operator_recorded` for one recorded through \
                  `jobs_record_receipt` or the CLI, `unknown` for receipts written before \
-                 the field existed). The response includes the claim token that \
-                 `jobs_record_receipt` needs. Readable after the schedule is cancelled. 404 \
+                 the field existed). The claim names the occurrence and the worker that \
+                 claimed it, and that is all: the response never includes the claim token. \
+                 The token was returned only to the claimer when it claimed, and \
+                 `jobs_record_receipt` needs it. This is a read: it changes nothing. \
+                 Readable after the schedule is cancelled. 404 \
                  when the schedule or the claim does not exist, which is every occurrence \
                  of a schedule that has no VM target.",
             )
@@ -1215,9 +1229,8 @@ impl HyperMachineOntology {
                 Some(json!({ "type": "object", "properties": {
                     "claim": { "type": "object", "properties": {
                         "occurrence": occurrence_schema(),
-                        "worker": { "type": "string" },
-                        "token": { "type": "string" } } },
-                    "completion": { "oneOf": [completion_schema(), { "type": "null" }] } } })),
+                        "worker": { "type": "string" } } },
+                    "completion": { "oneOf": [receipt_completion_schema(), { "type": "null" }] } } })),
             ))
             .answers(jobs_fail(400, "the schedule name is invalid"))
             .answers(jobs_fail(404, "no such schedule, or no claim for that occurrence"))
@@ -1237,7 +1250,8 @@ impl HyperMachineOntology {
             .about(
                 "Write the result of a VM occurrence whose claim is unresolved, from evidence \
                  the operator gathered outside this server. It checks the claim exists, that \
-                 `claim_token` is the claim's token (from `jobs_get_receipt`) and that the \
+                 `claim_token` is the claim's token (the one the claimer received; receipts \
+                 do not show it) and that the \
                  result is within bounds (an exit code of 0 to 255 or null, at most 65536 \
                  bytes per stream), then stores it as an immutable completion with \
                  `origin: operator_recorded`, whatever `origin` the body sent. Recording \
@@ -1556,8 +1570,9 @@ impl HyperMachineOntology {
                 title: "Recording a completion is an assertion that unblocks the next occurrence"
                     .to_string(),
                 description: "`jobs_record_receipt` does not look at the guest. It checks the \
-                    claim token (which `jobs_get_receipt` returns to any caller with the \
-                    server's token) and the result's bounds, and stores the result as \
+                    claim token (which the claimer received at claim time; no receipt shows \
+                    it, so only a holder of the token can record) and the result's bounds, and \
+                    stores the result as \
                     immutable. A completion is what lets the next occurrence of the schedule be \
                     claimed, so recording one for a command that is still running can start \
                     overlapping guest work; there is no retry or claim reset to undo it. An \
@@ -1574,7 +1589,9 @@ impl HyperMachineOntology {
                 condition: "A claim is unresolved and someone considers recording a result."
                     .to_string(),
                 mitigation: "Establish independently that the original execution has finished \
-                    and keep that evidence; do not record a result to get past a claim."
+                    and keep that evidence; do not record a result to get past a claim. The \
+                    claim token is never returned by a read, so recording needs it from the \
+                    claimer's own record, not from the API."
                     .to_string(),
                 reference: "docs/JOBS.md".to_string(),
             },

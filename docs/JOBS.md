@@ -89,8 +89,9 @@ times before this was changed. It now passes on Windows and Linux, and so does a
 a claim.
 
 **Leases.** A running job's worker renews its lease every 5 seconds. A job whose lease is older
-than `--lease-secs` (at least 15) has lost its worker, and the next store operation that
-notices requeues it, or fails it once `max_attempts` is spent.
+than `--lease-secs` (at least 15) has lost its worker. The next claim by a worker, or
+a local `hm jobs list`, requeues it or fails it once `max_attempts` is spent. The REST
+listing only reads, so it never does this.
 
 The lease names the attempt. A worker that was only slow, and finds its job requeued, kills
 its own run rather than running alongside its successor.
@@ -109,7 +110,7 @@ half of one.
 | Request | Result |
 |---|---|
 | `POST /api/v1/jobs` with a spec | `201 {"id": ...}` |
-| `GET /api/v1/jobs[?state=running]` | the job states, oldest first |
+| `GET /api/v1/jobs[?state=running]` | the job states, oldest first; a read only, so a lost worker's job stays `running` until a claim requeues or fails it |
 | `GET /api/v1/jobs/{id}` | `{"state": ..., "spec": ...}` |
 | `GET /api/v1/jobs/{id}/logs?stream=stdout\|stderr[&follow=true]` | the log as text; with `follow`, streamed until the job ends |
 | `POST /api/v1/jobs/{id}/cancel` | `202` with the job's state |
@@ -204,7 +205,7 @@ bearer-token requirement applied to every schedule route:
 | `POST /api/v1/schedules/{id}` with an interval spec | `201 {"id": ...}`; duplicate IDs return `409` |
 | `GET /api/v1/schedules?after=NAME&limit=100` | Schedule names in lexical order after an exclusive name cursor |
 | `GET /api/v1/schedules/{id}` | Schedule and `publication_through_ms` |
-| `POST /api/v1/schedules/{id}/publish` with `{"limit":100}` | One bounded batch of occurrence records; optional `now_ms` overrides the wall clock |
+| `POST /api/v1/schedules/{id}/publish` with `{"limit":100}` | One bounded batch of occurrence records up to the server's wall clock; a `now_ms` field is refused as an unknown field |
 | `GET /api/v1/schedules/{id}/occurrences?after_ms=...&limit=100` | A page of committed records after an exclusive cursor |
 | `POST /api/v1/schedules/{id}/cancel` | `200 {"id": ..., "cancelled": true}`; preserves history |
 
@@ -214,15 +215,19 @@ files, and scans the schedule directory while retaining at most one page of name
 in memory. The CLI takes the same exclusive cursor as `schedule list --after NAME`.
 Pages are not a frozen snapshot during concurrent creation; refresh from the
 beginning to discover names inserted before a previous cursor.
-`GET /api/v1/schedules/{id}/receipts/{scheduled_ms}` returns the same durable
-claim and optional completion as `schedule receipt`. It requires the jobs
-service bearer token when configured. A claim without completion returns 200
+`GET /api/v1/schedules/{id}/receipts/{scheduled_ms}` returns the claim's occurrence
+and worker, and the optional completion. It never returns the claim token: the
+token goes to the claimer when it claims, and a receipt only shows that a claim
+exists. (`schedule receipt` on the host still prints the token from the local
+store, which holds it in any case.) It requires the jobs service bearer token
+when configured. A claim without completion returns 200
 with `completion: null`; a missing claim returns 404. Results retain bounded
 stdout/stderr and truncation flags, survive store reopening, and remain readable
 after schedule cancellation. GET does not execute jobs or establish that an unresolved guest command has
-stopped. `POST` to the same receipt path records an operator-verified completion
-using the `record-result` JSON schema and the configured bearer token. It checks
-the existing claim token, result bounds and immutable replay rules in a blocking
+stopped, and it changes nothing. `POST` to the same receipt path records an operator-verified completion
+using the `record-result` JSON schema and the bearer token. The body's `claim_token`
+must be the token the claimer received, which no receipt shows. It checks
+the claim token, result bounds and immutable replay rules in a blocking
 task. Success is 200 with `completion_recorded: true`; a missing claim is 404,
 a wrong claim token or changed result is 409, and invalid result bounds are 400.
 As with CLI recovery, the operator must independently verify the original
@@ -342,7 +347,8 @@ hm jobs --store DIR schedule record-result NAME SCHEDULED_MS verified-result.jso
 ```
 
 The JSON uses the completion receipt schema, including the exact `claim_token`
-from `schedule receipt`, `exit_code` (0-255 or null), `timed_out`, optional
+that the claimer received when it claimed (the local `schedule receipt` prints it;
+the HTTP receipt does not), `exit_code` (0-255 or null), `timed_out`, optional
 `stdout`/`stderr`, and optional truncation flags. For example:
 
 ```json

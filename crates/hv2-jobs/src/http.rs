@@ -130,14 +130,17 @@ async fn schedule_detail(State(api): State<Api>, Path(id): Path<String>) -> Resp
     .await
 }
 
+// The claim token is not part of a receipt: it went to the claimer when the
+// claim was made, and POST needs it. Showing it here would let any reader of
+// this GET act as that worker.
 async fn schedule_receipt(
     State(api): State<Api>,
     Path((id, scheduled_ms)): Path<(String, u64)>,
 ) -> Response {
     schedule_operation(StatusCode::OK, move || {
         Ok(
-            serde_json::to_value(api.store.vm_dispatch_state(&id, scheduled_ms)?)
-                .expect("dispatch state serialization"),
+            serde_json::to_value(api.store.vm_dispatch_state(&id, scheduled_ms)?.receipt())
+                .expect("dispatch receipt serialization"),
         )
     })
     .await
@@ -187,10 +190,12 @@ async fn schedule_list(State(api): State<Api>, Query(query): Query<ScheduleListQ
     .await
 }
 
+// There is no `now_ms` here: the horizon is always this server's clock. A
+// request that names one is refused by deny_unknown_fields, not silently given
+// a different time. Tests inject time through Store::materialize_interval.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct PublishRequest {
-    now_ms: Option<u64>,
     #[serde(default = "batch_limit")]
     limit: usize,
 }
@@ -201,11 +206,9 @@ async fn schedule_publish(
     Json(request): Json<PublishRequest>,
 ) -> Response {
     schedule_operation(StatusCode::OK, move || {
-        let records = api.store.materialize_interval(
-            &id,
-            request.now_ms.unwrap_or_else(crate::now_ms),
-            request.limit,
-        )?;
+        let records = api
+            .store
+            .materialize_interval(&id, crate::now_ms(), request.limit)?;
         Ok(json!(records))
     })
     .await
@@ -246,8 +249,9 @@ struct ListQuery {
     state: Option<String>,
 }
 
+// A GET: it must not requeue or fail lost jobs, so it reads without reaping.
 async fn list(State(api): State<Api>, Query(q): Query<ListQuery>) -> Response {
-    match api.store.list() {
+    match api.store.list_states() {
         Ok(all) => Json(
             all.into_iter()
                 .filter(|s| {
@@ -454,7 +458,9 @@ mod tests {
             .0,
             StatusCode::CREATED
         );
-        let body = r#"{"now_ms":1793527200000,"limit":2}"#;
+        // The horizon is the server's clock. The first two occurrences are due
+        // on any date after the second one, so the expected records hold.
+        let body = r#"{"limit":2}"#;
         let (status, records) = call(
             &app,
             "POST",
@@ -532,8 +538,14 @@ mod tests {
         }
         let (status, body) = call(&app, "GET", path, None, token).await;
         assert_eq!(status, StatusCode::OK);
+        assert!(
+            !body.contains(&claim.token),
+            "receipt leaked the token: {body}"
+        );
         let state: serde_json::Value = serde_json::from_str(&body).unwrap();
-        assert_eq!(state["claim"]["token"], claim.token);
+        assert!(state["claim"].get("token").is_none(), "{body}");
+        assert_eq!(state["claim"]["worker"], "worker");
+        assert_eq!(state["claim"]["occurrence"]["scheduled_ms"], 100);
         assert!(state["completion"].is_null());
         let mut result = json!({"origin":"api_response","claim_token":"wrong","exit_code":7,"timed_out":false,
             "stdout":"durable output","stderr":"","stdout_truncated":false});
@@ -603,6 +615,10 @@ mod tests {
         );
         let (status, body) = call(&reopened, "GET", path, None, token).await;
         assert_eq!(status, StatusCode::OK);
+        assert!(
+            !body.contains(&claim.token),
+            "receipt leaked the token: {body}"
+        );
         let state: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert_eq!(state["completion"]["origin"], "operator_recorded");
         assert_eq!(state["completion"]["stdout"], "durable output");
@@ -664,11 +680,28 @@ mod tests {
                 .0,
             StatusCode::CONFLICT
         );
+        // A caller-chosen horizon is refused (422, an unknown field), and commits nothing.
+        assert_eq!(
+            call(
+                &app,
+                "POST",
+                "/api/v1/schedules/test/publish",
+                Some(r#"{"now_ms":135,"limit":2}"#),
+                token
+            )
+            .await
+            .0,
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert!(store
+            .committed_interval_occurrences("test", None, 1)
+            .unwrap()
+            .is_empty());
         let (status, body) = call(
             &app,
             "POST",
             "/api/v1/schedules/test/publish",
-            Some(r#"{"now_ms":135,"limit":2}"#),
+            Some(r#"{"limit":2}"#),
             token,
         )
         .await;
@@ -747,6 +780,110 @@ mod tests {
             .0,
             StatusCode::CONFLICT
         );
+    }
+
+    fn read_tree(
+        root: &std::path::Path,
+    ) -> std::collections::BTreeMap<std::path::PathBuf, Vec<u8>> {
+        let mut files = std::collections::BTreeMap::new();
+        let mut pending = vec![root.to_path_buf()];
+        while let Some(dir) = pending.pop() {
+            for entry in std::fs::read_dir(&dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else {
+                    files.insert(path.clone(), std::fs::read(&path).unwrap());
+                }
+            }
+        }
+        files
+    }
+
+    #[tokio::test]
+    async fn get_routes_leave_the_store_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::open(dir.path()).unwrap();
+        // Every running job is already past its lease, so any reaping a GET
+        // did would requeue or fail it.
+        store.lease = Duration::ZERO;
+        let spec = serde_json::from_str::<JobSpec>(r#"{"command":["x"]}"#).unwrap();
+        store.submit(&spec).unwrap();
+        let running = store.claim("lost-worker", &[]).unwrap().unwrap().id;
+        let schedule = json!({"first_ms":100,"every_ms":10,
+            "vm":{"sandbox_id":"guest","connection_profile":"local","timeout_secs":30},
+            "job":{"command":["true"]}});
+        store
+            .create_interval_schedule("snap", &serde_json::from_value(schedule).unwrap())
+            .unwrap();
+        store.materialize_interval("snap", 100, 1).unwrap();
+        store.claim_vm_occurrence("snap", 100, "worker").unwrap();
+        let app = router(store.clone(), None);
+        let before = read_tree(dir.path());
+        for _ in 0..2 {
+            for uri in [
+                "/api/v1/jobs".to_string(),
+                "/api/v1/jobs?state=running".to_string(),
+                format!("/api/v1/jobs/{running}"),
+                format!("/api/v1/jobs/{running}/logs"),
+                "/api/v1/schedules".to_string(),
+                "/api/v1/schedules/snap".to_string(),
+                "/api/v1/schedules/snap/occurrences".to_string(),
+                "/api/v1/schedules/snap/receipts/100".to_string(),
+            ] {
+                let (status, body) = call(&app, "GET", &uri, None, None).await;
+                assert_eq!(status, StatusCode::OK, "GET {uri}: {body}");
+            }
+        }
+        assert_eq!(read_tree(dir.path()), before, "a GET changed the store");
+        let (_, body) = call(&app, "GET", "/api/v1/jobs?state=running", None, None).await;
+        assert!(body.contains(&running), "{body}");
+    }
+
+    #[tokio::test]
+    async fn publish_horizon_is_the_servers_clock() {
+        let dir = tempfile::tempdir().unwrap();
+        let (store, app) = app(dir.path(), None);
+        let spec = format!(
+            r#"{{"first_ms":{},"every_ms":10,"job":{{"command":["x"]}}}}"#,
+            crate::now_ms() + 3_600_000
+        );
+        assert_eq!(
+            call(&app, "POST", "/api/v1/schedules/later", Some(&spec), None)
+                .await
+                .0,
+            StatusCode::CREATED
+        );
+        // The first occurrence is an hour away by the server's clock.
+        let (status, body) = call(
+            &app,
+            "POST",
+            "/api/v1/schedules/later/publish",
+            Some(r#"{"limit":5}"#),
+            None,
+        )
+        .await;
+        assert_eq!((status, body.as_str()), (StatusCode::OK, "[]"));
+        // A request-supplied clock is refused, not used.
+        for horizon in ["0", "18446744073709551615"] {
+            let body = format!(r#"{{"now_ms":{horizon}}}"#);
+            assert_eq!(
+                call(
+                    &app,
+                    "POST",
+                    "/api/v1/schedules/later/publish",
+                    Some(&body),
+                    None
+                )
+                .await
+                .0,
+                StatusCode::UNPROCESSABLE_ENTITY
+            );
+        }
+        assert!(store
+            .committed_interval_occurrences("later", None, 1)
+            .unwrap()
+            .is_empty());
     }
 
     #[tokio::test]

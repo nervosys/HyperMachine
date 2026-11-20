@@ -404,9 +404,17 @@ impl Store {
         write_json(&self.job_dir(&state.id).join("state.json"), state)
     }
 
-    /// Every job, oldest first.
+    /// Every job, oldest first, after first requeuing or failing the jobs whose
+    /// worker has lost its lease. This is the CLI's listing.
     pub fn list(&self) -> Result<Vec<JobState>> {
         self.reap_lost();
+        self.list_states()
+    }
+
+    /// Every job, oldest first, as stored. Reads only: a lost worker's job is
+    /// still shown as running until a claim reaps it. The HTTP listing uses
+    /// this, because a GET must not change state.
+    pub fn list_states(&self) -> Result<Vec<JobState>> {
         let mut ids: Vec<String> = std::fs::read_dir(self.root.join("jobs"))?
             .filter_map(|e| e.ok()?.file_name().into_string().ok())
             .collect();
