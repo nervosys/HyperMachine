@@ -29,10 +29,9 @@ use hv2_agent::AgentVM;
 use hv2_guest_agent::{TemplateDefaults, TEMPLATE_DEFAULTS_PATH};
 
 use super::{
-    api_error, bring_up, build_from_image, caller_team, create_park, new_access_token,
-    policy_from, reserve, sizes_of, snapshots, token_digest, valid_template_name, AppState, Arc,
-    Deserialize, IntoResponse, Json, NetworkSpec, Path, Query, Response, Running, Sizes, State,
-    StatusCode,
+    api_error, bring_up, build_from_image, caller_team, create_park, new_access_token, policy_from,
+    reserve, sizes_of, snapshots, token_digest, valid_template_name, AppState, Arc, Deserialize,
+    IntoResponse, Json, NetworkSpec, Path, Query, Response, Running, Sizes, State, StatusCode,
 };
 use crate::env_vars::{join_guest, Member, Unpack};
 use crate::oci::Credentials;
