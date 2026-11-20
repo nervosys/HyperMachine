@@ -130,7 +130,10 @@ lists it, starts sandboxes from it (an administrator cannot start a teamless
 copy either) and deletes it. Snapshot names are one namespace, so a name
 another team holds answers 409. Operator templates (`base`, images built by an
 administrator) belong to no team: every team may start from them, and only
-administrators delete them.
+administrators delete them. A node checks each delete against the team the
+control plane sends with it, so a team's delete reaches the node only for its
+own snapshots; a call to a node with the cluster token and no team is an
+administrator's, and deletes any.
 
 ## Sharing a snapshot with another team
 

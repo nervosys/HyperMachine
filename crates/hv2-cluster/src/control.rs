@@ -3212,6 +3212,17 @@ async fn on_every_node(
     method: Method,
     path: &str,
 ) -> Result<Vec<(String, u16, Value)>, (StatusCode, String)> {
+    on_every_node_for(control, method, path, None).await
+}
+
+/// As [`on_every_node`], for the team `team` acts for when there is one: each
+/// node is told it, as it is for every team call, and checks the call itself.
+async fn on_every_node_for(
+    control: &ControlPlane,
+    method: Method,
+    path: &str,
+    team: Option<&crate::ownership::TeamId>,
+) -> Result<Vec<(String, u16, Value)>, (StatusCode, String)> {
     if !forwards_verbatim(path) {
         return Err((StatusCode::BAD_REQUEST, "invalid request path".into()));
     }
@@ -3225,6 +3236,9 @@ async fn on_every_node(
         let mut request = control
             .http
             .request(method.clone(), format!("{}{path}", node.api));
+        if let Some(team) = team {
+            request = request.header(crate::ownership::TEAM_HEADER, team.as_str());
+        }
         if let Some(token) = &control.config.cluster_token {
             request = request.header(CLUSTER_TOKEN_HEADER, token);
         }
@@ -3442,7 +3456,9 @@ async fn delete_template(
         return api_error(StatusCode::BAD_REQUEST, "invalid snapshot ID");
     };
     let path = url.path().to_owned();
-    let answers = match on_every_node(&control, Method::DELETE, &path).await {
+    // The node checks the delete against the team it is told, as it does its
+    // own snapshots: an administrator's goes with no team.
+    let answers = match on_every_node_for(&control, Method::DELETE, &path, team.0.as_ref()).await {
         Ok(answers) => answers,
         Err((status, message)) => return api_error(status, message),
     };

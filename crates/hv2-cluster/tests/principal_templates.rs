@@ -151,6 +151,16 @@ impl FakeNode {
 
     /// Say which templates the node offers, as its heartbeat does.
     async fn offer(&self, store: &Arc<dyn ClusterStore>, templates: &[String]) {
+        self.offer_with(store, templates, BTreeMap::new()).await;
+    }
+
+    /// As [`Self::offer`], with each template's owner as the node reports it.
+    async fn offer_with(
+        &self,
+        store: &Arc<dyn ClusterStore>,
+        templates: &[String],
+        template_metadata: BTreeMap<String, hv2_cluster::model::TemplateInfo>,
+    ) {
         let mut names = vec!["base".to_owned()];
         names.extend(templates.iter().cloned());
         store
@@ -165,7 +175,7 @@ impl FakeNode {
                     version: "fixture".into(),
                     jwk: None,
                     templates: names,
-                    template_metadata: Default::default(),
+                    template_metadata,
                 },
                 Duration::from_secs(60),
             )
@@ -630,6 +640,92 @@ async fn a_principals_template_is_its_own() {
             .status(Method::DELETE, &format!("/templates/{a}app"), "admin-key")
             .await,
         204
+    );
+}
+
+/// A delete is told to the node with the team it is for: a team's and a
+/// principal's carry theirs, and an administrator's carries none, so the node
+/// can refuse what is not theirs. Another scope's name is 404 and is not sent.
+#[tokio::test]
+async fn a_node_is_told_whose_template_a_delete_is() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let node = FakeNode::start().await;
+    let (a, b) = (scope("alice"), scope("bob"));
+    let red_snapshot = "snap-red";
+    let mut metadata = BTreeMap::new();
+    metadata.insert(
+        red_snapshot.to_owned(),
+        hv2_cluster::model::TemplateInfo {
+            snapshot: true,
+            cpu_count: 1,
+            memory_mb: 1,
+            team: Some(TeamId::parse("red").unwrap()),
+            shared_with: Vec::new(),
+        },
+    );
+    node.offer_with(
+        &store,
+        &[
+            format!("{a}app"),
+            format!("{b}app"),
+            red_snapshot.to_owned(),
+        ],
+        metadata,
+    )
+    .await;
+    let plane = Plane::new(store).await;
+    let team_of = |principal: &str| {
+        TeamId::personal(&OwnerId::parse(principal).unwrap())
+            .as_str()
+            .to_owned()
+    };
+
+    let before = node.calls().len();
+    assert_eq!(
+        plane
+            .status(Method::DELETE, "/templates/app", "alice-key")
+            .await,
+        204
+    );
+    assert_eq!(
+        plane
+            .status(Method::DELETE, &format!("/templates/{a}app"), "admin-key")
+            .await,
+        204
+    );
+    assert_eq!(
+        plane
+            .status(Method::DELETE, "/templates/snap-red", "red-key")
+            .await,
+        204
+    );
+    for (key, path) in [
+        ("bob-key", format!("/templates/{a}app")),
+        ("red-key", format!("/templates/{b}app")),
+        ("alice-key", "/templates/snap-red".to_owned()),
+    ] {
+        assert_eq!(
+            plane.status(Method::DELETE, &path, key).await,
+            404,
+            "{key} {path}"
+        );
+    }
+    let told: Vec<(String, Option<String>)> = node
+        .teams()
+        .into_iter()
+        .skip(before)
+        .filter(|(method, _, _)| method == "DELETE")
+        .map(|(_, path, team)| (path, team))
+        .collect();
+    assert_eq!(
+        told,
+        [
+            (format!("/templates/{a}app"), Some(team_of("alice"))),
+            (format!("/templates/{a}app"), None),
+            ("/templates/snap-red".to_owned(), Some("red".to_owned())),
+        ],
+        "{:?}",
+        node.teams()
     );
 }
 

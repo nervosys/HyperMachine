@@ -322,8 +322,12 @@ impl HyperMachineOntology {
                  has a snapshot store, are removed and the cluster is told at once. \
                  Sandboxes already created from it run on. Only snapshots are deleted: a \
                  template built from an image is 409 and stays, and there is no way to \
-                 delete one through the API. This route does not check whose snapshot it is; \
-                 the control plane does."
+                 delete one through the API. The control plane sends the caller's team with \
+                 the delete, and this route deletes only what that team may: its own \
+                 snapshots, or a principal's own scope's templates by their scoped names. \
+                 Anything else of a team is 404, as a missing name is. With no team sent -- \
+                 an administrator, or a caller holding only the cluster token -- any snapshot \
+                 is deleted."
             } else {
                 "Delete a snapshot wherever it is offered: the control plane sends the \
                  delete to every live node and answers 204 if any removed it. A team \

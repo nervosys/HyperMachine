@@ -16,7 +16,7 @@ use super::{
     api_error, now_ms, transition_lock, valid_template_name, AppState, Arc, BTreeMap, Deserialize,
     Duration, IntoResponse, Json, Path, Query, Response, Serialize, State, StatusCode,
 };
-use hv2_cluster::ownership::TeamId;
+use hv2_cluster::ownership::{RequestTeam, TeamId};
 use serde_json::json;
 
 /// A snapshot offered as a template.
@@ -442,14 +442,59 @@ pub(crate) async fn list(
     Json(listed).into_response()
 }
 
+/// Whether a caller acting for `caller` may delete the snapshot `name`, which
+/// belongs to `owner`: a team deletes its own, and a teamless principal its
+/// own scope's templates by their scoped names. No caller (an administrator)
+/// deletes any. Mirrors the control plane's rule, which names the same
+/// scopes, so that a node refuses what the control plane would.
+pub(crate) fn deletable_by(name: &str, owner: Option<&TeamId>, caller: Option<&TeamId>) -> bool {
+    let Some(caller) = caller else {
+        return true;
+    };
+    if !RequestTeam(Some(caller.clone())).may_name_template(name) {
+        return false;
+    }
+    match owner {
+        Some(owner) => owner == caller,
+        // An operator's template, or a build's: no owner on the node, so
+        // only a principal's own scope's, by the name it was built under.
+        None => caller
+            .template_prefix()
+            .is_some_and(|prefix| name.starts_with(&prefix)),
+    }
+}
+
 /// `DELETE /templates/{id}`: delete a snapshot. Sandboxes already created
 /// from it run on; they copied what they needed out of it.
+///
+/// The control plane sends the caller's team with the delete, as it does
+/// with every team call, and a call with a team may delete only what
+/// [`deletable_by`] allows. Another scope's snapshot is answered as a missing
+/// one is, and so is an image-built template, so a scoped caller learns no
+/// names. With no team (an administrator) the delete is as it always was.
 pub(crate) async fn delete(
     State(state): State<Arc<AppState>>,
+    headers: axum::http::HeaderMap,
     Path(template): Path<String>,
 ) -> Response {
     let name = untagged(&template).to_string();
-    let Some(removed) = state.snapshots.write().remove(&name) else {
+    let caller = match super::caller_team(&state, &headers) {
+        Ok(caller) => caller,
+        Err(response) => return response,
+    };
+    // Checked and removed under one lock, so nothing changes between.
+    let removed = {
+        let mut snapshots = state.snapshots.write();
+        if caller.is_some()
+            && !snapshots
+                .get(&name)
+                .is_some_and(|s| deletable_by(&name, s.team.as_ref(), caller.as_ref()))
+        {
+            return api_error(StatusCode::NOT_FOUND, format!("no snapshot {name}"));
+        }
+        snapshots.remove(&name)
+    };
+    let Some(removed) = removed else {
         return if state.initrds.read().contains_key(&name) {
             api_error(
                 StatusCode::CONFLICT,
@@ -646,6 +691,58 @@ mod tests {
         assert!(!usable_by(&reds, None));
         reds.shared_with.write().clear();
         assert!(!usable_by(&reds, Some(&team("blue"))));
+    }
+
+    /// A team deletes its own snapshots and no other team's; a principal its
+    /// own scope's templates, by their scoped names, and never another's; an
+    /// administrator any.
+    #[test]
+    fn a_team_deletes_its_own_snapshots_and_a_principal_its_own_templates() {
+        let team = |t: &str| TeamId::parse(t).unwrap();
+        let scope_a = TeamId::personal(&hv2_cluster::ownership::OwnerId::parse("alice").unwrap());
+        let scope_b = TeamId::personal(&hv2_cluster::ownership::OwnerId::parse("bob").unwrap());
+        let (a, b) = (
+            scope_a.template_prefix().unwrap(),
+            scope_b.template_prefix().unwrap(),
+        );
+        let (red, blue) = (team("red"), team("blue"));
+
+        // A team's snapshot: its own team's, and nobody else's.
+        assert!(deletable_by("snap", Some(&red), Some(&red)));
+        assert!(!deletable_by("snap", Some(&red), Some(&blue)));
+        assert!(!deletable_by("snap", Some(&red), Some(&scope_a)));
+        assert!(deletable_by("snap", Some(&red), None));
+
+        // A principal's build under its scope: its own, by the scoped name.
+        let mine = format!("{a}app");
+        assert!(deletable_by(&mine, None, Some(&scope_a)));
+        assert!(!deletable_by(&mine, None, Some(&scope_b)));
+        assert!(!deletable_by(&mine, None, Some(&red)));
+        assert!(deletable_by(&mine, None, None));
+
+        // Another scope's name, raw, is refused to every caller but an administrator,
+        // even when the owner recorded is the caller's own.
+        let theirs = format!("{b}app");
+        assert!(!deletable_by(&theirs, None, Some(&scope_a)));
+        assert!(!deletable_by(&theirs, None, Some(&red)));
+        assert!(deletable_by(&theirs, None, Some(&scope_b)));
+        assert!(deletable_by(&theirs, None, None));
+        assert!(!deletable_by(
+            &format!("{a}app"),
+            Some(&scope_b),
+            Some(&scope_a)
+        ));
+
+        // A team may not reach a scope's name: a team has no scope to name it by.
+        assert!(!deletable_by(&theirs, Some(&scope_b), Some(&red)));
+        assert!(!deletable_by(&mine, Some(&scope_a), Some(&red)));
+
+        // An operator's template, or a build made before scopes: no owner, so
+        // only an administrator deletes it; a scoped caller may not.
+        assert!(!deletable_by("base", None, Some(&red)));
+        assert!(!deletable_by("app", None, Some(&scope_a)));
+        assert!(deletable_by("base", None, None));
+        assert!(deletable_by("app", None, None));
     }
 
     /// A size is kept with a snapshot of a sandbox of its own, and a record
