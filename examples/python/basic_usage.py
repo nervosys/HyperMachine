@@ -214,7 +214,7 @@ async def main():
         print(f"Response: {e.response.text}")
     except httpx.ConnectError:
         print("\nError: Could not connect to HyperMachine API")
-        print("Make sure the server is running: hm serve --port 8080")
+        print("Make sure the server is running: hm serve --rest-port 8080")
     finally:
         await client.close()
 

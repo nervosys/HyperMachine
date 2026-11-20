@@ -367,6 +367,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`hm-tui`, a new terminal dashboard** for Type 2 VMs and sandbox VMs over the same APIs `hm-gui` and `hm sandbox vm` already use; and a Sandboxes tab for `hm-gui`, which previously showed only Type 2 VMs.
 
 ### Security
+- **`hm serve` listened on `0.0.0.0` with no TLS, left every read open without `HM_API_KEY`, and let
+  a client evade its rate limit by changing `X-Forwarded-For`.** It now binds `127.0.0.1` by default
+  (new `--bind ADDR`). With no `HM_API_KEY`, a non-loopback bind is refused unless
+  `--allow-unauthenticated` is passed, which prints a warning. With a key set, every route except
+  `GET /health` requires it, not only the six mutating ones. The rate limiter is keyed on the socket
+  peer; `X-Forwarded-For` is honoured only from the new repeatable `--trusted-proxy ADDR` peers. It
+  is still plain HTTP with no TLS, so expose it only behind a TLS-terminating proxy. Anything that
+  reached `hm serve` from another host must now pass `--bind` and either `HM_API_KEY` or
+  `--allow-unauthenticated`.
 - **`hv2 serve` listened on `0.0.0.0` with no authentication by default, and an API key could not
   be told from any other.** The REST and gRPC servers now bind `127.0.0.1` unless told otherwise,
   and with no API key they refuse to start on any other address unless `--allow-unauthenticated`

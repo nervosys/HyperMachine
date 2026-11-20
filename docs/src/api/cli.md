@@ -140,14 +140,24 @@ REST and gRPC surfaces:
 hm serve [OPTIONS]
 
 Options:
-      --grpc-port <GRPC_PORT>  gRPC port [default: 50051]
-      --rest-port <REST_PORT>  REST API port [default: 8080]
-  -v, --verbose                Enable verbose logging
+      --grpc-port <GRPC_PORT>        gRPC port [default: 50051]
+      --rest-port <REST_PORT>        REST API port [default: 8080]
+      --bind <ADDR>                  Address to bind [default: 127.0.0.1]
+      --allow-unauthenticated        Serve a non-loopback address with no HM_API_KEY
+      --trusted-proxy <ADDR>         Proxy whose X-Forwarded-For is honoured for rate limiting (repeatable)
+  -v, --verbose                      Enable verbose logging
 
 Examples:
-  hm mcp serve --api-key "secret"
-  hm mcp serve --port 8443 --tls-cert cert.pem --tls-key key.pem
+  hm serve                                          # 127.0.0.1:8080, no key needed
+  HM_API_KEY="$(openssl rand -hex 32)" hm serve --bind 0.0.0.0
+  hm serve --bind 0.0.0.0 --allow-unauthenticated   # refused unless you opt in
 ```
+
+`hm serve` is plain HTTP with no TLS. It binds loopback by default. If you expose it, set `HM_API_KEY` and put a TLS-terminating proxy in front of it, and have that proxy append the client address to `X-Forwarded-For`.
+
+- With `HM_API_KEY` set, every route except `GET /health` requires `Authorization: Bearer <HM_API_KEY>`.
+- With no key, a non-loopback `--bind` is refused at startup unless `--allow-unauthenticated` is passed, which prints a warning.
+- The rate limit (100 requests per minute per client) is keyed on the socket peer. `X-Forwarded-For` is read only from peers listed in `--trusted-proxy`, so a client cannot change its bucket by changing the header.
 
 #### List Tools
 

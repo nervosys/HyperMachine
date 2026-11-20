@@ -412,8 +412,11 @@ plane's routers, so every interface the five components serve is described
   context. On the control plane no key scope covers `/environments` or
   `/usage`, so only an administrator (or an open plane) reaches them.
 - **hm-cli** (`hm_cli_local_vms`, `hm_cli_tool_calls`, `hm_cli_agent_discovery`,
-  `hm_cli_mcp_http`): `hm serve` binds `0.0.0.0` with no TLS and checks
-  `HM_API_KEY` on its six mutating routes only; its reads stay open.
+  `hm_cli_mcp_http`): `hm serve` binds `127.0.0.1` by default (`--bind`) and is
+  plain HTTP with no TLS. It refuses a non-loopback bind without `HM_API_KEY`
+  unless `--allow-unauthenticated` is passed, requires the key on every route
+  except `/health`, and keys its rate limit on the socket peer, honouring
+  `X-Forwarded-For` only from `--trusted-proxy` addresses.
   `hm sandbox vm mcp-http` is loopback only and needs a token of 32 to 4096
   bytes and an allowed `Origin`.
 - **hv2-jobs** (`jobs_queue`, `jobs_schedules`, `jobs_vm_receipts`): an optional

@@ -68,6 +68,9 @@ enum Commands {
     },
 
     /// Start API server (serves both T1 and T2)
+    ///
+    /// Plain HTTP with no TLS. Binds 127.0.0.1 by default. To expose it, set
+    /// HM_API_KEY and put a TLS-terminating proxy in front of it.
     Serve {
         /// gRPC port
         #[arg(long, default_value = "50051")]
@@ -76,6 +79,21 @@ enum Commands {
         /// REST API port
         #[arg(long, default_value = "8080")]
         rest_port: u16,
+
+        /// Address to bind. Loopback by default; a non-loopback address needs HM_API_KEY
+        /// or --allow-unauthenticated.
+        #[arg(long, default_value = "127.0.0.1", value_name = "ADDR")]
+        bind: std::net::IpAddr,
+
+        /// Serve a non-loopback address even though HM_API_KEY is not set. Every route
+        /// then answers anyone who can reach the port.
+        #[arg(long)]
+        allow_unauthenticated: bool,
+
+        /// Proxy address whose X-Forwarded-For is honoured for rate limiting. Repeatable.
+        /// Other peers are rate-limited by socket address, whatever header they send.
+        #[arg(long = "trusted-proxy", value_name = "ADDR")]
+        trusted_proxy: Vec<std::net::IpAddr>,
     },
 
     /// A durable queue of sandboxed host jobs, and the workers that run them
@@ -321,7 +339,19 @@ async fn main() -> Result<()> {
         Commands::Serve {
             grpc_port,
             rest_port,
-        } => handle_serve(grpc_port, rest_port).await?,
+            bind,
+            allow_unauthenticated,
+            trusted_proxy,
+        } => {
+            handle_serve(
+                grpc_port,
+                rest_port,
+                bind,
+                allow_unauthenticated,
+                trusted_proxy,
+            )
+            .await?;
+        }
         Commands::Jobs { store, command } => {
             let code = hm_cli::jobs_cmd::run(&store, command).await?;
             std::process::exit(code);
@@ -937,15 +967,47 @@ async fn handle_t2(command: T2Commands) -> Result<()> {
 }
 
 /// Handle API server startup
-async fn handle_serve(grpc_port: u16, rest_port: u16) -> Result<()> {
+async fn handle_serve(
+    grpc_port: u16,
+    rest_port: u16,
+    bind: std::net::IpAddr,
+    allow_unauthenticated: bool,
+    trusted_proxy: Vec<std::net::IpAddr>,
+) -> Result<()> {
     println!("{}", "Starting HyperMachine API servers...".cyan().bold());
 
     // Note: gRPC requires protoc - using MCP HTTP server instead
     let _ = grpc_port; // gRPC disabled until protoc available
 
+    let api_key = std::env::var("HM_API_KEY").ok().filter(|k| !k.is_empty());
+    let addr = std::net::SocketAddr::new(bind, rest_port);
+
+    // Refuse before printing a banner that says the server is up.
+    mcp_server::check_exposure(bind, api_key.as_deref(), allow_unauthenticated)?;
+    if !bind.is_loopback() && api_key.is_none() {
+        eprintln!(
+            "{}",
+            format!(
+                "WARNING: serving {addr} with no HM_API_KEY (--allow-unauthenticated). \
+                 Every route is open to anyone who can reach this port."
+            )
+            .yellow()
+            .bold()
+        );
+    }
+
     println!(
-        "  MCP HTTP API: {}",
-        format!("http://0.0.0.0:{}", rest_port).green()
+        "  MCP HTTP API: {} {}",
+        format!("http://{}", addr).green(),
+        "(plain HTTP, no TLS)".yellow()
+    );
+    println!(
+        "  Auth: {}",
+        if api_key.is_some() {
+            "HM_API_KEY required on every route except /health"
+        } else {
+            "none (HM_API_KEY not set)"
+        }
     );
     println!();
     println!("{}", "Endpoints:".bold());
@@ -960,8 +1022,13 @@ async fn handle_serve(grpc_port: u16, rest_port: u16) -> Result<()> {
     println!("  GET  /health         - Health check");
     println!();
 
-    let addr: std::net::SocketAddr = format!("0.0.0.0:{}", rest_port).parse()?;
-    mcp_server::start_mcp_server(addr).await
+    mcp_server::start_mcp_server(mcp_server::ServeConfig {
+        addr,
+        api_key,
+        allow_unauthenticated,
+        trusted_proxies: trusted_proxy,
+    })
+    .await
 }
 
 /// Display system and version information
@@ -1134,9 +1201,15 @@ mod tests {
             Commands::Serve {
                 grpc_port,
                 rest_port,
+                bind,
+                allow_unauthenticated,
+                trusted_proxy,
             } => {
                 assert_eq!(grpc_port, 50051);
                 assert_eq!(rest_port, 8080);
+                assert_eq!(bind, std::net::IpAddr::from([127, 0, 0, 1]));
+                assert!(!allow_unauthenticated);
+                assert!(trusted_proxy.is_empty());
             }
             _ => panic!("Expected Serve"),
         }
@@ -1151,9 +1224,45 @@ mod tests {
             Commands::Serve {
                 grpc_port,
                 rest_port,
+                ..
             } => {
                 assert_eq!(grpc_port, 9090);
                 assert_eq!(rest_port, 3000);
+            }
+            _ => panic!("Expected Serve"),
+        }
+    }
+
+    #[test]
+    fn test_parse_serve_exposure_flags() {
+        let cli = Cli::try_parse_from([
+            "hm",
+            "serve",
+            "--bind",
+            "0.0.0.0",
+            "--allow-unauthenticated",
+            "--trusted-proxy",
+            "10.0.0.1",
+            "--trusted-proxy",
+            "10.0.0.2",
+        ])
+        .unwrap();
+        match cli.command {
+            Commands::Serve {
+                bind,
+                allow_unauthenticated,
+                trusted_proxy,
+                ..
+            } => {
+                assert_eq!(bind, std::net::IpAddr::from([0, 0, 0, 0]));
+                assert!(allow_unauthenticated);
+                assert_eq!(
+                    trusted_proxy,
+                    vec![
+                        std::net::IpAddr::from([10, 0, 0, 1]),
+                        std::net::IpAddr::from([10, 0, 0, 2]),
+                    ]
+                );
             }
             _ => panic!("Expected Serve"),
         }

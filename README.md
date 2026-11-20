@@ -129,7 +129,7 @@ hm t2 create --name unikernel --cpu 1 --memory 1 --image ./kernel.bin
 # memory: it can be started, but there is no guest code to execute.
 hm t2 create --name empty --cpu 2 --memory 4
 
-# Start the MCP HTTP server for AI agents (REST port defaults to 8080)
+# Start the MCP HTTP server for AI agents on loopback (127.0.0.1:8080, plain HTTP)
 hm serve --rest-port 8080
 ```
 

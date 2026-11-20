@@ -5,19 +5,19 @@
 //! and Anthropic tool use.
 
 use crate::vm_manager::{VmManager, VmMetrics};
-use anyhow::Result;
+use anyhow::{bail, Result};
 use axum::{
     body::Body,
-    extract::{Path, State},
+    extract::{connect_info::ConnectInfo, Path, State},
     http::{Request, StatusCode},
     middleware::{self, Next},
     response::Response,
-    routing::{delete, get, post},
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -30,10 +30,48 @@ pub struct McpServerState {
     pub vm_manager: Arc<VmManager>,
     /// Active sessions
     pub sessions: RwLock<HashMap<String, McpSession>>,
-    /// API key for authentication (optional)
+    /// API key for authentication (optional). When set, every route except
+    /// `/health` requires `Authorization: Bearer <key>`.
     pub api_key: Option<String>,
     /// Rate limiter state
     pub rate_limiter: RateLimiter,
+    /// Peers whose `X-Forwarded-For` is honoured when keying the rate limiter.
+    /// Any other peer is counted by its socket address, whatever header it sends.
+    pub trusted_proxies: Vec<IpAddr>,
+}
+
+/// How `hm serve` listens, authenticates and attributes clients.
+#[derive(Debug, Clone)]
+pub struct ServeConfig {
+    /// Address to bind. The CLI defaults to loopback.
+    pub addr: SocketAddr,
+    /// Bearer key for every route except `/health`. `None` (or an empty key)
+    /// leaves the server unauthenticated.
+    pub api_key: Option<String>,
+    /// Allow a non-loopback `addr` with no key. Refused otherwise.
+    pub allow_unauthenticated: bool,
+    /// Peers whose `X-Forwarded-For` is honoured. See `McpServerState`.
+    pub trusted_proxies: Vec<IpAddr>,
+}
+
+/// Refuse a non-loopback bind that has no key, unless the operator opted in.
+///
+/// `hm serve` speaks plain HTTP, so anything reachable on the port is reachable
+/// unauthenticated when no key is set. That is acceptable on loopback only.
+pub fn check_exposure(
+    addr: IpAddr,
+    api_key: Option<&str>,
+    allow_unauthenticated: bool,
+) -> Result<()> {
+    let keyed = api_key.is_some_and(|k| !k.is_empty());
+    if addr.is_loopback() || keyed || allow_unauthenticated {
+        return Ok(());
+    }
+    bail!(
+        "refusing to serve on {addr} without authentication: HM_API_KEY is not set, \
+         and every route would be open to anyone who can reach the port. Set HM_API_KEY, \
+         bind 127.0.0.1 (the default), or pass --allow-unauthenticated to accept this."
+    )
 }
 
 /// An agent session
@@ -181,6 +219,21 @@ fn default_timeout() -> u64 {
 }
 
 /// Authentication middleware
+/// Compares a presented key with the configured one without returning early
+/// on the first differing byte, so response time does not reveal how much of
+/// a guess was right. Only the length can leak, which a key of fixed length
+/// does not mind.
+fn keys_match(presented: &[u8], expected: &[u8]) -> bool {
+    if presented.len() != expected.len() {
+        return false;
+    }
+    presented
+        .iter()
+        .zip(expected)
+        .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+        == 0
+}
+
 async fn auth_middleware(
     State(state): State<Arc<McpServerState>>,
     request: Request<Body>,
@@ -200,7 +253,7 @@ async fn auth_middleware(
     match auth_header {
         Some(header) if header.starts_with("Bearer ") => {
             let token = &header[7..];
-            if token == required_key {
+            if keys_match(token.as_bytes(), required_key.as_bytes()) {
                 Ok(next.run(request).await)
             } else {
                 Err(StatusCode::UNAUTHORIZED)
@@ -216,64 +269,71 @@ async fn rate_limit_middleware(
     request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    // Use X-Forwarded-For or connection IP as key
-    let ip = request
-        .headers()
-        .get("X-Forwarded-For")
-        .and_then(|h| h.to_str().ok())
-        .map(|s| s.split(',').next().unwrap_or("unknown").trim().to_string())
-        .unwrap_or_else(|| "unknown".to_string());
-
-    match state.rate_limiter.check(&ip).await {
+    let key = client_key(&request, &state.trusted_proxies);
+    match state.rate_limiter.check(&key).await {
         Some(_remaining) => Ok(next.run(request).await),
         None => Err(StatusCode::TOO_MANY_REQUESTS),
     }
 }
 
-/// Start the MCP HTTP server
-pub async fn start_mcp_server(addr: SocketAddr) -> Result<()> {
-    let vm_manager = Arc::new(VmManager::new()?);
-
-    // Load API key from environment
-    let api_key = std::env::var("HM_API_KEY").ok();
-    if api_key.is_some() {
-        tracing::info!("API key authentication enabled");
-    } else {
-        tracing::warn!("No API key configured (set HM_API_KEY for authentication)");
+/// The address a request is counted against by the rate limiter.
+///
+/// The socket peer is the key. `X-Forwarded-For` is read only when the peer is
+/// a trusted proxy. A proxy appends the address it received from, so the
+/// rightmost entry that is not itself a trusted proxy is the client; entries to
+/// its left were written by the client and are ignored. A malformed entry, or a
+/// header that is missing, falls back to the peer.
+fn client_key(request: &Request<Body>, trusted: &[IpAddr]) -> String {
+    let Some(peer) = request
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|c| c.0.ip())
+    else {
+        // No peer address was attached (not served over a socket): one shared bucket.
+        return "unknown".to_string();
+    };
+    if !trusted.contains(&peer) {
+        return peer.to_string();
     }
 
-    let state = Arc::new(McpServerState {
-        vm_manager,
-        sessions: RwLock::new(HashMap::new()),
-        api_key,
-        rate_limiter: RateLimiter::default(),
-    });
+    let entries: Vec<&str> = request
+        .headers()
+        .get_all("x-forwarded-for")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .collect();
 
+    let mut leftmost_trusted = None;
+    for entry in entries.iter().rev() {
+        let Ok(ip) = entry.trim().parse::<IpAddr>() else {
+            return peer.to_string();
+        };
+        if !trusted.contains(&ip) {
+            return ip.to_string();
+        }
+        leftmost_trusted = Some(ip);
+    }
+    leftmost_trusted.unwrap_or(peer).to_string()
+}
+
+/// Build the router: every route is guarded by `api_key` except `/health`.
+pub fn build_router(state: Arc<McpServerState>) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
 
-    // Protected routes (require auth if configured)
-    let protected_routes = Router::new()
+    // Every route that does anything, reads included, sits behind the key.
+    let guarded = Router::new()
+        .route("/mcp/tools", get(list_tools))
         .route("/mcp/call", post(call_tool))
-        .route("/vms", post(create_vm))
-        .route("/vms/{name}", delete(delete_vm))
+        .route("/vms", get(list_vms).post(create_vm))
+        .route("/vms/{name}", get(get_vm).delete(delete_vm))
         .route("/vms/{name}/start", post(start_vm))
         .route("/vms/{name}/stop", post(stop_vm))
-        .route("/vms/{name}/script", post(execute_script))
-        .route_layer(middleware::from_fn_with_state(
-            state.clone(),
-            auth_middleware,
-        ));
-
-    // Public routes (no auth required)
-    let public_routes = Router::new()
-        .route("/mcp/tools", get(list_tools))
-        .route("/vms", get(list_vms))
-        .route("/vms/{name}", get(get_vm))
         .route("/vms/{name}/metrics", get(get_vm_metrics))
-        .route("/health", get(health_check))
+        .route("/vms/{name}/script", post(execute_script))
         // Agentic AI endpoints for LLM discovery and introspection
         .route("/agentic/ontology", get(agentic_ontology))
         .route("/agentic/schema", get(agentic_schema))
@@ -282,22 +342,66 @@ pub async fn start_mcp_server(addr: SocketAddr) -> Result<()> {
         .route("/agentic/providers/{provider}", get(agentic_provider_config))
         .route("/agentic/tools/openai", get(agentic_openai_tools))
         .route("/agentic/tools/anthropic", get(agentic_anthropic_tools))
-        .route("/agentic/tools/gemini", get(agentic_gemini_tools));
+        .route("/agentic/tools/gemini", get(agentic_gemini_tools))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth_middleware,
+        ));
 
-    let app = Router::new()
-        .merge(protected_routes)
-        .merge(public_routes)
+    // The health probe stays open so load balancers and orchestrators can check liveness.
+    let open = Router::new().route("/health", get(health_check));
+
+    Router::new()
+        .merge(guarded)
+        .merge(open)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             rate_limit_middleware,
         ))
         .layer(cors)
-        .with_state(state);
+        .with_state(state)
+}
 
-    tracing::info!("MCP server listening on {}", addr);
+/// Start the MCP HTTP server. Plain HTTP: no TLS is provided here.
+pub async fn start_mcp_server(cfg: ServeConfig) -> Result<()> {
+    check_exposure(
+        cfg.addr.ip(),
+        cfg.api_key.as_deref(),
+        cfg.allow_unauthenticated,
+    )?;
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, app).await?;
+    let api_key = cfg.api_key.filter(|k| !k.is_empty());
+    if api_key.is_some() {
+        tracing::info!("API key authentication enabled");
+    } else {
+        tracing::warn!("No API key configured (set HM_API_KEY for authentication)");
+    }
+    if !cfg.addr.ip().is_loopback() && api_key.is_none() {
+        tracing::warn!(
+            "serving {} without authentication (--allow-unauthenticated)",
+            cfg.addr
+        );
+    }
+
+    let vm_manager = Arc::new(VmManager::new()?);
+    let state = Arc::new(McpServerState {
+        vm_manager,
+        sessions: RwLock::new(HashMap::new()),
+        api_key,
+        rate_limiter: RateLimiter::default(),
+        trusted_proxies: cfg.trusted_proxies,
+    });
+
+    let app = build_router(state);
+
+    tracing::info!("MCP server listening on {} (plain HTTP)", cfg.addr);
+
+    let listener = tokio::net::TcpListener::bind(cfg.addr).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }

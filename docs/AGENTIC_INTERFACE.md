@@ -334,39 +334,40 @@ for tool_call in response.choices[0].message.tool_calls:
 HyperMachine includes a built-in MCP HTTP server for AI agent access:
 
 ```bash
-# Start the MCP server
+# Start the MCP server on loopback (127.0.0.1:8080, plain HTTP)
 hm serve --rest-port 8080
 
-# With authentication enabled
+# Expose beyond loopback: a key is required (plain HTTP; put a TLS proxy in front)
 export HM_API_KEY="your-secret-key"
-hm serve --rest-port 8080
+hm serve --bind 0.0.0.0 --rest-port 8080
 ```
 
 ### Security
 
-**Authentication**: Set the `HM_API_KEY` environment variable to enable bearer token authentication. When enabled, protected endpoints require an `Authorization: Bearer <token>` header.
+**Authentication**: Set the `HM_API_KEY` environment variable to enable bearer token authentication. When it is set, every route except `/health` requires an `Authorization: Bearer <token>` header. With no key, `hm serve` refuses a non-loopback `--bind` unless `--allow-unauthenticated` is passed.
 
-**Rate Limiting**: Built-in token bucket rate limiting (100 requests/minute per IP) protects against abuse.
+**Rate Limiting**: Built-in token bucket rate limiting (100 requests/minute per client) protects against abuse. The client is the socket peer. `X-Forwarded-For` is honoured only from the addresses given with `--trusted-proxy`.
 
-| Endpoint Type | Authentication Required |
-| ------------- | ----------------------- |
-| GET endpoints | No (read-only)          |
-| POST/DELETE   | Yes (if HM_API_KEY set) |
-| /health       | No                      |
+**Transport**: `hm serve` is plain HTTP with no TLS. Put a TLS-terminating proxy in front of it before exposing it.
+
+| Endpoint Type                  | Authentication Required |
+| ------------------------------ | ----------------------- |
+| All routes except `/health`    | Yes (if HM_API_KEY set) |
+| /health                        | No                      |
 
 ### Endpoints
 
 | Method | Endpoint             | Description                                    | Auth |
 | ------ | -------------------- | ---------------------------------------------- | ---- |
-| GET    | `/mcp/tools`         | List available tools (OpenAI/Anthropic format) | No   |
+| GET    | `/mcp/tools`         | List available tools (OpenAI/Anthropic format) | Yes  |
 | POST   | `/mcp/call`          | Execute a tool call                            | Yes  |
-| GET    | `/vms`               | List all VMs                                   | No   |
+| GET    | `/vms`               | List all VMs                                   | Yes  |
 | POST   | `/vms`               | Create a new VM                                | Yes  |
-| GET    | `/vms/:name`         | Get VM details                                 | No   |
+| GET    | `/vms/:name`         | Get VM details                                 | Yes  |
 | DELETE | `/vms/:name`         | Delete a VM                                    | Yes  |
 | POST   | `/vms/:name/start`   | Start a VM                                     | Yes  |
 | POST   | `/vms/:name/stop`    | Stop a VM                                      | Yes  |
-| GET    | `/vms/:name/metrics` | Get VM metrics                                 | No   |
+| GET    | `/vms/:name/metrics` | Get VM metrics                                 | Yes  |
 | GET    | `/health`            | Health check                                   | No   |
 
 ### Tool Discovery

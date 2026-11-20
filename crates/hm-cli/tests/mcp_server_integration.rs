@@ -22,6 +22,7 @@ async fn test_vm_lifecycle_create_start_stop_delete() {
         sessions: RwLock::new(HashMap::new()),
         api_key: None,
         rate_limiter: RateLimiter::new(100, Duration::from_secs(60)),
+        trusted_proxies: Vec::new(),
     });
 
     // Create VM
@@ -219,6 +220,7 @@ async fn test_mcp_state_creation() {
         sessions: RwLock::new(HashMap::new()),
         api_key: Some("test-key".to_string()),
         rate_limiter: RateLimiter::new(50, Duration::from_secs(30)),
+        trusted_proxies: Vec::new(),
     };
 
     assert!(state.api_key.is_some());
@@ -235,8 +237,172 @@ async fn test_mcp_state_without_auth() {
         sessions: RwLock::new(HashMap::new()),
         api_key: None,
         rate_limiter: RateLimiter::default(),
+        trusted_proxies: Vec::new(),
     };
 
     assert!(state.api_key.is_none());
     assert_eq!(state.rate_limiter.max_requests, 100); // Default
+}
+
+// =============================================================================
+// `hm serve` exposure, authentication and rate-limit keying
+// =============================================================================
+
+use hm_cli::mcp_server::{self, ServeConfig};
+use std::net::{IpAddr, SocketAddr};
+
+/// A key built at runtime, so no secret literal sits in the source.
+fn test_key() -> String {
+    "k".repeat(32)
+}
+
+/// Start the real router on an ephemeral loopback port. The socket peer of
+/// every test request is therefore 127.0.0.1.
+async fn spawn_server(
+    api_key: Option<String>,
+    trusted: Vec<IpAddr>,
+    max_requests: u64,
+) -> SocketAddr {
+    let state = Arc::new(McpServerState {
+        vm_manager: Arc::new(VmManager::new_in_memory().expect("Failed to create VM manager")),
+        sessions: RwLock::new(HashMap::new()),
+        api_key,
+        rate_limiter: RateLimiter::new(max_requests, Duration::from_secs(60)),
+        trusted_proxies: trusted,
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind ephemeral port");
+    let addr = listener.local_addr().expect("local addr");
+    let app = mcp_server::build_router(state).into_make_service_with_connect_info::<SocketAddr>();
+    tokio::spawn(async move {
+        let _ = axum::serve(listener, app).await;
+    });
+    addr
+}
+
+/// GET `path` and return the status code. No proxy from the environment.
+async fn get_status(addr: SocketAddr, path: &str, headers: &[(&str, &str)]) -> u16 {
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .build()
+        .expect("client");
+    let mut req = client.get(format!("http://{addr}{path}"));
+    for (name, value) in headers {
+        req = req.header(*name, *value);
+    }
+    req.send().await.expect("request").status().as_u16()
+}
+
+#[tokio::test]
+async fn serve_refuses_non_loopback_bind_without_key() {
+    let cfg = ServeConfig {
+        addr: "0.0.0.0:0".parse().unwrap(),
+        api_key: None,
+        allow_unauthenticated: false,
+        trusted_proxies: Vec::new(),
+    };
+    // A server that starts would serve forever, so bound the wait.
+    let outcome =
+        tokio::time::timeout(Duration::from_secs(5), mcp_server::start_mcp_server(cfg)).await;
+    match outcome {
+        Ok(Err(e)) => assert!(
+            e.to_string().contains("HM_API_KEY"),
+            "unexpected error: {e}"
+        ),
+        Ok(Ok(())) => panic!("server returned Ok without a key on a non-loopback bind"),
+        Err(_) => panic!("server started on 0.0.0.0 without a key"),
+    }
+}
+
+#[test]
+fn exposure_check_allows_loopback_key_or_explicit_opt_in() {
+    let any: IpAddr = "0.0.0.0".parse().unwrap();
+    let loopback: IpAddr = "127.0.0.1".parse().unwrap();
+    let key = test_key();
+    assert!(mcp_server::check_exposure(loopback, None, false).is_ok());
+    assert!(mcp_server::check_exposure(any, Some(&key), false).is_ok());
+    assert!(mcp_server::check_exposure(any, None, true).is_ok());
+    // An empty key is no key.
+    assert!(mcp_server::check_exposure(any, Some(""), false).is_err());
+    assert!(mcp_server::check_exposure(any, None, false).is_err());
+}
+
+#[tokio::test]
+async fn key_guards_reads_but_not_health() {
+    let key = test_key();
+    let addr = spawn_server(Some(key.clone()), Vec::new(), 1000).await;
+
+    assert_eq!(get_status(addr, "/health", &[]).await, 200);
+    assert_eq!(get_status(addr, "/vms", &[]).await, 401);
+    assert_eq!(get_status(addr, "/mcp/tools", &[]).await, 401);
+    assert_eq!(get_status(addr, "/agentic/capabilities", &[]).await, 401);
+
+    let wrong = "Bearer not-the-key";
+    assert_eq!(
+        get_status(addr, "/vms", &[("Authorization", wrong)]).await,
+        401
+    );
+
+    let right = format!("Bearer {key}");
+    assert_eq!(
+        get_status(addr, "/vms", &[("Authorization", right.as_str())]).await,
+        200
+    );
+}
+
+#[tokio::test]
+async fn spoofed_forwarded_for_does_not_evade_rate_limit() {
+    // No trusted proxies: the header must be ignored and the socket peer counted.
+    let addr = spawn_server(None, Vec::new(), 3).await;
+
+    for i in 0..3 {
+        let xff = format!("198.51.100.{}", i + 1);
+        assert_eq!(
+            get_status(addr, "/health", &[("X-Forwarded-For", xff.as_str())]).await,
+            200
+        );
+    }
+    // A fresh spoofed address on the fourth request is still the same client.
+    assert_eq!(
+        get_status(addr, "/health", &[("X-Forwarded-For", "203.0.113.99")]).await,
+        429
+    );
+}
+
+#[tokio::test]
+async fn trusted_proxy_forwarded_for_is_honoured() {
+    // The test client connects from 127.0.0.1, so 127.0.0.1 is the proxy.
+    let proxy: IpAddr = "127.0.0.1".parse().unwrap();
+    let addr = spawn_server(None, vec![proxy], 2).await;
+
+    // The proxy appends the real client (203.0.113.7). The client controls only
+    // the entries to its left, so varying those must not change the bucket.
+    for i in 0..2 {
+        let xff = format!("10.9.9.{}, 203.0.113.7", i + 1);
+        assert_eq!(
+            get_status(addr, "/health", &[("X-Forwarded-For", xff.as_str())]).await,
+            200
+        );
+    }
+    assert_eq!(
+        get_status(
+            addr,
+            "/health",
+            &[("X-Forwarded-For", "10.9.9.9, 203.0.113.7")]
+        )
+        .await,
+        429
+    );
+
+    // A different real client behind the same proxy has its own quota.
+    assert_eq!(
+        get_status(
+            addr,
+            "/health",
+            &[("X-Forwarded-For", "10.9.9.9, 198.51.100.9")]
+        )
+        .await,
+        200
+    );
 }
