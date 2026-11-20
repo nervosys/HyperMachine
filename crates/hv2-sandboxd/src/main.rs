@@ -1554,6 +1554,81 @@ async fn set_timeout(
 }
 
 #[derive(Debug, Deserialize)]
+struct RefreshRequest {
+    duration: Option<i64>,
+}
+
+/// What a refresh gives when it names no duration: E2B's default, 300 s.
+const DEFAULT_REFRESH_SECS: i64 = 300;
+/// The longest a refresh may ask for, in seconds: E2B's bound, which is
+/// tighter than the 24-hour cap on a sandbox's lifetime.
+const MAX_REFRESH_SECS: i64 = 3600;
+
+/// The duration a refresh body asks for. An empty body, or one without a
+/// `duration`, asks for the default; anything else must be an integer from
+/// 0 to 3600 seconds.
+fn refresh_duration(body: &[u8]) -> Result<u64, &'static str> {
+    let request = if body.iter().all(u8::is_ascii_whitespace) {
+        RefreshRequest { duration: None }
+    } else {
+        serde_json::from_slice::<RefreshRequest>(body)
+            .map_err(|_| "the body must be JSON of the form {\"duration\": seconds}")?
+    };
+    match request.duration.unwrap_or(DEFAULT_REFRESH_SECS) {
+        secs @ 0..=MAX_REFRESH_SECS => Ok(secs as u64),
+        _ => Err("duration must be from 0 to 3600 seconds"),
+    }
+}
+
+/// The end a refresh gives a sandbox: `duration` seconds from `now_ms`, or
+/// the end it already has if that is later. A refresh extends a sandbox and
+/// never shortens it, and the 24-hour cap `/timeout` applies holds here too.
+fn refreshed_end_ms(current_end_ms: u64, now_ms: u64, duration_secs: u64) -> u64 {
+    current_end_ms.max(now_ms + duration_secs.min(MAX_TIMEOUT_SECS) * 1000)
+}
+
+/// `POST /sandboxes/{id}/refreshes` -- E2B's keep-alive. The sandbox's end
+/// is moved out to `duration` seconds from now, if that is later than the
+/// end it has; it is never brought in.
+async fn refresh_sandbox(
+    State(state): State<Arc<AppState>>,
+    Path(sandbox_id): Path<String>,
+    body: axum::body::Bytes,
+) -> Response {
+    let duration = match refresh_duration(&body) {
+        Ok(duration) => duration,
+        Err(message) => return api_error(StatusCode::BAD_REQUEST, message),
+    };
+    let lock = transition_lock(&state, &sandbox_id);
+    let _held = lock.lock().await;
+    let record = {
+        let mut sandboxes = state.sandboxes.lock();
+        if sandboxes
+            .get(&sandbox_id)
+            .is_some_and(|live| live.pending_registration.is_some())
+        {
+            return api_error(
+                StatusCode::CONFLICT,
+                "reconcile registration before refreshing",
+            );
+        }
+        sandboxes.get_mut(&sandbox_id).map(|live| {
+            live.record.end_at_ms = refreshed_end_ms(live.record.end_at_ms, now_ms(), duration);
+            live.record.clone()
+        })
+    };
+    let Some(record) = record else {
+        return api_error(StatusCode::NOT_FOUND, format!("no sandbox {sandbox_id}"));
+    };
+    if let Some(node) = &state.node {
+        if let Err(e) = node.updated(&record).await {
+            tracing::warn!("recording {sandbox_id}'s new end time: {e}");
+        }
+    }
+    StatusCode::NO_CONTENT.into_response()
+}
+
+#[derive(Debug, Deserialize)]
 struct ListQuery {
     metadata: Option<String>,
     state: Option<String>,
@@ -7050,6 +7125,7 @@ async fn main() -> std::process::ExitCode {
         .route("/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/v2/sandboxes/{sandboxID}/connect", post(connect_sandbox))
         .route("/sandboxes/{sandboxID}/timeout", post(set_timeout))
+        .route("/sandboxes/{sandboxID}/refreshes", post(refresh_sandbox))
         .route(
             "/sandboxes/{sandboxID}/registration/reconcile",
             post(reconcile_registration),
@@ -7563,6 +7639,45 @@ mod tests {
     }
 
     use super::*;
+
+    /// A refresh moves a sandbox's end out to `duration` seconds from now and
+    /// never brings it in; its duration is an integer from 0 to 3600, with
+    /// the default when none is given, and the 24-hour cap still applies.
+    #[test]
+    fn a_refresh_extends_a_sandboxes_life_and_never_shortens_it() {
+        let now = 1_000_000;
+        // Later than the current end: the end moves out.
+        assert_eq!(refreshed_end_ms(now + 60_000, now, 300), now + 300_000);
+        // Sooner than the current end: the current end stands.
+        assert_eq!(refreshed_end_ms(now + 600_000, now, 60), now + 600_000);
+        assert_eq!(refreshed_end_ms(now + 600_000, now, 0), now + 600_000);
+        // The 24-hour cap on a lifetime holds even for a huge duration.
+        assert_eq!(
+            refreshed_end_ms(0, now, u64::MAX),
+            now + MAX_TIMEOUT_SECS * 1000
+        );
+
+        assert_eq!(refresh_duration(b"").unwrap(), 300, "no body: the default");
+        assert_eq!(refresh_duration(b" \n").unwrap(), 300);
+        assert_eq!(refresh_duration(b"{}").unwrap(), 300);
+        assert_eq!(refresh_duration(br#"{"duration":null}"#).unwrap(), 300);
+        assert_eq!(refresh_duration(br#"{"duration":0}"#).unwrap(), 0);
+        assert_eq!(refresh_duration(br#"{"duration":3600}"#).unwrap(), 3600);
+        for refused in [
+            &br#"{"duration":3601}"#[..],
+            br#"{"duration":-1}"#,
+            br#"{"duration":1.5}"#,
+            br#"{"duration":"60"}"#,
+            b"[1,2]",
+            b"{",
+        ] {
+            assert!(
+                refresh_duration(refused).is_err(),
+                "{:?} must be refused",
+                String::from_utf8_lossy(refused)
+            );
+        }
+    }
 
     fn exec_req(json: serde_json::Value) -> ExecRequest {
         serde_json::from_value(json).unwrap()

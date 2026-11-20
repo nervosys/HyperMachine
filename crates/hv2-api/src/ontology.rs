@@ -1635,6 +1635,7 @@ impl HyperMachineOntology {
                     "node_connect_sandbox".to_string(),
                     "node_connect_sandbox_v2".to_string(),
                     "node_set_sandbox_timeout".to_string(),
+                    "node_refresh_sandbox".to_string(),
                     "node_pause_sandbox".to_string(),
                     "node_resume_sandbox".to_string(),
                     "node_standby_sandbox".to_string(),
@@ -3067,7 +3068,58 @@ impl HyperMachineOntology {
     /// `main.rs` and `reboot.rs`). Served by `hv2-sandboxd`, one per node;
     /// the control plane forwards most of them.
     fn build_sandbox_node_operations() -> Vec<Operation> {
-        Self::sandbox_lifecycle_operations(true)
+        let mut operations = Self::sandbox_lifecycle_operations(true);
+        operations.push(Self::node_refresh_sandbox_operation());
+        operations
+    }
+
+    /// The node's keep-alive route, `hv2-sandboxd` `refresh_sandbox`. The
+    /// control plane's `refresh_sandbox` (exposure operations) is the same
+    /// route after its own owner and team checks.
+    fn node_refresh_sandbox_operation() -> Operation {
+        Operation {
+            id: "node_refresh_sandbox".to_string(),
+            name: "Refresh A Sandbox (Node)".to_string(),
+            description: "E2B's keep-alive, served by the node. The running sandbox's end \
+                moves to `duration` seconds from this request (default 300, from 0 to 3600) \
+                if that is later than the end it has; it is never brought in, so a shorter \
+                duration changes nothing. The 24-hour cap applies, as it does to \
+                `set_sandbox_timeout`, the route that can also shorten. A paused sandbox is \
+                404. Answers 204 with no body."
+                .to_string(),
+            http_method: "POST".to_string(),
+            path: "/sandboxes/{sandboxID}/refreshes".to_string(),
+            parameters: vec![Self::sandbox_id_parameter(true)],
+            request_body: Some(RequestBody {
+                content_type: "application/json".to_string(),
+                required: false,
+                schema: serde_json::json!({
+                    "type": "object",
+                    "properties": { "duration": { "type": "integer", "minimum": 0,
+                        "maximum": 3600, "description": "seconds from now; default 300" } }
+                }),
+            }),
+            responses: {
+                let mut responses = vec![
+                    Self::sandbox_plain(204, "The end is extended, or already was that late."),
+                    Self::sandbox_json_error(
+                        400,
+                        "`duration` is not an integer from 0 to 3600, or the body is not JSON",
+                    ),
+                    Self::sandbox_json_error(404, "no running sandbox of that ID"),
+                    Self::sandbox_json_error(
+                        409,
+                        "its registration is unsettled: reconcile it before refreshing",
+                    ),
+                ];
+                responses.extend(Self::sandbox_access_responses(true, true));
+                responses
+            },
+            idempotent: false,
+            async_operation: false,
+            rate_limit: None,
+            examples: vec![],
+        }
     }
 
     /// The control plane's sandbox command routes (`forward`, to the node's

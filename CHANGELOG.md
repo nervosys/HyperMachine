@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **`POST /sandboxes/{id}/refreshes` always answered 404.** The control plane relayed it, but no node served the route, so E2B's keep-alive failed on every call. The node now serves it: `{"duration": seconds}` (default 300, 0 to 3600, otherwise 400) moves a sandbox's end to that many seconds from now when that is later than its current end, and never brings it in; 204 on success, with the same 401/403/404 checks as `/timeout`.
 - **Team keys and signed-in members got 403 on `/environments` and `/usage`.** The
   key check granted no scope for either route, so only an administrator reached
   them, though the docs describe both as a team's own. `/environments` now needs
@@ -238,8 +239,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sharing, custom domains, names, private network tags and tunnels, the node's
   local networks, metrics, logs, events, and the pending-registration and
   reconcile routes), with request and response shapes and status codes read
-  from the handlers. It records that `POST /sandboxes/{id}/refreshes` always
-  ends in 404 (no node serves it) and that a node's `/networks` has no owner
+  from the handlers. It records that a node's `/networks` has no owner
   check. Seven new guardrails (egress rules replacing the whole policy,
   public ports, custom domains, web sharing, private-network source trust,
   the reconcile answer's access token, event metadata) and the open-control-

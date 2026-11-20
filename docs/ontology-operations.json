@@ -2180,6 +2180,12 @@
     },
     {
       "component": "hv2-sandboxd",
+      "id": "node_refresh_sandbox",
+      "method": "POST",
+      "path": "/sandboxes/{sandboxID}/refreshes"
+    },
+    {
+      "component": "hv2-sandboxd",
       "id": "node_reconcile_sandbox_registration",
       "method": "POST",
       "path": "/sandboxes/{sandboxID}/registration/reconcile"

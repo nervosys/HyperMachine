@@ -1346,13 +1346,19 @@ fn network_and_exposure_operations_are_described_for_both_components() {
             "{id} is refused with no credential"
         );
     }
-    // A refresh is routed and never served.
+    // A refresh answers 204 when it extends a sandbox, 400 for a bad duration,
+    // and 404 for an unknown one; it has no 200.
     let refresh = onto
         .operations
         .iter()
         .find(|o| o.id == "refresh_sandbox")
         .unwrap();
-    assert!(refresh.responses.iter().any(|r| r.status_code == 404));
+    for status in [204, 400, 404] {
+        assert!(
+            refresh.responses.iter().any(|r| r.status_code == status),
+            "refresh_sandbox declares {status}"
+        );
+    }
     assert!(!refresh.responses.iter().any(|r| r.status_code == 200));
 }
 

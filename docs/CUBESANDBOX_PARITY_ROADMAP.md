@@ -1133,7 +1133,7 @@ and then the failure cases, by hand:
 **E2B surface added on the way**, because the SDK's list and detail models
 need it: sandbox lifetimes (`timeout`, defaulting to the spec's 15 s on v1
 and 300 s on v2, capped at 24 h), expiry, `POST /sandboxes/{id}/timeout`,
-`connect` extending the lifetime ("TTL is only extended"), `GET /sandboxes`,
+`connect` extending the lifetime ("TTL is only extended"), `POST /sandboxes/{id}/refreshes` (E2B's keep-alive: extends only, default 300 s, at most 3600 s per call), `GET /sandboxes`,
 `GET /v2/sandboxes` with metadata/state filters and `x-next-token`
 pagination, `GET /sandboxes/{id}` (`SandboxDetail`), and
 `/v2/sandboxes/{id}/connect`.

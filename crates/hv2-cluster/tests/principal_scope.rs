@@ -900,3 +900,83 @@ async fn only_put_reaches_a_sandboxs_network_route() {
     assert_eq!(plane.status(Method::PUT, path, "alice-key").await, 201);
     assert_eq!(seen.lock().len(), 1);
 }
+
+/// `POST /sandboxes/{id}/refreshes` takes the same checks as `/timeout`: the
+/// sandbox's owner or team, a missing key, an unknown sandbox. What passes
+/// is relayed to the sandbox's node with its body, and the node's answer is
+/// the client's.
+#[tokio::test]
+async fn refreshes_are_fenced_and_relayed_like_timeouts() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let relayed: Arc<Mutex<Vec<(String, String)>>> = Arc::default();
+    let seen = relayed.clone();
+    let _node = Owned(tokio::spawn(async move {
+        let app = Router::new().fallback(move |uri: axum::http::Uri, body: String| {
+            let seen = seen.clone();
+            async move {
+                seen.lock().push((uri.path().to_owned(), body));
+                StatusCode::NO_CONTENT
+            }
+        });
+        axum::serve(listener, app).await.unwrap();
+    }));
+    store
+        .put_node(&node("n", address), Duration::from_secs(60))
+        .await
+        .unwrap();
+    for mut rec in [
+        record("alice-sbx", Some("alice"), Some(me("alice"))),
+        record("red-sbx", Some("rita"), Some(TeamId::parse("red").unwrap())),
+    ] {
+        rec.node_id = "n".into();
+        store.put_sandbox(&rec).await.unwrap();
+    }
+    let plane = Plane::new(store).await;
+    let refresh = |path: &'static str, key: &'static str| {
+        let call = plane.call(Method::POST, path, key);
+        async move {
+            call.json(&json!({"duration": 120}))
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16()
+        }
+    };
+
+    let mine = "/sandboxes/alice-sbx/refreshes";
+    assert_eq!(refresh(mine, "alice-key").await, 204);
+    assert_eq!(
+        relayed.lock().clone(),
+        vec![(mine.to_owned(), r#"{"duration":120}"#.to_owned())],
+        "the owner's refresh reaches the node with its body"
+    );
+    assert_eq!(
+        refresh("/sandboxes/alice-sbx/refreshes", "bob-key").await,
+        403
+    );
+    assert_eq!(
+        refresh("/sandboxes/alice-sbx/refreshes", "red-key").await,
+        403
+    );
+    assert_eq!(
+        refresh("/sandboxes/red-sbx/refreshes", "alice-key").await,
+        403
+    );
+    assert_eq!(
+        refresh("/sandboxes/red-sbx/refreshes", "red-key").await,
+        204
+    );
+    assert_eq!(
+        refresh("/sandboxes/missing/refreshes", "alice-key").await,
+        404
+    );
+    assert_eq!(refresh(mine, "no-such-key").await, 401);
+    assert_eq!(
+        relayed.lock().len(),
+        2,
+        "only the two accepted refreshes reached the node"
+    );
+}

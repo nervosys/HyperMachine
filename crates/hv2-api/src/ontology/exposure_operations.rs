@@ -476,21 +476,37 @@ impl HyperMachineOntology {
             .repeatable(),
             Spec::new(
                 "refresh_sandbox",
-                "Refresh A Sandbox (Routed, Not Served)",
+                "Refresh A Sandbox (Keep-Alive)",
                 "POST",
                 "/sandboxes/{id}/refreshes",
             )
             .about(
-                "E2B's route for extending a sandbox's life. The control plane routes it \
-                 like the others and relays it to the sandbox's node, but the node serves no \
-                 such route, so the answer is always the node's `404` (`no route \
-                 /sandboxes/{id}/refreshes`) once the ownership check has passed. Use \
-                 `set_sandbox_timeout` to extend a sandbox. Nothing is changed.",
+                "E2B's keep-alive. Makes the running sandbox end `duration` seconds from this \
+                 request (default 300, from 0 to 3600) if that is later than the end it already \
+                 has. It only ever extends: a shorter duration changes nothing, and a sandbox's \
+                 end is never brought in. The 24-hour cap on a lifetime applies, as it does to \
+                 `set_sandbox_timeout`, which is the route that can also shorten. A paused \
+                 sandbox is 404: resume or connect to it first. The control plane checks the \
+                 caller as it does for `set_sandbox_timeout` and relays the request to the \
+                 sandbox's node, which records the new end.",
             )
             .with(sandbox_param())
+            .takes(
+                json!({
+                    "type": "object",
+                    "properties": { "duration": { "type": "integer", "minimum": 0,
+                        "maximum": 3600, "description": "seconds from now; default 300" } }
+                }),
+                false,
+            )
+            .answers(ok(204, "The end is extended, or already was that late.", None))
             .answers(fail(
-                404,
-                "the node has no such route; or no such sandbox",
+                400,
+                "`duration` is not an integer from 0 to 3600, or the body is not JSON",
+            ))
+            .answers(fail(
+                409,
+                "its registration is unsettled: reconcile it before refreshing",
             ))
             .answers_all(super::HyperMachineOntology::sandbox_access_responses(false, true)),
         ];

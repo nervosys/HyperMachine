@@ -243,8 +243,8 @@ impl HyperMachineOntology {
             capabilities.push(capability(
                 "sandbox_refreshes",
                 "Sandbox Refresh (cluster control plane)",
-                "E2B's refresh route, which the control plane routes and no node serves: it \
-                 always ends in 404. Use `set_sandbox_timeout`.",
+                "E2B's keep-alive route: it extends a running sandbox's end, never shortens it, \
+                 and answers 204. `set_sandbox_timeout` is the route that can also shorten it.",
                 &["refresh_sandbox"],
                 false,
                 &[],
