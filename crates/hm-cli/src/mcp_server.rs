@@ -93,6 +93,9 @@ pub struct RateLimiter {
     pub window: Duration,
 }
 
+/// The most clients the rate limiter tracks at once.
+const MAX_BUCKETS: usize = 10_000;
+
 struct RateBucket {
     count: AtomicU64,
     window_start: Instant,
@@ -114,6 +117,17 @@ impl RateLimiter {
     pub async fn check(&self, key: &str) -> Option<u64> {
         let now = Instant::now();
         let mut buckets = self.buckets.write().await;
+
+        // One bucket per client address, so the map is bounded: past
+        // MAX_BUCKETS, buckets whose window has ended are dropped, and if
+        // every one is still live a new client is refused until one ends,
+        // rather than letting many addresses grow the map without limit.
+        if buckets.len() >= MAX_BUCKETS && !buckets.contains_key(key) {
+            buckets.retain(|_, b| now.duration_since(b.window_start) <= self.window);
+            if buckets.len() >= MAX_BUCKETS {
+                return None;
+            }
+        }
 
         let bucket = buckets
             .entry(key.to_string())
@@ -926,6 +940,25 @@ mod tests {
 
         // Should be able to make requests again
         assert!(limiter.check("test").await.is_some());
+    }
+
+    /// Many client addresses cannot grow the limiter without bound: past
+    /// MAX_BUCKETS a new client is refused while every bucket is live, and
+    /// is let in again once ended windows can be dropped.
+    #[tokio::test]
+    async fn test_rate_limiter_is_bounded() {
+        let limiter = RateLimiter::new(5, Duration::from_millis(50));
+        for i in 0..MAX_BUCKETS {
+            assert!(limiter.check(&format!("10.0.{i}")).await.is_some());
+        }
+        assert!(limiter.check("one-too-many").await.is_none());
+        assert!(limiter.buckets.read().await.len() <= MAX_BUCKETS);
+        // A client already tracked is still served.
+        assert!(limiter.check("10.0.0").await.is_some());
+
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        assert!(limiter.check("one-too-many").await.is_some());
+        assert_eq!(limiter.buckets.read().await.len(), 1);
     }
 
     #[tokio::test]
