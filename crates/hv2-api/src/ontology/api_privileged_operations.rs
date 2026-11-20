@@ -33,7 +33,7 @@ fn tenant_header() -> Parameter {
         name: "X-Tenant-Id".to_string(),
         location: ParameterLocation::Header,
         required: false,
-        description: "The tenant the request acts for. The caller chooses it: nothing checks \
+        description: "The tenant the request acts for. When the key is bound to a tenant, that tenant is used, and a different value is 403 `TENANT_MISMATCH`. Otherwise the caller chooses it: nothing checks \
                       it against a credential. Absent or empty is `default`"
             .to_string(),
         schema: json!({ "type": "string" }),
@@ -135,7 +135,7 @@ impl HyperMachineOntology {
                  can succeed only for a VM an embedding program built with `GuestExec` and a \
                  channel and put in the server's inventory. This is not `execute_script`, which \
                  evaluates a Rhai script on the host and runs nothing in the guest. Open unless \
-                 an API key is configured, and then any key may run any program in any VM the \
+                 an API key is configured, and then an operator or admin key may run any program in any VM the \
                  server holds. Not idempotent.",
             )
             .with(vm_id_parameter())
@@ -218,7 +218,7 @@ impl HyperMachineOntology {
                      `has_verified_signature` is false for every image registered through this \
                      API. The answer is 201 with no body; a reference already registered is 409 \
                      `REGISTER_FAILED`, and a registration cannot be edited or replaced. Not \
-                     idempotent. Open unless an API key is configured, and then any key may \
+                     idempotent. Open unless an API key is configured, and then only an admin key may \
                      register.",
                 )
                 .takes(
@@ -341,23 +341,13 @@ impl HyperMachineOntology {
                 "/api/v1/images/{reference}/approve",
             )
             .about(
-                "Mark an image `approved` and record the reviewer. When the registry requires \
-                 a signature, which this server's does (`require_signature: true`), approval is \
-                 refused with 422 `APPROVE_FAILED` unless the image has a verified signature, \
-                 and this API never records one as verified: so on this server approving an \
-                 image registered through it fails every time, and with `enforce` every such \
-                 image stays unadmitted (`deprecate_image` is the one state that admits one, \
-                 with a warning). When it does succeed there is no precondition on the \
-                 image's state: a `denied`, `revoked` or `deprecated` image is approved again, \
-                 so a revocation is not final. `reviewer` is free text the caller sends, not \
-                 the authenticated identity, and only the last reviewer is kept. `reason` is \
-                 ignored. The answer is 200 with no body. Repeatable. Open unless an API key \
-                 is configured, and then any key may approve.",
+                "Mark an image `approved` and record the reviewer. A denied or revoked image is refused with 409 `APPROVE_FAILED`: those decisions are final for the reference, and admission by digest refuses a digest that any denied or revoked entry carries. Otherwise, when the registry requires a signature, which this server's does (`require_signature: true`), approval is refused with 422 `APPROVE_FAILED` unless the image has a verified signature. This API never records one as verified, so on this server approving an image registered through it fails every time, and under `enforce` such an image stays unadmitted. A pending, approved or deprecated image can be approved; no other state is checked. `reviewer` is free text the caller sends, not the authenticated identity, and only the last reviewer is kept. `reason` is ignored. The answer is 200 with no body. Repeatable. Open unless an API key is configured, and then only an admin key may approve.",
             )
             .with(image_reference())
             .takes(review_body(), true)
             .answers(plain(200, "Approved. No body."))
             .answers(api_fail_registry(404, "no such image (`APPROVE_FAILED`)"))
+            .answers(api_fail_registry(409, "the image is denied or revoked, which approval refuses (`APPROVE_FAILED`)"))
             .answers(api_fail_registry(
                 422,
                 "approval needs a verified signature and the image has none (`APPROVE_FAILED`)",
@@ -373,13 +363,7 @@ impl HyperMachineOntology {
                 "/api/v1/images/{reference}/deny",
             )
             .about(
-                "Mark an image `denied`, keeping `reason` as its notes (replacing any earlier \
-                 note) and the reviewer. It works on an image in any state, an approved one \
-                 included. A denied image is refused at launch in `audit` as well as \
-                 `enforce` (only `disabled` admits everything); the refusal is an error from the VM's launch, which does not \
-                 touch a VM already running from that image. The answer is 200 with no body; \
-                 the only failure is an unknown reference. Repeatable. Open unless an API key \
-                 is configured.",
+                "Mark an image `denied`, keeping `reason` as its notes (replacing any earlier note) and the reviewer. It works on an image in any state, an approved one included, and the decision is final for the reference: `approve_image` refuses it with 409. A denied image is refused at launch in `audit` as well as `enforce` (only `disabled` admits everything); the refusal is an error from the VM's launch, which does not touch a VM already running from that image. The answer is 200 with no body; the only failure is an unknown reference. Repeatable. Open unless an API key is configured, and then only an admin key may deny.",
             )
             .with(image_reference())
             .takes(review_body(), true)
@@ -396,14 +380,7 @@ impl HyperMachineOntology {
                 "/api/v1/images/{reference}/revoke",
             )
             .about(
-                "Withdraw an image: mark it `revoked`, keeping `reason` as its notes and the \
-                 reviewer. It needs no earlier approval and works on an image in any state. A \
-                 revoked image is refused at launch in `audit` as well as `enforce`. Revocation takes effect for \
-                 launches that happen after it; no VM is stopped, paused or altered, and no \
-                 event is published, so a VM already running from the image keeps running. It \
-                 is not permanent: `approve_image` can approve the image again, when it can \
-                 succeed. 200 with no body; the only failure is an unknown reference. \
-                 Repeatable. Open unless an API key is configured.",
+                "Withdraw an image: mark it `revoked`, keeping `reason` as its notes and the reviewer. It needs no earlier approval and works on an image in any state. A revoked image is refused at launch in `audit` as well as `enforce`. Revocation takes effect for launches that happen after it; no VM is stopped, paused or altered, and no event is published, so a VM already running from the image keeps running. It is final for the reference: `approve_image` refuses it with 409, and admission by digest refuses the digest while any entry for it is denied or revoked. 200 with no body; the only failure is an unknown reference. Repeatable. Open unless an API key is configured, and then only an admin key may revoke.",
             )
             .with(image_reference())
             .takes(review_body(), true)
@@ -420,20 +397,13 @@ impl HyperMachineOntology {
                 "/api/v1/images/{reference}/deprecate",
             )
             .about(
-                "Mark an image `deprecated`, keeping `reason` as its notes and the reviewer. A \
-                 deprecated image is admitted with a warning: `check_image_admission` answers \
-                 `allowed_with_warning`, and a launch logs the warning and proceeds. That holds \
-                 in `audit` and in `enforce`, and the registry does not ask for a \
-                 signature on a deprecated image: deprecating an image that was never reviewed \
-                 or never signed admits it. The route needs no earlier approval, so it is the \
-                 way an image becomes launchable under `enforce` on this server, where approval \
-                 cannot succeed. 200 with no body; the only failure is an unknown reference. \
-                 Repeatable. Open unless an API key is configured.",
+                "Mark an image `deprecated`, keeping `reason` as its notes and the reviewer. Only an `approved` or already `deprecated` image can be deprecated; any other state is refused with 409 `DEPRECATE_FAILED`. A deprecated image passes the same signature gate as an approved one, and an image that passes is admitted with a warning: `check_image_admission` answers `allowed_with_warning`, and a launch logs the warning and proceeds. An image that fails the gate is refused, so deprecation does not get around it: on this server, which records no verified signature, a deprecated image is refused under `enforce` too. 200 with no body; an unknown reference is 404. Repeatable. Open unless an API key is configured, and then only an admin key may deprecate.",
             )
             .with(image_reference())
             .takes(review_body(), true)
             .answers(plain(200, "Deprecated. No body."))
             .answers(api_fail_registry(404, "no such image (`DEPRECATE_FAILED`)"))
+            .answers(api_fail_registry(409, "the image is not approved or deprecated (`DEPRECATE_FAILED`)"))
             .answers(body_rejection())
             .answers(json_content_type_required())
             .answers_all(keys())
@@ -452,7 +422,7 @@ impl HyperMachineOntology {
                      context memory, debug, coordination and admin), `read_only` (also \
                      `readonly`) and `none`; they are recorded on the session for the MCP \
                      dispatcher to check, and are not enforced by this route. The tenant is the \
-                     `X-Tenant-Id` the caller sends. At most 100 agents live at once: at the \
+                     `X-Tenant-Id` the caller sends, or the key's tenant when the key is bound to one (a different header is 403 `TENANT_MISMATCH`). At most 100 agents live at once: at the \
                      limit idle ones are reclaimed first, whichever tenant owns them, and then \
                      a 503 `Maximum sessions reached`. Not idempotent. Open unless an API key \
                      is configured: the per-route bearer check in this module is never given \
@@ -487,7 +457,7 @@ impl HyperMachineOntology {
                     "List the session ids of the agents the requesting tenant spawned and that \
                      are still live (an agent reaped or released elsewhere drops out). `agents` \
                      holds session ids, not the `agent_id`s that were sent. The tenant is \
-                     whatever `X-Tenant-Id` the caller names, so any caller can list any \
+                     the key's tenant when the key is bound to one, otherwise whatever `X-Tenant-Id` the caller names, so a caller with no key or an unscoped key can list any \
                      tenant's agents. Read only. Open unless an API key is configured.",
                 )
                 .with(tenant_header())
@@ -510,7 +480,7 @@ impl HyperMachineOntology {
                 "Read the tenant's live agent count and the fleet's memory: `baseline_bytes` \
                  is the one shared warm image, and `fleet_memory_bytes` the baseline plus every \
                  agent's private copied pages, across all tenants (not only the caller's). \
-                 Read only. The tenant is the `X-Tenant-Id` the caller sends. Open unless an \
+                 Read only. The tenant is the key's tenant when the key is bound to one, else the `X-Tenant-Id` the caller sends. Open unless an \
                  API key is configured.",
             )
             .with(tenant_header())
@@ -527,11 +497,7 @@ impl HyperMachineOntology {
             Spec::new("reap_agents", "Reap Idle Agents", "POST", "/api/v1/agents/reap")
                 .about(
                     "Release every agent that has been idle for at least `max_idle_secs`, and \
-                     answer how many were. It is not scoped to a tenant: the runtime's \
-                     sessions are reaped whoever owns them, and the `X-Tenant-Id` is not \
-                     read, so `0` releases every agent on the server. Releasing drops the \
-                     agent's sandbox. Repeatable in the sense that a second call finds fewer. \
-                     Open unless an API key is configured, and then any key may reap every \
+                     answer how many were. It is scoped to the requesting tenant: the tenant is the key's when the key is bound to one, else the `X-Tenant-Id` the caller sends (absent is `default`), and only that tenant's sessions are considered; other tenants' agents are never touched. `0` releases every agent of that tenant. Releasing drops the agent's sandbox. Repeatable in the sense that a second call finds fewer. Open unless an API key is configured, and then an operator or admin key may reap its own \
                      tenant's agents.",
                 )
                 .takes(
@@ -561,7 +527,7 @@ impl HyperMachineOntology {
                 "Release one agent by session id, ending its session and dropping its sandbox. \
                  Only the tenant recorded when it was spawned may release it: another tenant \
                  gets the same 404 as for an id that does not exist. The tenant is the \
-                 `X-Tenant-Id` the caller sends, so naming the owner is enough. Answers 204 \
+                 `X-Tenant-Id` the caller sends (or the key's tenant, when the key is bound to one), so naming the owner is enough. Answers 204 \
                  with no body. Open unless an API key is configured.",
             )
             .with(path_param(

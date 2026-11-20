@@ -357,10 +357,12 @@ first:
   console reports `attached: false` (no serial device is registered).
 - **`image_admission`.** In-memory registry; the launch check is off by
   default and hashes the kernel only. `register_image` stores signatures as
-  unverified, so `approve_image` is 422 for all; `deprecate_image` admits.
-  Approval has no state precondition.
-- **`agent_runtime`.** Tenant is the caller's `X-Tenant-Id`; `reap_agents`
-  is not tenant-scoped; the baseline is a placeholder.
+  unverified, so `approve_image` is 422 for all. `deprecate_image` passes the
+  same signature gate, so it refuses too on this server. A denied or revoked
+  image cannot be approved (409).
+- **`agent_runtime`.** Tenant is the caller's `X-Tenant-Id`, unless its key is
+  bound to a tenant; `reap_agents` is scoped to the requesting tenant; the
+  baseline is a placeholder.
 - **`fleet_runtime`.** Bookkeeping only: nothing starts a process;
   `pending_workloads` is always 0; destroy of an unknown session is 200;
   maintenance runs only when called.
@@ -368,8 +370,8 @@ first:
   hold no GPU and check no capacity; the fleet has no register route.
 - **`vm_snapshot_records`.** Catalogue entries only; restore changes no VM.
 - **`event_delivery`.** Only `publish_event` puts events on the bus. Webhook
-  URLs are not validated, signatures are a 64-bit hash, delivery is not
-  retried.
+  URLs must be public unless `allow_private_webhooks` is set; the signature is
+  HMAC-SHA256 when a secret is set; delivery is not retried.
 - **`health_and_metrics`.** `/health/ready` and `/api/v1/health/full` cannot
   report failure; `/metrics` renders two series on the shipped server.
 - **`agent_discovery_and_plans`.** `execute_plan` runs `create_vm`,
@@ -493,12 +495,12 @@ its source; the first two are finding O12 in
 - **`private-network-source-trust`** (warning; private networks): the source node label is trusted on the cluster's shared credential, and support is documented as Partial ([PRIVATE_VM_NETWORKS.md](PRIVATE_VM_NETWORKS.md#receiving-node-tcp-route)).
 - **`registration-reconcile-returns-access-token`** (warning; registration recovery): the answer is credential-bearing, and a retry may duplicate an event ([NATIVE_PORT_GATEWAY.md](NATIVE_PORT_GATEWAY.md#recovering-uncertain-guest-registration)).
 - **`sandbox-events-carry-metadata`** (info; events): metadata travels in every event, and a node does not filter by team (`crates/hv2-cluster/src/events.rs`).
-- **`api-unauthenticated-unless-key-configured`** (critical; hv2-api's routes): no authentication by default and no per-route rights with keys (`crates/hv2-api/src/middleware.rs`).
+- **`api-unauthenticated-unless-key-configured`** (critical; hv2-api's routes): with no key configured the server answers every caller; it binds loopback by default and refuses other addresses without a key unless `allow_unauthenticated` is set. Keys carry a role and an optional tenant, enforced by the key middleware (`crates/hv2-api/src/middleware.rs`).
 - **`guest-exec-runs-programs-in-the-guest`** (warning; `exec_in_vm`): the guest agent authenticates nothing and runs as whoever started it ([GUEST_AGENT.md](GUEST_AGENT.md)).
-- **`image-admission-off-by-default-and-unsatisfiable`** (warning; image routes): admission is off by default and approval cannot succeed over REST ([SECURITY_AUDIT.md](SECURITY_AUDIT.md)).
-- **`agent-runtime-tenant-is-caller-asserted`** (warning; agent sessions): the tenant is a caller-written header ([SECURITY_AUDIT.md](SECURITY_AUDIT.md)).
-- **`webhooks-post-to-any-url-with-a-non-hmac-signature`** (warning; webhooks): unvalidated URLs and a forgeable signature ([security/SECURITY_AUDIT_2026-11-16.md](security/SECURITY_AUDIT_2026-11-16.md)).
-- **`event-publish-injects-events`** (warning; events): any caller can publish (`crates/hv2-api/src/events.rs`).
+- **`image-admission-off-by-default-and-unsatisfiable`** (warning; image routes): admission is off by default; over REST no image can be approved, and deprecation does not admit one either, because both pass the signature gate ([SECURITY_AUDIT.md](SECURITY_AUDIT.md)).
+- **`agent-runtime-tenant-is-caller-asserted`** (warning; agent sessions): the tenant is the caller-written `X-Tenant-Id` unless the key is bound to a tenant ([SECURITY_AUDIT.md](SECURITY_AUDIT.md)).
+- **`webhooks-unsigned-without-secret-and-opt-out-reaches-internal`** (warning; webhooks): non-public targets are refused unless `allow_private_webhooks` is set; a webhook without a secret is unsigned; the signed data has no delivery time, so a delivery can be replayed ([security/SECURITY_AUDIT_2026-11-16.md](security/SECURITY_AUDIT_2026-11-16.md)).
+- **`event-publish-injects-events`** (warning; events): any caller who may write can publish (`crates/hv2-api/src/events.rs`).
 - **`probes-exempt-from-api-key`** (info; health and `/agentic`): reads need no key (`crates/hv2-api/src/middleware.rs`).
 - **`snapshot-routes-record-no-vm-state`** (warning; VM snapshot records): nothing is captured (`crates/hv2-api/src/snapshot_routes.rs`).
 - **`template-upload-hash-not-verified-by-default`** (warning; uploads): the hash is checked only with `--verify-upload-hash` ([security/SECURITY_AUDIT_2026-11-16.md](security/SECURITY_AUDIT_2026-11-16.md), O8).
@@ -515,7 +517,7 @@ its source; the first two are finding O12 in
 - **`team-telemetry-leaves-the-platform`** (info): [TELEMETRY.md](TELEMETRY.md).
 - **`cluster-event-log-lists-every-team`** (info): [TEAMS.md](TEAMS.md).
 - **`platform-discovery-and-metrics-are-public`** (info): [TELEMETRY.md](TELEMETRY.md).
-- **`hm-serve-open-and-plain-by-default`** (critical; `hm serve`): [src/ai/mcp-server.md](src/ai/mcp-server.md).
+- **`hm-serve-open-and-plain-by-default`** (warning; `hm serve`): plain HTTP always, and every route is open to any caller when started with `--allow-unauthenticated` ([src/ai/mcp-server.md](src/ai/mcp-server.md)).
 - **`mcp-http-single-shared-credential`** (warning; MCP over HTTP): [src/ai/mcp-server.md](src/ai/mcp-server.md).
 - **`jobs-serve-is-remote-execution`** (critical; hv2-jobs): [JOBS.md](JOBS.md).
 - **`schedule-receipts-trust-the-operator`** (warning; hv2-jobs): [JOBS.md](JOBS.md).

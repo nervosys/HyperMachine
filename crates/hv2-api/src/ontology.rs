@@ -5131,18 +5131,8 @@ impl HyperMachineOntology {
             Guardrail {
                 id: "api-unauthenticated-unless-key-configured".to_string(),
                 severity: GuardrailSeverity::Critical,
-                title: "hv2-api answers every caller unless API keys are configured".to_string(),
-                description: "With the default configuration (`enable_api_key_auth` off, \
-                    listening on 0.0.0.0) the REST server authenticates nobody: any caller \
-                    who can reach the port can create and delete VMs, run programs through \
-                    `exec_in_vm`, approve images, spawn agents and execute plans. When keys \
-                    are configured the check is a static comparison of `Authorization: \
-                    Bearer <key>` (or a bare key): 401 without one, 403 for a wrong one. \
-                    There is no per-route or per-key permission: the permission middleware \
-                    exists in the crate and is not installed on any router, so a valid key \
-                    reaches every route. The agent card's claim of `Ed25519-JWT` and `mTLS` \
-                    is not enforced by this server."
-                    .to_string(),
+                title: "hv2-api answers every caller when no API key is configured".to_string(),
+                description: "The server listens on loopback (`127.0.0.1`) by default and refuses any other address at startup unless API keys are configured or `allow_unauthenticated` (`--allow-unauthenticated`) is set. With no key configured the REST and gRPC surfaces authenticate nobody: on loopback only local processes can connect, and with `allow_unauthenticated` anyone who can reach the port can create and delete VMs, run programs through `exec_in_vm`, approve images, spawn agents and execute plans. When keys are configured the REST check is a static comparison of `Authorization: Bearer <key>` (or a bare key): 401 without one, 403 for a wrong one, 403 `ROLE_DENIED` for a role that may not send that method to that path, and 403 `TENANT_MISMATCH` for a tenant-bound key whose `X-Tenant-Id` names another tenant. A key is either unscoped (an administrator with no tenant) or scoped to a role and an optional tenant: `viewer` may read, `operator` may also write except to the admin-only routes (`/api/v1/images`, `/api/v1/runtime`, and GPU fabric routes other than capacity reservations), and `admin` may do everything. The role table is enforced by the key middleware itself; the separate permission middleware in the crate is not installed on any router. The default exclusions, `/health` and `/agentic`, apply to GET, HEAD and OPTIONS only. gRPC checks the same keys, refuses a viewer key with `PERMISSION_DENIED`, and applies no per-method role check. The agent card's claim of `Ed25519-JWT` and `mTLS` is not enforced by this server.".to_string(),
                 applies_to: [
                     "vm_guest_access",
                     "image_admission",
@@ -5159,13 +5149,8 @@ impl HyperMachineOntology {
                 .into_iter()
                 .map(str::to_string)
                 .collect(),
-                condition: "The server runs with no API key configured, or with a key that \
-                    several callers share, on a network not every host on it may be trusted."
-                    .to_string(),
-                mitigation: "Set `HV2_API_KEYS` (or the configured keys), enable API key \
-                    authentication, bind to loopback or a private interface, and put an \
-                    authenticating proxy in front where callers need different rights."
-                    .to_string(),
+                condition: "The server runs with no API key and `allow_unauthenticated` set, or with an unscoped key that several callers share, on a network not every host on it may be trusted.".to_string(),
+                mitigation: "Set `HV2_API_KEYS` (or the configured keys) and give each caller a scoped key with the lowest role it needs and a tenant where one applies; keep the loopback default or a private interface, and put an authenticating proxy in front where callers need different identities.".to_string(),
                 reference: "crates/hv2-api/src/middleware.rs".to_string(),
             },
             Guardrail {
@@ -5195,20 +5180,8 @@ impl HyperMachineOntology {
             Guardrail {
                 id: "image-admission-off-by-default-and-unsatisfiable".to_string(),
                 severity: GuardrailSeverity::Warning,
-                title: "Boot image admission does nothing by default, and over REST nothing \
-                    can be approved"
-                    .to_string(),
-                description: "Admission is a no-op unless the registry is installed and the \
-                    server enforces it at VM creation (off by default). When it is on, the \
-                    check is the SHA-256 of the VM's primary image (the kernel; an initrd is \
-                    not checked). The registry is held in memory and is empty after a \
-                    restart. This server requires a verified signature for approval, and \
-                    `register_image` records every signature as unverified, so `approve_image` \
-                    answers 422 for every image; `deprecate_image` is the route that admits \
-                    one, and it does so with a warning and no signature check. Approval has \
-                    no state precondition, so a denied or revoked image can be approved \
-                    again, and the reviewer is free text."
-                    .to_string(),
+                title: "Boot image admission does nothing by default, and over REST no image can be approved or admitted".to_string(),
+                description: "Admission is a no-op unless the registry is installed and the server enforces it at VM creation (off by default). When it is on, the check is the SHA-256 of the VM's primary image (the kernel; an initrd is not checked). The registry is held in memory and is empty after a restart. This server requires a verified signature for approval, and `register_image` records every signature as unverified, so `approve_image` answers 422 for every image registered over REST. `deprecate_image` does not get around that: a deprecated image passes the same signature gate as an approved one, so over REST it is refused too. A denied or revoked image is final for its reference (`approve_image` answers 409), and admission by digest refuses a digest that any denied or revoked entry carries. The reviewer is free text.".to_string(),
                 applies_to: [
                     "image_admission",
                     "register_image",
@@ -5219,68 +5192,40 @@ impl HyperMachineOntology {
                 .into_iter()
                 .map(str::to_string)
                 .collect(),
-                condition: "Image admission is relied on to keep unreviewed images from \
-                    booting."
-                    .to_string(),
-                mitigation: "Confirm enforcement is on, treat the registry as advisory \
-                    until signatures can be verified, re-register after a restart, and \
-                    keep the routes behind an API key."
-                    .to_string(),
+                condition: "Image admission is relied on to keep unreviewed images from booting.".to_string(),
+                mitigation: "Confirm enforcement is on, treat the registry as advisory until signatures can be verified, re-register after a restart, and give only admin keys the image routes.".to_string(),
                 reference: "docs/SECURITY_AUDIT.md".to_string(),
             },
             Guardrail {
                 id: "agent-runtime-tenant-is-caller-asserted".to_string(),
                 severity: GuardrailSeverity::Warning,
-                title: "An agent's tenant is the header the caller sends".to_string(),
-                description: "The agent routes scope sessions by the `X-Tenant-Id` header, \
-                    which the caller writes: another tenant's id reads, lists and releases \
-                    that tenant's sessions. The per-route bearer check is never active on \
-                    this server (it is built with no tokens), and `reap_agents` is not \
-                    scoped to a tenant. The `full` capability set includes guest and host \
-                    exec. Sessions do not outlive the process."
-                    .to_string(),
+                title: "An agent's tenant is the X-Tenant-Id header unless the caller's key is bound to a tenant".to_string(),
+                description: "The agent routes scope sessions by tenant. The tenant is the `X-Tenant-Id` header the caller writes, unless its key is bound to a tenant: then the key sets the header, and a different one is refused with 403 `TENANT_MISMATCH`. With no key, or with an unscoped key, another tenant's id reads, lists and releases that tenant's sessions. `reap_agents` is scoped to the requesting tenant. The per-route bearer check is never active on this server (it is built with no tokens). The `full` capability set includes guest and host exec. Sessions do not outlive the process.".to_string(),
                 applies_to: ["agent_runtime", "spawn_agent", "list_agents", "release_agent", "reap_agents"]
                     .into_iter()
                     .map(str::to_string)
                     .collect(),
-                condition: "Tenants are expected to be isolated from one another."
-                    .to_string(),
-                mitigation: "Put an authenticating proxy in front that sets the header from \
-                    the caller's identity and strips any the caller sent."
-                    .to_string(),
+                condition: "Tenants are expected to be isolated from one another, and callers hold no tenant-bound key.".to_string(),
+                mitigation: "Give each tenant a key bound to it, or put an authenticating proxy in front that sets the header from the caller's identity and strips any the caller sent.".to_string(),
                 reference: "docs/SECURITY_AUDIT.md".to_string(),
             },
             Guardrail {
-                id: "webhooks-post-to-any-url-with-a-non-hmac-signature".to_string(),
+                id: "webhooks-unsigned-without-secret-and-opt-out-reaches-internal".to_string(),
                 severity: GuardrailSeverity::Warning,
-                title: "This server's webhooks post to any URL and do not carry an HMAC"
-                    .to_string(),
-                description: "`create_webhook` does not validate the URL, so a caller can \
-                    make the server request an internal address; redirects are followed, \
-                    there is no retry, and any response counts as delivered. The \
-                    `X-HyperMachine-Signature` header (`sha256=...`) is a 64-bit hash from \
-                    the standard library's hasher, not HMAC-SHA256, and can be forged. \
-                    Custom headers, which may hold credentials, are returned by the read \
-                    routes. The control plane's webhooks are different: they pin DNS, do \
-                    not follow redirects and accept only global addresses."
-                    .to_string(),
+                title: "Webhooks refuse non-public targets unless opted out, and are unsigned without a secret".to_string(),
+                description: "Registration and every delivery refuse non-public targets unless `server.allow_private_webhooks` is set. That opt-out turns the address check off, so a caller who can register a webhook can make this server send requests to internal addresses (cloud metadata, internal services), and delivery may then use a system proxy. A webhook registered without a `secret` is delivered unsigned, and a receiver that does not require a signature cannot tell its events from forged ones. A signature, when present, is HMAC-SHA256 of the exact body keyed by the secret, but nothing in the signed data is a delivery time, so a captured delivery can be sent again and still verify: a receiver that needs freshness must keep the delivery ids it has seen. Custom header values, which may hold credentials, are returned as `[redacted]` by the read routes. Delivery is one attempt with no retry, and a non-2xx answer counts as a failure in `failure_count`.".to_string(),
                 applies_to: ["create_webhook", "list_webhooks", "get_webhook", "event_delivery"]
                     .into_iter()
                     .map(str::to_string)
                     .collect(),
-                condition: "Webhooks are registered by callers who must not reach the \
-                    server's network, or the receiver relies on the signature."
-                    .to_string(),
-                mitigation: "Register webhooks only from trusted callers, do not put \
-                    secrets in headers, and use the control plane's webhooks where a real \
-                    HMAC is needed."
-                    .to_string(),
+                condition: "Webhooks are registered by callers who must not reach the server's network, the opt-out is set, or a receiver relies on a signature while the webhook has no secret.".to_string(),
+                mitigation: "Keep `allow_private_webhooks` off, set a `secret` on every webhook and verify it at the receiver, reject delivery ids it has already seen, and register webhooks only from trusted callers.".to_string(),
                 reference: "docs/security/SECURITY_AUDIT_2026-11-16.md".to_string(),
             },
             Guardrail {
                 id: "event-publish-injects-events".to_string(),
                 severity: GuardrailSeverity::Warning,
-                title: "Any caller can put an event on the bus".to_string(),
+                title: "Any caller who may write can put an event on the bus".to_string(),
                 description: "`publish_event` is a development route that is always \
                     mounted: it broadcasts whatever event it is given to every SSE and \
                     WebSocket subscriber and every matching webhook. Nothing else in this \
@@ -8777,7 +8722,7 @@ mod tests {
             "guest-exec-runs-programs-in-the-guest",
             "image-admission-off-by-default-and-unsatisfiable",
             "agent-runtime-tenant-is-caller-asserted",
-            "webhooks-post-to-any-url-with-a-non-hmac-signature",
+            "webhooks-unsigned-without-secret-and-opt-out-reaches-internal",
             "event-publish-injects-events",
             "probes-exempt-from-api-key",
             "snapshot-routes-record-no-vm-state",

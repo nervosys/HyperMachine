@@ -82,7 +82,7 @@ pub(super) fn api_key_failures() -> Vec<OperationResponse> {
         ),
         api_fail(
             403,
-            "an API key is configured and the one sent is not among them (`FORBIDDEN`)",
+            "an API key is configured and either the one sent is not among them (`FORBIDDEN`), or its role may not send this method to this path (`ROLE_DENIED`), or it is bound to a tenant and `X-Tenant-Id` names another (`TENANT_MISMATCH`)",
         ),
     ]
 }

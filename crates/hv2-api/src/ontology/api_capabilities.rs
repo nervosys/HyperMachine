@@ -7,7 +7,7 @@ use super::{Capability, CapabilityCategory, HyperMachineOntology};
 
 impl HyperMachineOntology {
     pub(super) fn build_api_capabilities() -> Vec<Capability> {
-        let key = "an API key when the server has keys configured (none by default)";
+        let key = "an API key when the server has keys configured (none by default): viewer for reads, operator for writes, admin for the image, runtime and GPU class and topology writes";
         vec![
             api_capability(
                 "vm_guest_access",
@@ -47,7 +47,7 @@ impl HyperMachineOntology {
                 "Agent Sessions",
                 "Spawn, list, count and release agent sessions per tenant, and reap idle \
                  ones. Sessions are records of the agent runtime; the tenant is the \
-                 `X-Tenant-Id` header the caller sends.",
+                 `X-Tenant-Id` header the caller sends, or the key's tenant when the key is bound to one.",
                 CapabilityCategory::AgentExecution,
                 &[
                     "spawn_agent",

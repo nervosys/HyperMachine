@@ -25,10 +25,11 @@ fn hm_rate_limited() -> OperationResponse {
     plain(
         429,
         "the caller's bucket has used its 100 requests in the current 60-second window \
-         (empty body). The bucket is the first address of the request's `X-Forwarded-For` \
-         header, or the single shared bucket `unknown` when the header is absent, so every \
-         client that sends none shares one budget, and a caller can pick its own bucket by \
-         writing the header. Refused requests count against the bucket, and the limiter \
+         (empty body). The bucket is the request's socket peer address. `X-Forwarded-For` is \
+         read only when that peer is a `--trusted-proxy` address, and then the bucket is the \
+         rightmost entry that is not itself a trusted proxy; from any other peer the header is \
+         ignored, so a caller cannot pick its own bucket. A missing or malformed entry falls \
+         back to the peer address. Refused requests count against the bucket, and the limiter \
          runs before the key check, so unauthenticated requests spend it too",
     )
 }
@@ -38,7 +39,8 @@ fn hm_unauthorized() -> OperationResponse {
     plain(
         401,
         "the server was started with `HM_API_KEY` and the request has no `Authorization: \
-         Bearer <key>` header, or the token is not the key (empty body). Never returned when \
+         Bearer <key>` header, or the token is not the key (empty body). Returned on every \
+         route except GET /health, and only while `HM_API_KEY` is set. Never returned when \
          `HM_API_KEY` is unset, which is the default",
     )
 }
@@ -123,9 +125,8 @@ impl HyperMachineOntology {
                      `vm.*` tools: it is not the ontology the control plane's or `hv2-api`'s \
                      `/agentic/ontology` serves, and it lists none of the sandbox, node or \
                      cluster operations. Built fresh on every request from static data; the \
-                     order of tools inside it is not stable between calls. Public: never \
-                     needs the API key, even when `HM_API_KEY` is set (it is registered with \
-                     the unauthenticated routes). The rate limiter and CORS apply as to \
+                     order of tools inside it is not stable between calls. Needs the API \
+                     key when `HM_API_KEY` is set. The rate limiter and CORS apply as to \
                      every route."
                 ))
                 .repeatable()
@@ -135,6 +136,7 @@ impl HyperMachineOntology {
                     Some(json!({ "type": ["object", "array"] })),
                 ))
                 .answers(hm_rate_limited())
+                .answers(hm_unauthorized())
         };
 
         let specs = vec![
@@ -145,7 +147,7 @@ impl HyperMachineOntology {
                      registry, no hypervisor, no disk, so it answers 200 for as long as the \
                      process accepts connections and says nothing about whether VMs can be \
                      started. Public: never needs the API key. The rate limiter applies, so a \
-                     prober that shares the `unknown` bucket with other clients can be \
+                     prober that shares its socket peer address with other clients can be \
                      refused.",
                 )
                 .repeatable()
@@ -170,7 +172,7 @@ impl HyperMachineOntology {
                      the `gpu_enabled` text says creation refuses it where the refusal \
                      happens when the VM is started. `vm.execute_script` is described as \
                      running a Rhai script on the host against a read-only view of the VM: it \
-                     does not run commands in the guest. Public: never needs the API key.",
+                     does not run commands in the guest. Needs the API key when `HM_API_KEY` is set.",
                 )
                 .repeatable()
                 .answers(ok(
@@ -178,7 +180,8 @@ impl HyperMachineOntology {
                     "The tool definitions.",
                     Some(json!({ "type": "array", "items": hm_tool_definition_schema() })),
                 ))
-                .answers(hm_rate_limited()),
+                .answers(hm_rate_limited())
+                .answers(hm_unauthorized()),
             Spec::new("hm_call_tool", "Call A Local VM Tool", "POST", "/mcp/call")
                 .about(
                     "Run one of the tools `hm_list_tools` lists, named in `tool`, with its \
@@ -194,8 +197,7 @@ impl HyperMachineOntology {
                      reports `VM '' not found`. `vm.delete` of a VM that does not exist \
                      reports success (see `hm_delete_vm`). `agent_id` is accepted and unused: \
                      no per-agent session is kept. This route needs the API key when \
-                     `HM_API_KEY` is set, including for the read-only tools that the GET \
-                     routes serve without one. Not idempotent as a whole: it depends on the \
+                     `HM_API_KEY` is set, including for its read-only tools. Not idempotent as a whole: it depends on the \
                      tool.",
                 )
                 .takes(
@@ -228,7 +230,7 @@ impl HyperMachineOntology {
                     "List every VM in the local registry: the file `registry.json` in a                      `hypermachine` directory under `~/.local/share` on Linux,                      `~/Library/Application Support` on macOS or `%LOCALAPPDATA%` on                      Windows, which the `hm t2` commands share, so a VM created from the                      command line is listed here. An array of VM records in no stable order. \
                      The registry says what was recorded last, not what is running: after \
                      the server restarts a VM recorded `Running` has no process behind it \
-                     (see `hm_start_vm`). Public: never needs the API key.",
+                     (see `hm_start_vm`). Needs the API key when `HM_API_KEY` is set.",
                 )
                 .repeatable()
                 .answers(ok(
@@ -236,7 +238,8 @@ impl HyperMachineOntology {
                     "Every VM.",
                     Some(json!({ "type": "array", "items": hm_vm_info_schema() })),
                 ))
-                .answers(hm_rate_limited()),
+                .answers(hm_rate_limited())
+                .answers(hm_unauthorized()),
             Spec::new("hm_create_vm", "Create A Local VM", "POST", "/vms")
                 .about(
                     "Register a VM in the local registry, in state `Created`, and save the \
@@ -281,14 +284,15 @@ impl HyperMachineOntology {
                 .about(
                     "Read one VM's record from the registry: sizes, flags, `state` and the \
                      creation and last-change times. The state is what the registry last \
-                     recorded; it does not ask a running VM. Public: never needs the API \
-                     key.",
+                     recorded; it does not ask a running VM. Needs the API key when \
+                     `HM_API_KEY` is set.",
                 )
                 .with(hm_vm_name())
                 .repeatable()
                 .answers(ok(200, "The record.", Some(hm_vm_info_schema())))
                 .answers(plain(404, "plain text: `VM '<name>' not found`"))
-                .answers(hm_rate_limited()),
+                .answers(hm_rate_limited())
+                .answers(hm_unauthorized()),
             Spec::new("hm_delete_vm", "Delete A Local VM", "DELETE", "/vms/{name}")
                 .about(
                     "Stop the VM if it has a running instance in this process, ignoring any \
@@ -364,7 +368,7 @@ impl HyperMachineOntology {
                  instance (never started, stopped, or started by an earlier process) \
                  answers with `memory_used_gb`, `cpu_usage_percent` and `uptime_seconds` \
                  null. `state` is the registry's capitalised name (`Running`), not the lower \
-                 case some older documentation shows. Public: never needs the API key.",
+                 case some older documentation shows. Needs the API key when `HM_API_KEY` is set.",
             )
             .with(hm_vm_name())
             .repeatable()
@@ -385,7 +389,8 @@ impl HyperMachineOntology {
                 "plain text: `VM '<name>' not found`; also any error reading a running \
                  instance's metrics",
             ))
-            .answers(hm_rate_limited()),
+            .answers(hm_rate_limited())
+            .answers(hm_unauthorized()),
             Spec::new(
                 "hm_execute_vm_script",
                 "Run A Rhai Script Against A Local VM",
@@ -472,7 +477,7 @@ impl HyperMachineOntology {
                  `claude-3`, `claude-3.5`, `claude-4`, `claude-4.5` names; `google`, \
                  `gemini` and the `gemini-2.0`, `gemini-2.5` and `-flash`, `-pro`, \
                  `-ultra` names; and `generic`, `other`, `custom`. Anything else is a 400 \
-                 with an empty body. Public: never needs the API key.",
+                 with an empty body. Needs the API key when `HM_API_KEY` is set.",
             )
             .with(path_param(
                 "provider",
@@ -490,7 +495,8 @@ impl HyperMachineOntology {
                     "hints": { "type": "object" } } })),
             ))
             .answers(plain(400, "the name is not one the server knows (empty body)"))
-            .answers(hm_rate_limited()),
+            .answers(hm_rate_limited())
+            .answers(hm_unauthorized()),
             discovery(
                 "hm_get_openai_tools",
                 "Get The Local Tools For OpenAI",
@@ -1275,8 +1281,8 @@ impl HyperMachineOntology {
 
     /// The capabilities of the local servers.
     pub(super) fn build_local_server_capabilities() -> Vec<Capability> {
-        let hm_key = "`HM_API_KEY` as a bearer token on the mutating routes, when the server \
-                      was started with one (none by default)";
+        let hm_key = "`HM_API_KEY` as a bearer token on every route except GET /health, when \
+                      the server was started with one (none by default)";
         let jobs_token = "the `--token` / `HM_JOBS_TOKEN` bearer token, when the server has one \
                           (required off loopback)";
         let capability = |id: &str,
@@ -1302,9 +1308,10 @@ impl HyperMachineOntology {
                 "Local VM Registry (hm serve)",
                 "Create, start, stop, inspect and delete VMs of the local registry that `hm \
                  serve` manages in its own process, and run a Rhai script against a running \
-                 one. This is the single-machine server: it binds 0.0.0.0, has no TLS, and \
-                 asks for a key only when `HM_API_KEY` is set and only on routes that change \
-                 something. Reads are always open. See docs/AGENTIC_INTERFACE.md and \
+                 one. This is the single-machine server: it binds 127.0.0.1 by default, has no TLS, and \
+                 asks for a key on every route except GET /health when `HM_API_KEY` is set. \
+                 With no key it refuses a non-loopback bind unless `--allow-unauthenticated` is \
+                 given. See docs/AGENTIC_INTERFACE.md and \
                  docs/src/ai/mcp-server.md",
                 CapabilityCategory::VirtualMachine,
                 &[
@@ -1336,8 +1343,8 @@ impl HyperMachineOntology {
                 "hm_cli_agent_discovery",
                 "Local Server Discovery And Health",
                 "Read the local server's own ontology, schemas, capabilities summary and \
-                 per-provider tool lists, and its health. All public. They describe the \
-                 `vm.*` tools only.",
+                 per-provider tool lists, and its health. Health needs no key; the rest need \
+                 `HM_API_KEY` when it is set. They describe the `vm.*` tools only.",
                 CapabilityCategory::Monitoring,
                 &[
                     "hm_get_health",
@@ -1431,22 +1438,24 @@ impl HyperMachineOntology {
         vec![
             Guardrail {
                 id: "hm-serve-open-and-plain-by-default".to_string(),
-                severity: GuardrailSeverity::Critical,
-                title: "`hm serve` listens on every interface, without TLS, and without a key \
-                    unless one is set"
+                severity: GuardrailSeverity::Warning,
+                title: "`hm serve` is plain HTTP, and open to every caller when started with \
+                    `--allow-unauthenticated`"
                     .to_string(),
-                description: "`hm serve` binds `0.0.0.0` and has no TLS. With no `HM_API_KEY` \
-                    in its environment (the default) it authenticates nobody: any host that \
-                    reaches the port can create, start and delete VMs and run scripts. With a \
-                    key set, only the six mutating routes (`/mcp/call`, `POST /vms`, `DELETE \
-                    /vms/{name}`, start, stop and script) check it, as a plain string \
-                    comparison; every GET stays open, so VM names, sizes, state and the \
-                    metrics are readable without it. CORS allows every origin, method and \
-                    header. The rate limit (100 requests a minute) is keyed on the \
-                    `X-Forwarded-For` header the client sends, and clients that send none \
-                    share one bucket, so it is neither per-caller nor a defence against a \
-                    caller who varies the header. There is one key for every caller and no \
-                    per-route permission."
+                description: "`hm serve` binds `127.0.0.1` by default and refuses a \
+                    non-loopback bind unless `HM_API_KEY` is set or `--allow-unauthenticated` \
+                    is given. With a key set, every route except `GET /health` requires \
+                    `Authorization: Bearer <key>`, checked against the key byte by byte with no \
+                    early exit (a length mismatch is rejected first). With no key, no route \
+                    checks anything: that is the default only on loopback, where only local \
+                    processes can connect, and it is what `--allow-unauthenticated` accepts \
+                    elsewhere. Traffic is plain HTTP with no TLS, so the key and the responses \
+                    cross the network unencrypted. CORS allows every origin, method and header. \
+                    The rate limit (100 requests a minute) is keyed on the socket peer address; \
+                    `X-Forwarded-For` is honoured only from `--trusted-proxy` peers, so a caller \
+                    cannot choose its own bucket with the header. The per-client map of the \
+                    limiter is not bounded. There is one key for every caller and no per-route \
+                    permission."
                     .to_string(),
                 applies_to: [
                     "hm_cli_local_vms",
@@ -1460,13 +1469,15 @@ impl HyperMachineOntology {
                 .into_iter()
                 .map(str::to_string)
                 .collect(),
-                condition: "`hm serve` runs on a machine whose network is not trusted, or \
-                    without `HM_API_KEY`."
+                condition: "`hm serve` runs with `--allow-unauthenticated`, or with \
+                    `HM_API_KEY` on a path where other parties can read or alter plain HTTP \
+                    traffic."
                     .to_string(),
-                mitigation: "Set `HM_API_KEY`, firewall the port or front it with a TLS proxy \
-                    that authenticates callers and sets `X-Forwarded-For` itself, and treat \
-                    the read routes as public. For TLS and per-user rights use the control \
-                    plane or `hm sandbox vm mcp-http`."
+                mitigation: "Keep the default `127.0.0.1` bind. For any other address set \
+                    `HM_API_KEY` and front the port with a TLS proxy that authenticates callers \
+                    and sets `X-Forwarded-For` itself, and pass that proxy's address as \
+                    `--trusted-proxy`. For TLS and per-user rights use the control plane or \
+                    `hm sandbox vm mcp-http`."
                     .to_string(),
                 reference: "docs/src/ai/mcp-server.md".to_string(),
             },

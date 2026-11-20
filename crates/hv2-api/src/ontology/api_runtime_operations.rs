@@ -249,7 +249,7 @@ impl HyperMachineOntology {
                  including one that was never created or was already destroyed, with \
                  `invoice_generated: false` when there was nothing to invoice, so a 200 does \
                  not show that a session existed. `total_charges` is the metering's total, \
-                 not a payment taken. Open unless an API key is configured, and then any key \
+                 not a payment taken. Open unless an API key is configured, and then only an admin key \
                  may destroy any session.",
             )
             .with(path_param(
@@ -389,7 +389,7 @@ impl HyperMachineOntology {
                  error: nothing changes and the ready steps are returned. A workflow that \
                  this outcome finishes is moved to the completed list, after which its id is \
                  unknown to `cancel_runtime_workflow`. An unknown workflow is 400, not 404. \
-                 Open unless an API key is configured, and then any key may report any \
+                 Open unless an API key is configured, and then only an admin key may report any \
                  workflow's steps.",
             )
             .with(path_param("id", "The workflow's id", json!({ "type": "string" })))
@@ -450,7 +450,7 @@ impl HyperMachineOntology {
                  and an empty pool is not refilled until someone does. The slots it adds \
                  and removes are records, not VMs. No body is read, but the request needs \
                  `Content-Type: application/json`. Not idempotent. Open unless an API key is \
-                 configured, and then any key may run it.",
+                 configured, and then only an admin key may run it.",
             )
             .answers(ok(
                 200,
@@ -726,7 +726,7 @@ impl HyperMachineOntology {
                  for `duration_hours`, and answer its id (`rsv-<n>`). It is a record with an \
                  expiry and nothing more: it does not check the class's instance limit, the \
                  topology, the GPUs free or other reservations, and it holds no GPU; \
-                 `tenant_id` is whatever the caller sends. It is refused (422 \
+                 `tenant_id` is whatever the caller sends, unless the key is bound to a tenant: then it must be that tenant, or the answer is 403 `TENANT_MISMATCH`. It is refused (422 \
                  `RESERVATION_FAILED`) only for an unknown class or a `count` of 0. Not \
                  idempotent: each call is a new reservation. Open unless an API key is \
                  configured.",
@@ -750,6 +750,7 @@ impl HyperMachineOntology {
                 Some(json!({ "type": "object", "properties": { "reservation_id": { "type": "string" } } })),
             ))
             .answers(fabric_fail(422, "an unknown class or a count of 0 (`RESERVATION_FAILED`)"))
+            .answers(fabric_fail(403, "the key is bound to another tenant (`TENANT_MISMATCH`)"))
             .answers(body_rejection())
             .answers(json_content_type_required())
             .answers_all(keys()),
@@ -762,8 +763,7 @@ impl HyperMachineOntology {
             .about(
                 "Mark a reservation cancelled, so it is no longer counted as active. The \
                  reservation is kept; cancelling one that is already cancelled, or expired, \
-                 is 204 again, and an unknown id is 404 `RESERVATION_NOT_FOUND`. Any caller \
-                 may cancel any tenant's reservation. Answers 204 with no body. Open unless \
+                 is 204 again, and an unknown id is 404 `RESERVATION_NOT_FOUND`. Only the reservation's own tenant may cancel it: the key's tenant when the key is bound to one, else the `X-Tenant-Id` the caller sends (so a caller that sends neither cancels nothing), and an unscoped admin key may cancel any tenant's. Anyone else gets the same 404 as for an unknown id. Answers 204 with no body. Open unless \
                  an API key is configured.",
             )
             .with(path_param("id", "The reservation's id", json!({ "type": "string" })))

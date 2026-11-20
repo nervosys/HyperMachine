@@ -174,6 +174,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sync override exists for it); any effect in CI (no kernel fixture there).
 
 ### Changed
+- **The agentic ontology describes the fixed behaviour.** Its entries for webhooks (signatures, redaction, delivery state, address checks, 400 answers), scoped keys and roles, tenant binding, image approval and deprecation (409 answers), `hm serve` (loopback by default, key on every route but `/health`, peer-keyed rate limit) and the guardrails that name them now match the code.
 - **`hm sandbox vm` prints JSON on every success.** `pause`, `delete`,
   `checkpoint delete`, `network disconnect`, `network delete`, `disk delete`
   (and `volume delete`, `machine delete`) printed nothing; each now prints one

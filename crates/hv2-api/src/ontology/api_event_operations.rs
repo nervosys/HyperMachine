@@ -59,9 +59,9 @@ fn webhook_schema() -> Value {
         "events": { "type": "array", "items": { "type": "string" } },
         "active": { "type": "boolean" },
         "created_at": { "type": "string" },
-        "last_triggered": { "type": ["string", "null"], "description": "never set" },
-        "failure_count": { "type": "integer", "description": "never incremented" },
-        "headers": { "type": "object", "additionalProperties": { "type": "string" }, "description": "the custom headers, returned as given" }
+        "last_triggered": { "type": ["string", "null"], "description": "the time of the last delivery attempt, successful or not; null before the first" },
+        "failure_count": { "type": "integer", "description": "consecutive failed deliveries; a 2xx resets it to 0; a non-2xx answer counts as a failure" },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" }, "description": "the custom header names; every value is `[redacted]`" }
     }, "description": "the secret is never returned" })
 }
 
@@ -206,7 +206,7 @@ impl HyperMachineOntology {
                  in any VM (it touches only the catalogue's counters). A `restored` answer \
                  is therefore not evidence that a VM went back to anything. 404 for an unknown \
                  snapshot; 400 when the snapshot is not `Valid` or another snapshot operation \
-                 is in progress. Open unless an API key is configured, and then any key may \
+                 is in progress. Open unless an API key is configured, and then an operator or admin key may \
                  \"restore\". No event is published.",
             )
             .with(vm_id())
@@ -231,21 +231,7 @@ impl HyperMachineOntology {
                 "/api/v1/events/webhooks",
             )
             .about(
-                "Register a URL to be POSTed each event of the listed types. The URL is not \
-                 validated in any way (no scheme, host or address check, no DNS pinning, \
-                 redirects are followed), so the server will send requests, with the event's \
-                 JSON, to whatever address is given, internal addresses included. Delivery is \
-                 one attempt with no retry, any HTTP answer counts as delivered, a failure is \
-                 only logged, and the subscription's `failure_count` and `last_triggered` are \
-                 never updated. Each delivery carries `X-HyperMachine-Event` (the dotted type, \
-                 such as `vm.created`), `X-HyperMachine-Delivery` (the event id), your custom \
-                 `headers` and, with a `secret`, `X-HyperMachine-Signature`, which is a \
-                 64-bit non-cryptographic hash of the secret and the body written as \
-                 `sha256=<hex>`, not an HMAC-SHA256, and is not verifiable as one. The secret \
-                 is never returned but custom `headers` are, in every read. Subscriptions are \
-                 memory only. The only events that exist are those `publish_event` posts: \
-                 nothing else in this server publishes. Exists only while events are enabled \
-                 (the default). Not idempotent. Open unless an API key is configured.",
+                "Register a URL to be POSTed each event of the listed types. The URL must be http or https. Unless `server.allow_private_webhooks` is set, its host must be a public address, or a name that resolves only to public addresses: a loopback, private, link-local, shared, multicast or other non-public address is refused with 400 here. The check runs again at each delivery, which connects only to the address it checked, so a name that changes its answer after registration is refused then. A name that does not resolve yet is accepted and checked at delivery. Redirects are never followed. With the opt-out any address is accepted, and a system proxy may be used for delivery. Delivery is one attempt with no retry. Any 2xx counts as delivered; any other status, a refused address or a transport error is a failure and is logged. Every attempt sets `last_triggered`, and `failure_count` counts consecutive failures and returns to 0 on a success. Each delivery carries `X-HyperMachine-Event` (the dotted type, such as `vm.created`), `X-HyperMachine-Delivery` (the event id) and your custom `headers`. With a `secret` it also carries `X-HyperMachine-Signature: sha256=<hex>`, the HMAC-SHA256 of the exact request body keyed by the secret; a webhook with no secret is sent unsigned. Registration answers 400 for an empty `secret`, a URL that is not http(s) or not public, a malformed header name or value, and a custom header the server sets itself: any `X-HyperMachine-*` name, or `Host`, `Content-Type`, `Content-Length`, `Transfer-Encoding` or `Connection`. The secret is never returned. Every read returns custom header names, with each value shown as `[redacted]`. Subscriptions are memory only and have no owner: a caller with the operator or admin role (or any caller when no key is configured) may register one, and a viewer key gets 403 `ROLE_DENIED`. The only events that exist are those `publish_event` posts: nothing else in this server publishes. Exists only while events are enabled (the default). Not idempotent."
             )
             .takes(
                 json!({
@@ -261,6 +247,7 @@ impl HyperMachineOntology {
                 true,
             )
             .answers(ok(201, "The subscription.", Some(webhook_schema())))
+            .answers(error_only(400, "the URL is not http or https, or is not a public address (unless `server.allow_private_webhooks` is set), an empty `secret`, a malformed header name or value, or a header the server sets itself (`X-HyperMachine-*`, `Host`, `Content-Type`, `Content-Length`, `Transfer-Encoding`, `Connection`); the answer is `{\"error\": ...}`"))
             .answers(body_rejection())
             .answers(json_content_type_required())
             .answers_all(keys()),
@@ -273,7 +260,7 @@ impl HyperMachineOntology {
             .about(
                 "List every webhook subscription, sorted by id, paged by `offset` and `limit` \
                  (limit 20 by default, at most 100). It is the whole server's list: there is no \
-                 owner or tenant. Each carries its custom headers, which may hold credentials. \
+                 owner or tenant. Each carries its custom header names, with every value shown as `[redacted]`, and its delivery state (`last_triggered`, `failure_count`). \
                  Read only. Open unless an API key is configured.",
             )
             .with(query_param("offset", "Subscriptions to skip", json!({ "type": "integer", "minimum": 0, "default": 0 })))
@@ -298,7 +285,7 @@ impl HyperMachineOntology {
             )
             .about(
                 "Read one subscription: its URL, event types, active flag, creation time and \
-                 custom headers. The secret is never returned. Read only. Open unless an API \
+                 custom header names, with every value shown as `[redacted]`. The secret is never returned. Read only. Open unless an API \
                  key is configured.",
             )
             .with(path_param("id", "The subscription's id", json!({ "type": "string" })))
@@ -315,7 +302,7 @@ impl HyperMachineOntology {
             .about(
                 "Remove a subscription. Events published after it no longer reach the URL; a \
                  delivery already in flight is not recalled. Answers 204 with no body. Open \
-                 unless an API key is configured, and then any key may remove any subscription.",
+                 unless an API key is configured, and then an operator or admin key may remove any subscription (there is no owner); a viewer key gets 403 `ROLE_DENIED`.",
             )
             .with(path_param("id", "The subscription's id", json!({ "type": "string" })))
             .answers(plain(204, "Removed. No body."))
@@ -365,7 +352,7 @@ impl HyperMachineOntology {
                  matching its type receives it, and every active webhook for its type is sent \
                  it. The code names the route a development endpoint, but it is mounted \
                  whenever events are enabled and it is the only publisher in this server, so \
-                 any caller (any key holder, when a key is configured) can make subscribers \
+                 any caller with an operator or admin key (any caller at all when no key is configured) can make subscribers \
                  and webhook targets see an event that never happened, for example a \
                  `vm_stopped` or `health_check_failed` for a real VM id. Answers 202 with the \
                  event echoed; delivery to webhooks happens afterwards and its failures are \
