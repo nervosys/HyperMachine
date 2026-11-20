@@ -77,8 +77,10 @@ fn served_by(node: bool, scope: &str) -> String {
         "A node serves this route too, from its event store: the cluster store when it is a \
          cluster node, otherwise a store in its own memory that a restart empties. The check in \
          front of it is the cluster token (`x-hv2-cluster-token`) when the node has one, and \
-         nothing when it has none. The node sets no team on a request, so it works in the \
-         scope that has no team and filters nothing by team."
+         nothing when it has none. The node reads the team header the control plane sends, as \
+         its volumes do: a request with a team works in that team's scope only, and a request \
+         with no header works in the scope that has no team. A node that is not a cluster node \
+         with a cluster token refuses the header (503), since it cannot tell who sent it."
             .to_string()
     } else if scope == "admin" {
         "The control plane serves it itself, from the cluster store. Its key check lets only an \
@@ -363,8 +365,10 @@ impl HyperMachineOntology {
              when it was started with --allow-private-webhooks."
         };
         let scope_note = if node {
-            "A node filters nothing by team: it lists, reads and deletes every webhook in the \
-             store, and one made on it has no team, so it receives every team's events."
+            "A node scopes webhooks by the team header the control plane sends, as the control \
+             plane does: a team's webhook is its team's alone (another team's is 404), and a \
+             request with no header lists, reads and deletes every webhook in the store. A \
+             webhook made with no header has no team, so it receives every team's events."
         } else {
             "A key with a team sees and changes only its team's webhooks (another team's is \
              404); an administrator, which has no team, sees every webhook and its own \
@@ -579,7 +583,9 @@ impl HyperMachineOntology {
         let usage_scope = if node {
             "A node reports from the store it keeps its events and its usage ledger in: the \
              cluster's when it is a cluster node, otherwise its own memory, which a restart \
-             empties. It filters by no team, so it counts every sandbox in that store."
+             empties. It filters by the team header the control plane sends, as the control \
+             plane does: a team's request counts only its team's sandboxes, and a request with \
+             no header counts every sandbox in that store."
         } else {
             "A key with a team is limited to its team's sandboxes and a key with a principal \
              and no team to its own; an administrator sees every sandbox. The administrator \
@@ -1249,7 +1255,10 @@ pub(super) fn platform_guardrails() -> Vec<Guardrail> {
             severity: GuardrailSeverity::Warning,
             title: "An environment an administrator makes is not found by a team's sandbox"
                 .to_string(),
-            description: "On the control plane a team's key reaches `/environments` with the                 `sandboxes` scope (GET, HEAD, PUT, DELETE) and `/usage` with the `events`                 scope (GET, HEAD); observer and read-only keys are refused. Both handlers                 act on the caller's team only: environments are stored per team, and the                 usage report keeps only the caller's team's stretches (an administrator sees                 every team). A sandbox created under a team looks for its environment in that                 team's scope only (404 `no environment` otherwise), so an environment an                 administrator makes, in the scope with no team, is not found by a team's                 sandbox. A node serves both routes with no team at all."
+            description: "On the control plane a team's key reaches `/environments` with the                 `sandboxes` scope (GET, HEAD, PUT, DELETE) and `/usage` with the `events`                 scope (GET, HEAD); observer and read-only keys are refused. Both handlers                 act on the caller's team only: environments are stored per team, and the                 usage report keeps only the caller's team's stretches (an administrator sees                 every team). A sandbox created under a team looks for its environment in that                 team's scope only (404 `no environment` otherwise), so an environment an                 administrator makes, in the scope with no team, is not found by a team's                 sandbox. A node serves both routes too, and scopes them by the team header the \
+                 control plane sends, as the control plane does: a team's environments on a \
+                 node are its own, and a request with no header works in the environments that \
+                 have no team."
                 .to_string(),
             applies_to: both(&[
                 "sandbox_environments",
@@ -1300,18 +1309,22 @@ pub(super) fn platform_guardrails() -> Vec<Guardrail> {
             reference: "docs/WEBHOOKS.md".to_string(),
         },
         Guardrail {
-            id: "node-platform-routes-filter-by-no-team".to_string(),
+            id: "node-team-scope-rests-on-the-cluster-token".to_string(),
             severity: GuardrailSeverity::Warning,
-            title: "A node serves environments, webhooks and usage with no team filter".to_string(),
-            description: "The node mounts the control plane's environments, webhooks and \
-                usage routes behind the cluster token alone, and sets no team on a request, \
-                so a caller that holds the token (or, on a node with no token, anyone \
-                reaching the port) lists every webhook in the store, with its URL, reads \
-                every team's delivery records, which hold event bodies and sandbox \
-                metadata, deletes any webhook, reads every sandbox's usage, and works in the \
-                environments that have no team. A webhook made on a node has no team and \
-                receives every team's events. In a cluster these are the cluster store's \
-                records, not the node's own. The webhook secret is never returned."
+            title: "A node's team scope is only as strong as the cluster token".to_string(),
+            description: "The node mounts the environments, webhooks and usage routes behind \
+                the cluster token and reads the team header the control plane sends, as its \
+                volumes do, so a team's caller sees only its team's environments, webhooks, \
+                delivery records and usage. The header is believed only on a clustered node \
+                with a cluster token, and the token is the trust boundary: whoever holds it \
+                can send any team's header, and a caller with no header is an administrator. \
+                So the holder lists every webhook in the store, with its URL, reads every \
+                team's delivery records, which hold event bodies and sandbox metadata, deletes \
+                any webhook, and reads every sandbox's usage. On a node with no cluster token, \
+                anyone reaching the port is an administrator, and a team header is refused \
+                (503). A webhook made with no team receives every team's events. In a cluster \
+                these are the cluster store's records, not the node's own. The webhook secret \
+                is never returned."
                 .to_string(),
             applies_to: [
                 "node_sandbox_environments",

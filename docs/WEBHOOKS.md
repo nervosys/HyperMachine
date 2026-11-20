@@ -58,6 +58,12 @@ GitHub's `X-Hub-Signature-256`. A webhook registered without a `secret` is
 sent unsigned (an empty secret is refused). It signs no timestamp, so it does
 not stop a replay.
 
+On a node, a webhook is scoped by the team the control plane sends, as the
+control plane's are: a team lists, reads, changes and deletes only its own
+webhooks and their deliveries (another team's is 404), and a request with no
+team header sees them all. A webhook made with no team receives every team's
+events. A node with no cluster token refuses the team header.
+
 A URL must be `http` or `https`, and its host must be, or resolve only to,
 public addresses: loopback, private, link-local (the cloud metadata service),
 CGNAT, multicast, unspecified and tunnel-prefix addresses are refused, IPv4

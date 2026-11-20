@@ -5161,8 +5161,9 @@ impl HyperMachineOntology {
                     put in it, so a secret placed there is read by every key with the \
                     `events` scope in its team, and kept in the cluster's event log (the \
                     newest 10,000 events). A control plane filters events by team; a node \
-                    serving the same routes filters nothing, and answers every team's \
-                    events to a caller with the cluster token."
+                    serving the same routes filters by the team header the control plane \
+                    sends, so a caller with the cluster token and no header sees every team's \
+                    events."
                     .to_string(),
                 applies_to: [
                     "sandbox_events",
@@ -8784,11 +8785,11 @@ mod tests {
             "volume-growth-limits-and-defaults",
             "volume-content-token-is-the-only-credential",
             "volume-writes-are-not-atomic-and-delete-is-immediate",
-            "block-disks-are-node-local-and-unscoped",
+            "block-disks-are-node-local-and-team-scoped-by-the-cluster-token",
             "environments-keep-secrets-unencrypted",
             "administrator-environments-are-not-found-by-team-sandboxes",
             "webhook-urls-are-checked-at-delivery",
-            "node-platform-routes-filter-by-no-team",
+            "node-team-scope-rests-on-the-cluster-token",
             "team-telemetry-leaves-the-platform",
             "cluster-event-log-lists-every-team",
             "platform-discovery-and-metrics-are-public",

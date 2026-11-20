@@ -36,7 +36,10 @@ hm sandbox vm usage --from 2026-10-01T00:00:00Z --by template
   preset holds ([API keys](API_KEY_ROTATION.md#presets)). A `machines` or
   `read-only` key, and an observer, get 403.
 - **The node and the control plane both answer**, each from the cluster's
-  events: a node alone from its own, a control plane from every node's.
+  events: a node alone from its own, a control plane from every node's. A node
+  applies the same team rule to the team the control plane sends it: a team's
+  request counts only its team's sandboxes, and a request with no team header
+  counts them all. A node with no cluster token refuses the team header.
 
 ## What it is counted from, and what that cannot know
 

@@ -740,9 +740,11 @@ impl HyperMachineOntology {
                  `diskID`, `name`, `sizeMiB` and `attachedTo`, the sandbox holding the disk. \
                  A disk is held by one sandbox at a time. `attachedTo` is null when the disk is \
                  free, and also when its metadata names a sandbox this daemon process no longer \
-                 holds (a restarted daemon treats a dead daemon's claim as free). Disks are \
-                 not scoped to a team: every caller that passes the node's gate sees them \
-                 all. The control plane has no `/disks` route; call the node.",
+                 holds (a restarted daemon treats a dead daemon's claim as free). A disk made \
+                 for a team is that team's: a request with the team header sees only its \
+                 team's disks, and a request with no header (an administrator's) sees every \
+                 disk. A node that reads no team header refuses one (503). The control plane \
+                 has no `/disks` route; call the node.",
             )
             .answers(ok(
                 200,
@@ -756,10 +758,12 @@ impl HyperMachineOntology {
                 "Make a persistent ext4 block device a sandbox can hold, sparse on the host and \
                  formatted with the host's `mkfs.ext4` (e2fsprogs must be installed) before the \
                  answer. The body is `{\"name\", \"sizeMiB\"}`: a name of 1 to 64 letters, digits, \
-                 `_` and `-`, and 16 to 1,048,576 MiB (1 TiB). The ID is derived from the name, \
-                 so a name is one disk. The formatting runs while the node holds its disk lock, \
+                 `_` and `-`, and 16 to 1,048,576 MiB (1 TiB). The ID is derived from the team \
+                 and the name, so a name is one disk per team. The formatting runs while the node holds its disk lock, \
                  so other disk calls on the node wait for it. A failed create removes what it \
-                 made. A sandbox then asks for the disk with `diskMount` on create, by name. \
+                 made. A sandbox then asks for the disk with `diskMount` on create, by name, and \
+                 finds only its own team's disk of that name (an administrator's sandbox, only \
+                 a disk with no team). \
                  The disk is a raw image: no copy-on-write, no snapshots of its own.",
             )
             .takes(
@@ -784,7 +788,7 @@ impl HyperMachineOntology {
             .about(
                 "Read one disk: `diskID`, `name`, `sizeMiB` and `attachedTo` (the holding sandbox, \
              or null when free or when the claim is a dead daemon's). An ID that is not 1 to 64 \
-             letters, digits, `_` and `-` is 404.",
+             letters, digits, `_` and `-` is 404, and so is another team's disk.",
             )
             .with(id())
             .answers(ok(200, "The disk.", Some(disk_schema())))
@@ -801,8 +805,8 @@ impl HyperMachineOntology {
             "Remove a disk and its image. Refused while a sandbox holds it: unlike a volume's, \
              whose sandboxes are left looking at an empty directory, a disk's sandbox would be \
              left writing to a file that no longer exists. A claim left by a daemon that is gone \
-             does not count. The disk's ID is not reusable for another size: make the name \
-             again for a new, empty disk.",
+             does not count. Another team's disk is 404, and is not removed. The disk's ID is \
+             not reusable for another size: make the name again for a new, empty disk.",
         )
         .with(id())
         .answers(plain(204, "The disk and its image are gone."))
@@ -914,8 +918,8 @@ impl HyperMachineOntology {
                 name: "Block Disks (node daemon)".to_string(),
                 description: "Make, list, read and delete persistent ext4 block disks that one \
                     sandbox holds at a time, at block-device speed. Disks are the node's own: \
-                    the control plane has no route for them, they are not scoped to a team and \
-                    a disk never moves between nodes. See docs/DISKS.md"
+                    the control plane has no route for them, a team's disk is that team's alone \
+                    (as a volume is), and a disk never moves between nodes. See docs/DISKS.md"
                     .to_string(),
                 category: CapabilityCategory::Storage,
                 operations: ids(&["list_disks", "create_disk", "get_disk", "delete_disk"]),
@@ -1071,15 +1075,21 @@ impl HyperMachineOntology {
                 reference: "docs/VOLUMES.md".to_string(),
             },
             Guardrail {
-                id: "block-disks-are-node-local-and-unscoped".to_string(),
+                id: "block-disks-are-node-local-and-team-scoped-by-the-cluster-token".to_string(),
                 severity: GuardrailSeverity::Warning,
-                title: "Block disks belong to one node and to no team".to_string(),
+                title: "Block disks are team-scoped only as far as the cluster token holds"
+                    .to_string(),
                 description: "The disk routes exist on the node only: the control plane neither \
                     forwards `/disks` nor places a sandbox on the node holding its disk, and \
-                    a disk never moves between nodes. They read no team context, so every \
-                    caller that passes the node's gate (the cluster token, or anyone when the \
-                    node has none) lists, creates and deletes every disk, and a sandbox asks \
-                    for one by name. The default disk directory is under the node's temporary \
+                    a disk never moves between nodes. The node reads the team header the control \
+                    plane sends, so a team's caller lists, reads and deletes only its team's \
+                    disks, and a sandbox asks for one by name within its team. The header is \
+                    believed only on a clustered node with a cluster token: whoever holds the \
+                    token can send any team's header, and a caller with no header is an \
+                    administrator who sees every disk. On a node with no token, anyone reaching \
+                    the port is an administrator, and a team header is refused (503). A disk \
+                    made before teams has no team and is visible to administrators only. The \
+                    default disk directory is under the node's temporary \
                     directory (`--disk-dir` overrides it), which an operating system may \
                     clear; a claim by a daemon that died is treated as free, so a disk can be \
                     held by a new sandbox while the old guest is gone. Power-loss durability \

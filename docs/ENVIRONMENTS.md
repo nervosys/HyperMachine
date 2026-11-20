@@ -39,7 +39,11 @@ curl -sS -X DELETE $NODE/environments/web -H "x-api-key: $KEY"
 - **Limits:** 1,024 variables and 128 KiB of them; 64 files and 4 MiB of
   them; absolute paths with no `..`; 256 environments a team.
 - **A node and a control plane both serve them**, from the cluster store, so
-  every node starts a sandbox with the same environment.
+  every node starts a sandbox with the same environment. A node scopes them by
+  the team the control plane sends, as the control plane does: a team's
+  environments are its own on a node too, and a request with no team header
+  sees the environments that have no team. A node with no cluster token refuses
+  the team header.
 
 ## Repositories
 

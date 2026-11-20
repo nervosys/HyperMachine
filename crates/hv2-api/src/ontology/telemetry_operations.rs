@@ -257,8 +257,10 @@ impl HyperMachineOntology {
         let events_about = |one: bool| {
             let scope = if node {
                 "A node serves the same routes over its own store, which in a cluster is the \
-                 cluster's, and filters nothing by team: it answers every team's events to \
-                 whoever reaches it with the cluster token."
+                 cluster's, and filters by the team header the control plane sends, as the \
+                 control plane does: a team's key sees its team's events, and a request with no \
+                 header sees every team's, so whoever holds the cluster token can see every \
+                 team's events."
             } else {
                 "A team's key sees the events of its team's sandboxes only; an administrator \
                  or a key with no team sees every team's. The key needs the `events` scope."

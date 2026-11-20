@@ -513,11 +513,11 @@ its source; the first two are finding O12 in
 - **`volume-growth-limits-and-defaults`** (warning; volumes): the reserve guard is on, the byte and inode limits are off (O7).
 - **`volume-content-token-is-the-only-credential`** (warning; volume content): [VOLUMES.md](VOLUMES.md).
 - **`volume-writes-are-not-atomic-and-delete-is-immediate`** (info; volumes): [VOLUMES.md](VOLUMES.md).
-- **`block-disks-are-node-local-and-unscoped`** (warning; disks): [DISKS.md](DISKS.md).
+- **`block-disks-are-node-local-and-team-scoped-by-the-cluster-token`** (warning; disks): [DISKS.md](DISKS.md).
 - **`environments-keep-secrets-unencrypted`** (warning; environments): [ENVIRONMENTS.md](ENVIRONMENTS.md).
 - **`administrator-environments-are-not-found-by-team-sandboxes`** (warning): [TEAMS.md](TEAMS.md).
 - **`webhook-urls-are-checked-at-delivery`** (warning; the control plane's and node's webhooks): [WEBHOOKS.md](WEBHOOKS.md).
-- **`node-platform-routes-filter-by-no-team`** (warning; node): the node's environments, webhooks and usage routes see every team (`crates/hv2-cluster/src/events.rs`).
+- **`node-team-scope-rests-on-the-cluster-token`** (warning; node): the node scopes its environments, webhooks and usage by the team header the control plane sends, so the cluster token is the trust boundary; a request with no header is an administrator's (`crates/hv2-cluster/src/events.rs`).
 - **`team-telemetry-leaves-the-platform`** (info): [TELEMETRY.md](TELEMETRY.md).
 - **`cluster-event-log-lists-every-team`** (info): [TEAMS.md](TEAMS.md).
 - **`platform-discovery-and-metrics-are-public`** (info): [TELEMETRY.md](TELEMETRY.md).

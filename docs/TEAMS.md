@@ -121,6 +121,7 @@ keys.
 | `/events/sandboxes` (all events) | its team's sandboxes' events | not listed |
 | Webhooks (`/events/webhooks…`) | the team's own: create, list, change, delete, deliveries | not there (404) |
 | Volumes (`/volumes…`, `volumeMounts`) | the team's own, by name | not there (404), and a mount by name finds only the team's |
+| Block disks (`/disks…`, `diskMount`; on the node, which the control plane does not route) | the team's own, by name | not there (404), and a `diskMount` by name finds only the team's |
 | [Machines](MACHINES.md#through-the-control-plane) (`/machines…`) | the team's own, by name | not there (404), by name and by ID |
 | Snapshots and templates (`/snapshots`, `/templates`, aliases, `templateID`) | the team's snapshots, plus every operator template | not listed, not startable (404), not deletable |
 

@@ -1130,6 +1130,19 @@ impl AppState {
     fn running(&self) -> u32 {
         u32::try_from(self.sandboxes.lock().len()).unwrap_or(u32::MAX)
     }
+
+    /// Whether this node reads the team header, from the same settings
+    /// `require_cluster_token` gates on.
+    fn team_attribution(&self) -> TeamAttribution {
+        TeamAttribution {
+            clustered: self.node.is_some(),
+            authenticated_cluster: self
+                .opts
+                .cluster_token
+                .as_ref()
+                .is_some_and(|token| !token.is_empty()),
+        }
+    }
 }
 
 /// A slot against capacity, given back when dropped -- so a create that fails
@@ -2481,16 +2494,58 @@ pub(crate) fn caller_team(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<Option<hv2_cluster::ownership::TeamId>, Response> {
+    let attribution = state.team_attribution();
     creator_team(
         headers,
-        state.node.is_some(),
-        state
-            .opts
-            .cluster_token
-            .as_ref()
-            .is_some_and(|token| !token.is_empty()),
+        attribution.clustered,
+        attribution.authenticated_cluster,
     )
     .map_err(|(status, error)| api_error(status, error))
+}
+
+/// When a node may read the team header: only when clustered, and only from
+/// a control plane that authenticated (see [`creator_team`]).
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct TeamAttribution {
+    clustered: bool,
+    authenticated_cluster: bool,
+}
+
+/// Sets the team a request acts for, from the header, on the store-backed
+/// routes a node serves: environments, events, webhooks and usage. The same
+/// rule volumes use: no header is an administrator's request, a header is
+/// that team's alone.
+async fn scope_team(
+    State(attribution): State<TeamAttribution>,
+    mut request: Request,
+    next: Next,
+) -> Response {
+    match creator_team(
+        request.headers(),
+        attribution.clustered,
+        attribution.authenticated_cluster,
+    ) {
+        Ok(team) => {
+            request
+                .extensions_mut()
+                .insert(hv2_cluster::ownership::RequestTeam(team));
+            next.run(request).await
+        }
+        Err((status, error)) => api_error(status, error),
+    }
+}
+
+/// The store-backed routes, each request scoped by [`scope_team`]. Without
+/// the layer a request has no team, which the event and webhook routes read
+/// as every team's.
+fn team_scoped_store_routes<S: Clone + Send + Sync + 'static>(
+    store: Arc<dyn hv2_cluster::store::ClusterStore>,
+    attribution: TeamAttribution,
+) -> Router<S> {
+    let scope = || axum::middleware::from_fn_with_state(attribution, scope_team);
+    Router::new()
+        .merge(hv2_cluster::environments::router(Arc::clone(&store)).layer(scope()))
+        .merge(hv2_cluster::events::router(store).layer(scope()))
 }
 
 /// A new sandbox ID.
@@ -3311,7 +3366,7 @@ async fn create_sandbox(
     let sandbox_id = new_sandbox_id();
     let access_token = new_access_token();
     let disk = match &req.disk_mount {
-        Some(mount) => match disks::claim(&state, &sandbox_id, mount) {
+        Some(mount) => match disks::claim(&state, team_id.as_ref(), &sandbox_id, mount) {
             Ok(claim) => Some(claim),
             Err((status, e)) => return api_error(status, e),
         },
@@ -7230,8 +7285,10 @@ async fn main() -> std::process::ExitCode {
             get(builds::status),
         )
         .route("/templates/aliases/{alias}", get(builds::alias))
-        .merge(hv2_cluster::environments::router(Arc::clone(&event_store)))
-        .merge(hv2_cluster::events::router(event_store))
+        .merge(team_scoped_store_routes(
+            event_store,
+            state.team_attribution(),
+        ))
         .route("/volumes", get(volumes::list).post(volumes::create))
         .route("/disks", get(disks::list).post(disks::create))
         .route("/machines", get(machines::list).post(machines::create))
@@ -8384,5 +8441,178 @@ mod decisions_json_tests {
         assert_eq!(d["verdict"], "allow");
         assert_eq!(d["reason"], "allowed");
         assert_eq!(v["stats"]["dnsRefused"], 0);
+    }
+}
+
+/// The team header on the store-backed routes a node serves: a team sees
+/// its own environments, webhooks and usage and no other team's, and a
+/// caller without the header sees what an administrator sees.
+#[cfg(test)]
+mod team_scope_tests {
+    use super::*;
+    use hv2_cluster::model::{now_ms, ClusterEvent};
+    use hv2_cluster::ownership::{TeamId, TEAM_HEADER};
+    use hv2_cluster::store::{ClusterStore, MemoryStore};
+    use serde_json::Value;
+
+    /// The routes as `main` mounts them, on a clustered node whose control
+    /// plane authenticated.
+    async fn serve() -> (String, Arc<dyn ClusterStore>) {
+        let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+        let attribution = TeamAttribution {
+            clustered: true,
+            authenticated_cluster: true,
+        };
+        let app: Router = team_scoped_store_routes(Arc::clone(&store), attribution);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        (base, store)
+    }
+
+    async fn call(
+        base: &str,
+        method: &str,
+        path: &str,
+        team: Option<&str>,
+        body: Option<Value>,
+    ) -> (StatusCode, Value) {
+        let mut request = reqwest::Client::new().request(
+            reqwest::Method::from_bytes(method.as_bytes()).unwrap(),
+            format!("{base}{path}"),
+        );
+        if let Some(team) = team {
+            request = request.header(TEAM_HEADER, team);
+        }
+        if let Some(body) = body {
+            request = request.json(&body);
+        }
+        let response = request.send().await.unwrap();
+        let status = StatusCode::from_u16(response.status().as_u16()).unwrap();
+        let bytes = response.bytes().await.unwrap();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+        )
+    }
+
+    fn names(listed: &Value) -> Vec<String> {
+        let mut names: Vec<String> = listed
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| e["name"].as_str().unwrap().to_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[tokio::test]
+    async fn a_team_reaches_only_its_own_environments() {
+        let (base, _store) = serve().await;
+        let (status, _) = call(
+            &base,
+            "PUT",
+            "/environments/alpha",
+            Some("red"),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let (status, _) = call(
+            &base,
+            "PUT",
+            "/environments/beta",
+            Some("blue"),
+            Some(json!({})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        for (path, team) in [
+            ("/environments/beta", "red"),
+            ("/environments/alpha", "blue"),
+        ] {
+            let (status, _) = call(&base, "GET", path, Some(team), None).await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "{team} reads {path}");
+        }
+        let (status, _) = call(&base, "DELETE", "/environments/alpha", Some("blue"), None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "blue deletes red's");
+        let (status, _) = call(&base, "GET", "/environments/alpha", Some("red"), None).await;
+        assert_eq!(status, StatusCode::OK, "red's survives blue's delete");
+        let (_, red) = call(&base, "GET", "/environments", Some("red"), None).await;
+        assert_eq!(names(&red), vec!["alpha".to_owned()]);
+        let (_, blue) = call(&base, "GET", "/environments", Some("blue"), None).await;
+        assert_eq!(names(&blue), vec!["beta".to_owned()]);
+        // Without a team, the environments that have none: never a team's.
+        let (_, teamless) = call(&base, "GET", "/environments", None, None).await;
+        assert!(names(&teamless).is_empty(), "{teamless}");
+    }
+
+    #[tokio::test]
+    async fn a_team_reaches_only_its_own_webhooks() {
+        let (base, _store) = serve().await;
+        let hook = json!({
+            "name": "ops",
+            "url": "https://hooks.example.com/ops",
+            "events": ["sandbox.lifecycle.created"],
+            "signatureSecret": "s".repeat(16),
+        });
+        let (status, made) = call(&base, "POST", "/events/webhooks", Some("red"), Some(hook)).await;
+        assert_eq!(status, StatusCode::CREATED);
+        let id = made["id"].as_str().unwrap().to_owned();
+        let own = format!("/events/webhooks/{id}");
+        for path in [
+            own.clone(),
+            format!("{own}/deliveries"),
+            format!("{own}/stats"),
+        ] {
+            let (status, _) = call(&base, "GET", &path, Some("blue"), None).await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "blue reads {path}");
+        }
+        let (status, _) = call(&base, "DELETE", &own, Some("blue"), None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "blue deletes red's webhook");
+        let (_, blue) = call(&base, "GET", "/events/webhooks", Some("blue"), None).await;
+        assert!(!blue.to_string().contains(&id), "{blue}");
+        let (_, red) = call(&base, "GET", "/events/webhooks", Some("red"), None).await;
+        assert!(red.to_string().contains(&id), "{red}");
+        // A caller without a team is an administrator: every team's webhook.
+        let (_, admin) = call(&base, "GET", "/events/webhooks", None, None).await;
+        assert!(admin.to_string().contains(&id), "{admin}");
+        let (status, _) = call(&base, "DELETE", &own, Some("red"), None).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn a_team_reads_only_its_own_usage() {
+        let (base, store) = serve().await;
+        for (sandbox, team) in [("sbx-red", "red"), ("sbx-blue", "blue")] {
+            let mut event = ClusterEvent::new("sandbox-created", "n1", Some(sandbox));
+            event.at_ms = now_ms() - 60_000;
+            event.team_id = Some(TeamId::parse(team).unwrap());
+            event.template_id = Some("base".into());
+            event.data = Some(json!({"hm_usage": {
+                "vcpuCount": 1, "memoryMB": 512, "running": true, "ownerId": "key-a",
+            }}));
+            store.publish(&event).await.unwrap();
+        }
+        let now = now_ms();
+        let window = format!("/usage?from={}&to={}", now - 3_600_000, now);
+        let keys = |answer: &Value| -> Vec<String> {
+            answer["groups"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|g| g["key"].as_str().unwrap().to_owned())
+                .collect()
+        };
+        let (status, red) = call(&base, "GET", &window, Some("red"), None).await;
+        assert_eq!(status, StatusCode::OK, "{red}");
+        assert_eq!(keys(&red), vec!["sbx-red".to_owned()]);
+        let (_, blue) = call(&base, "GET", &window, Some("blue"), None).await;
+        assert_eq!(keys(&blue), vec!["sbx-blue".to_owned()]);
+        let (_, admin) = call(&base, "GET", &window, None, None).await;
+        let mut both = keys(&admin);
+        both.sort();
+        assert_eq!(both, vec!["sbx-blue".to_owned(), "sbx-red".to_owned()]);
     }
 }

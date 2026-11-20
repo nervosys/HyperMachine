@@ -10,6 +10,16 @@
 //!   `DELETE /disks/{diskID}`, behind the API key.
 //! - `"diskMount": {"name", "path"}` on `POST /sandboxes` attaches one.
 //!
+//! # Whose a disk is
+//!
+//! A disk made for a team ([`hv2_cluster::ownership::TEAM_HEADER`], from the
+//! control plane) belongs to that team: the API shows it to that team only,
+//! its ID is derived from the team and the name, and a sandbox of that team
+//! attaches it by name. Without the header -- an administrator, or a
+//! deployment without teams -- every disk is visible, and a sandbox attaches
+//! only a disk with no team. A disk's sandbox inherits the disk's team when
+//! a checkpoint restore or a fork makes its copy.
+//!
 //! # What holds a disk
 //!
 //! Its `meta.json` names the sandbox it is attached to, so `GET /disks` can
@@ -45,10 +55,11 @@ use std::time::Duration;
 use serde_json::{json, Value};
 
 use hv2_agent::AgentVM;
+use hv2_cluster::ownership::TeamId;
 
 use super::{
-    api_error, AppState, Arc, Deserialize, IntoResponse, Json, Path, Response, Serialize, State,
-    StatusCode,
+    api_error, caller_team, AppState, Arc, Deserialize, HeaderMap, IntoResponse, Json, Path,
+    Response, Serialize, State, StatusCode,
 };
 
 /// Smallest disk: ext4 needs room for its journal.
@@ -104,6 +115,10 @@ pub(crate) struct Meta {
     /// from a pause is the same guest, and must find the address it had.
     #[serde(rename = "guestCID", default, skip_serializing_if = "Option::is_none")]
     guest_cid: Option<u64>,
+    /// The team it belongs to; `None` for a disk made without one, which is
+    /// also what every disk made before teams reads back as.
+    #[serde(rename = "teamID", default, skip_serializing_if = "Option::is_none")]
+    team: Option<TeamId>,
 }
 
 impl Meta {
@@ -112,12 +127,20 @@ impl Meta {
         self.attached_to.as_deref().filter(|id| held(id))
     }
 
+    /// Whether a caller acting for `team` may reach it: a caller without a
+    /// team reaches every disk, a team only its own. The same rule as a
+    /// volume's.
+    fn reachable_by(&self, team: Option<&TeamId>) -> bool {
+        team.is_none_or(|team| self.team.as_ref() == Some(team))
+    }
+
     fn describe(&self) -> Value {
         json!({
             "diskID": self.id,
             "name": self.name,
             "sizeMiB": self.size_mib,
             "attachedTo": self.holder(),
+            "teamID": self.team,
         })
     }
 }
@@ -140,7 +163,11 @@ fn read_meta(dir: &std::path::Path) -> Option<Meta> {
 /// Publish `meta` by rename, so a reader sees the old record or the new one
 /// and never half of either.
 fn write_meta(state: &AppState, meta: &Meta) -> std::io::Result<()> {
-    let dir = root(state).join(&meta.id);
+    write_meta_in(&root(state), meta)
+}
+
+fn write_meta_in(root: &std::path::Path, meta: &Meta) -> std::io::Result<()> {
+    let dir = root.join(&meta.id);
     let temporary = dir.join(".meta.json");
     let bytes = serde_json::to_vec(meta).map_err(std::io::Error::other)?;
     std::fs::write(&temporary, bytes)?;
@@ -149,7 +176,11 @@ fn write_meta(state: &AppState, meta: &Meta) -> std::io::Result<()> {
 }
 
 fn all(state: &AppState) -> Vec<Meta> {
-    let Ok(listing) = std::fs::read_dir(root(state)) else {
+    all_in(&root(state))
+}
+
+fn all_in(root: &std::path::Path) -> Vec<Meta> {
+    let Ok(listing) = std::fs::read_dir(root) else {
         return Vec::new();
     };
     let mut disks: Vec<Meta> = listing
@@ -160,15 +191,33 @@ fn all(state: &AppState) -> Vec<Meta> {
     disks
 }
 
-fn by_name(state: &AppState, name: &str) -> Option<Meta> {
-    all(state).into_iter().find(|d| d.name == name)
+/// `team`'s disk named `name`. Names are unique within a team, and the same
+/// name in two teams is two disks.
+fn by_name(state: &AppState, team: Option<&TeamId>, name: &str) -> Option<Meta> {
+    by_name_in(&root(state), team, name)
+}
+
+fn by_name_in(root: &std::path::Path, team: Option<&TeamId>, name: &str) -> Option<Meta> {
+    all_in(root)
+        .into_iter()
+        .find(|d| d.name == name && d.team.as_ref() == team)
 }
 
 fn by_id(state: &AppState, id: &str) -> Option<Meta> {
+    by_id_in(&root(state), id)
+}
+
+fn by_id_in(root: &std::path::Path, id: &str) -> Option<Meta> {
     if !valid_name(id) {
         return None;
     }
-    read_meta(&root(state).join(id))
+    read_meta(&root.join(id))
+}
+
+/// The disk `id`, if `team` may reach it. Another team's is not there,
+/// rather than forbidden: its ID says nothing to a team that did not make it.
+fn reachable_in(root: &std::path::Path, team: Option<&TeamId>, id: &str) -> Option<Meta> {
+    by_id_in(root, id).filter(|meta| meta.reachable_by(team))
 }
 
 /// The same rule as a volume's name, which an ID also meets.
@@ -180,9 +229,10 @@ fn valid_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
-/// A disk's ID: derived from its name, as a volume's is.
-fn disk_id(name: &str) -> String {
-    let volume = hv2_cluster::model::volume_id(name);
+/// A disk's ID: derived from its name, as a volume's is, and from its team
+/// too, so two teams each have their own disk of a name.
+fn disk_id(team: Option<&TeamId>, name: &str) -> String {
+    let volume = hv2_cluster::model::team_volume_id(team, name);
     format!("disk-{}", volume.trim_start_matches("vol-"))
 }
 
@@ -207,8 +257,13 @@ pub(crate) struct NewDisk {
 /// `POST /disks`.
 pub(crate) async fn create(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(req): Json<NewDisk>,
 ) -> Response {
+    let team = match caller_team(&state, &headers) {
+        Ok(team) => team,
+        Err(response) => return response,
+    };
     if !valid_name(&req.name) {
         return api_error(
             StatusCode::BAD_REQUEST,
@@ -222,12 +277,13 @@ pub(crate) async fn create(
         );
     }
     let meta = Meta {
-        id: disk_id(&req.name),
+        id: disk_id(team.as_ref(), &req.name),
         name: req.name,
         size_mib: req.size_mib,
         attached_to: None,
         mount_path: None,
         guest_cid: None,
+        team,
     };
     let state2 = Arc::clone(&state);
     let made = tokio::task::spawn_blocking(move || make(&state2, &meta).map(|()| meta))
@@ -248,7 +304,7 @@ fn make(state: &AppState, meta: &Meta) -> Result<(), (StatusCode, String)> {
     let _lock = LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    if by_name(state, &meta.name).is_some() {
+    if by_name(state, meta.team.as_ref(), &meta.name).is_some() {
         return Err((StatusCode::CONFLICT, format!("disk {} exists", meta.name)));
     }
     let root = root(state);
@@ -297,39 +353,81 @@ fn format(path: &std::path::Path, label: &str) -> Result<(), String> {
     }
 }
 
+/// The disks `team` may see, sorted by name.
+fn visible_in(root: &std::path::Path, team: Option<&TeamId>) -> Vec<Meta> {
+    all_in(root)
+        .into_iter()
+        .filter(|meta| meta.reachable_by(team))
+        .collect()
+}
+
 /// `GET /disks`.
-pub(crate) async fn list(State(state): State<Arc<AppState>>) -> Response {
-    let disks: Vec<Value> = all(&state).iter().map(Meta::describe).collect();
+pub(crate) async fn list(State(state): State<Arc<AppState>>, headers: HeaderMap) -> Response {
+    let team = match caller_team(&state, &headers) {
+        Ok(team) => team,
+        Err(response) => return response,
+    };
+    let disks: Vec<Value> = visible_in(&root(&state), team.as_ref())
+        .iter()
+        .map(Meta::describe)
+        .collect();
     Json(disks).into_response()
 }
 
 /// `GET /disks/{diskID}`.
-pub(crate) async fn get(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
-    match by_id(&state, &id) {
+pub(crate) async fn get(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let team = match caller_team(&state, &headers) {
+        Ok(team) => team,
+        Err(response) => return response,
+    };
+    match reachable_in(&root(&state), team.as_ref(), &id) {
         Some(meta) => Json(meta.describe()).into_response(),
         None => api_error(StatusCode::NOT_FOUND, format!("no disk {id}")),
     }
 }
 
-/// `DELETE /disks/{diskID}`: refused while a sandbox holds it. Unlike a
-/// volume's, whose sandboxes are left looking at an empty directory, a
-/// disk's sandbox would be left writing to a file that no longer exists.
-pub(crate) async fn delete(State(state): State<Arc<AppState>>, Path(id): Path<String>) -> Response {
+/// Remove disk `id`, if `team` may reach it. Refused while a sandbox holds
+/// it: unlike a volume's, whose sandboxes are left looking at an empty
+/// directory, a disk's sandbox would be left writing to a file that no
+/// longer exists.
+fn remove_in(
+    root: &std::path::Path,
+    team: Option<&TeamId>,
+    id: &str,
+) -> Result<(), (StatusCode, String)> {
     let _lock = LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let Some(meta) = by_id(&state, &id) else {
-        return api_error(StatusCode::NOT_FOUND, format!("no disk {id}"));
+    let Some(meta) = reachable_in(root, team, id) else {
+        return Err((StatusCode::NOT_FOUND, format!("no disk {id}")));
     };
     if let Some(holder) = meta.holder() {
-        return api_error(
+        return Err((
             StatusCode::CONFLICT,
             format!("disk {} is attached to sandbox {holder}", meta.name),
-        );
+        ));
     }
-    match std::fs::remove_dir_all(root(&state).join(&meta.id)) {
+    std::fs::remove_dir_all(root.join(&meta.id))
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+}
+
+/// `DELETE /disks/{diskID}`.
+pub(crate) async fn delete(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let team = match caller_team(&state, &headers) {
+        Ok(team) => team,
+        Err(response) => return response,
+    };
+    match remove_in(&root(&state), team.as_ref(), &id) {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        Err((status, message)) => api_error(status, message),
     }
 }
 
@@ -378,6 +476,7 @@ impl Drop for Claim {
 /// 400 for a bad path, 404 for no such disk, 409 if another sandbox holds it.
 pub(crate) fn claim(
     state: &Arc<AppState>,
+    team: Option<&TeamId>,
     sandbox_id: &str,
     mount: &DiskMount,
 ) -> Result<Claim, (StatusCode, String)> {
@@ -393,7 +492,7 @@ pub(crate) fn claim(
     let _lock = LOCK
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let Some(mut meta) = by_name(state, &mount.name) else {
+    let Some(mut meta) = by_name(state, team, &mount.name) else {
         return Err((StatusCode::NOT_FOUND, format!("no disk {}", mount.name)));
     };
     if let Some(holder) = meta.holder() {
@@ -435,6 +534,8 @@ pub(crate) struct DiskCopy {
     size_mib: u64,
     mount_path: String,
     guest_cid: Option<u64>,
+    /// The team of the disk it copies: the restored disk stays theirs.
+    team: Option<TeamId>,
 }
 
 /// Copy the disk `sandbox_id` holds to `file`, for a checkpoint. Called with
@@ -479,6 +580,7 @@ pub(crate) fn copy_out(
         size_mib: source.size_mib,
         mount_path,
         guest_cid: source.guest_cid,
+        team: source.team,
     })
 }
 
@@ -501,12 +603,13 @@ pub(crate) fn restore_copy(
     let stem: String = copy.name.chars().take(64 - 10 - tag.len()).collect();
     let name = format!("{stem}-restored-{tag}");
     let meta = Meta {
-        id: disk_id(&name),
+        id: disk_id(copy.team.as_ref(), &name),
         name,
         size_mib: copy.size_mib,
         attached_to: Some(sandbox_id.to_string()),
         mount_path: Some(copy.mount_path.clone()),
         guest_cid: copy.guest_cid,
+        team: copy.team.clone(),
     };
     let dir = root(state).join(&meta.id);
     std::fs::create_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -619,9 +722,10 @@ pub(crate) fn fork_for(state: &Arc<AppState>, parent: &str, child: &str) -> Resu
         attached_to: Some(child.to_string()),
         mount_path: Some(path.clone()),
         guest_cid: source.guest_cid,
+        team: source.team.clone(),
     };
     let meta = Meta {
-        id: disk_id(&meta.name),
+        id: disk_id(meta.team.as_ref(), &meta.name),
         ..meta
     };
     let dir = root(state).join(&meta.id);
@@ -845,10 +949,117 @@ mod tests {
 
     #[test]
     fn a_disk_id_is_derived_from_its_name() {
-        assert_eq!(disk_id("data"), disk_id("data"));
-        assert_ne!(disk_id("data"), disk_id("other"));
-        assert!(disk_id("data").starts_with("disk-"));
-        assert!(valid_name(&disk_id("data")));
+        assert_eq!(disk_id(None, "data"), disk_id(None, "data"));
+        assert_ne!(disk_id(None, "data"), disk_id(None, "other"));
+        assert!(disk_id(None, "data").starts_with("disk-"));
+        assert!(valid_name(&disk_id(None, "data")));
+    }
+
+    /// Two teams' disks of one name have two IDs, and neither is the
+    /// teamless disk's.
+    #[test]
+    fn a_disk_id_is_derived_from_its_team_too() {
+        let red = TeamId::parse("red").unwrap();
+        let blue = TeamId::parse("blue").unwrap();
+        assert_ne!(disk_id(Some(&red), "data"), disk_id(Some(&blue), "data"));
+        assert_ne!(disk_id(Some(&red), "data"), disk_id(None, "data"));
+        assert_eq!(disk_id(Some(&red), "data"), disk_id(Some(&red), "data"));
+    }
+
+    /// A temporary disk directory with one disk of each of three teams and
+    /// one teamless, all named "data".
+    fn three_teams_one_name() -> (PathBuf, [String; 4]) {
+        let root = std::env::temp_dir().join(format!("hv2-disks-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let red = TeamId::parse("red").unwrap();
+        let blue = TeamId::parse("blue").unwrap();
+        let green = TeamId::parse("green").unwrap();
+        let mut ids = [String::new(), String::new(), String::new(), String::new()];
+        for (i, team) in [Some(&red), Some(&blue), Some(&green), None]
+            .into_iter()
+            .enumerate()
+        {
+            let meta = Meta {
+                id: disk_id(team, "data"),
+                name: "data".into(),
+                size_mib: 16,
+                attached_to: None,
+                mount_path: None,
+                guest_cid: None,
+                team: team.cloned(),
+            };
+            std::fs::create_dir_all(root.join(&meta.id)).unwrap();
+            // Not `write_meta_in`: its fsync of a read-only handle is refused on
+            // Windows, and the record's bytes are all these tests need.
+            let bytes = serde_json::to_vec(&meta).unwrap();
+            std::fs::write(root.join(&meta.id).join("meta.json"), bytes).unwrap();
+            ids[i] = meta.id;
+        }
+        (root, ids)
+    }
+
+    /// A team sees its own disks and no other's; a caller without a team
+    /// sees all of them.
+    #[test]
+    fn a_team_lists_gets_and_names_only_its_own_disks() {
+        let (root, [red, blue, green, teamless]) = three_teams_one_name();
+        let red_team = TeamId::parse("red").unwrap();
+        let blue_team = TeamId::parse("blue").unwrap();
+        let ids = |team: Option<&TeamId>| -> Vec<String> {
+            visible_in(&root, team).into_iter().map(|m| m.id).collect()
+        };
+        assert_eq!(ids(Some(&red_team)), vec![red.clone()]);
+        assert_eq!(ids(Some(&blue_team)), vec![blue.clone()]);
+        assert!(!ids(Some(&red_team)).contains(&teamless));
+        let mut every = ids(None);
+        every.sort();
+        let mut expected = [red.clone(), blue.clone(), green, teamless.clone()].to_vec();
+        expected.sort();
+        assert_eq!(every, expected);
+        assert!(reachable_in(&root, Some(&blue_team), &red).is_none());
+        assert!(reachable_in(&root, Some(&red_team), &red).is_some());
+        assert!(reachable_in(&root, Some(&red_team), &teamless).is_none());
+        assert!(reachable_in(&root, None, &teamless).is_some());
+        // A name is one team's disk: each team finds its own by name.
+        let named = |team: Option<&TeamId>| by_name_in(&root, team, "data").map(|m| m.id);
+        assert_eq!(named(Some(&red_team)), Some(red.clone()));
+        assert_eq!(named(None), Some(teamless.clone()));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Another team's disk answers as a missing one does, and is not removed;
+    /// the owner's is.
+    #[test]
+    fn a_team_cannot_delete_another_teams_disk() {
+        let (root, [red, blue, _green, teamless]) = three_teams_one_name();
+        let red_team = TeamId::parse("red").unwrap();
+        let blue_team = TeamId::parse("blue").unwrap();
+        let (status, _) = remove_in(&root, Some(&blue_team), &red).unwrap_err();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        let (status, _) = remove_in(&root, Some(&red_team), &teamless).unwrap_err();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert!(root.join(&red).join("meta.json").exists());
+        assert!(root.join(&teamless).join("meta.json").exists());
+        assert!(remove_in(&root, Some(&red_team), &red).is_ok());
+        assert!(!root.join(&red).exists());
+        assert!(remove_in(&root, None, &blue).is_ok(), "no team deletes any");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// The disk record keeps its team, and a record from before teams has none.
+    #[test]
+    fn a_disk_record_keeps_its_team_and_an_old_one_has_none() {
+        let old: Meta =
+            serde_json::from_str(r#"{"diskID":"disk-1","name":"data","sizeMiB":16}"#).unwrap();
+        assert!(old.team.is_none());
+        assert!(old.reachable_by(None));
+        assert!(!old.reachable_by(Some(&TeamId::parse("red").unwrap())));
+        let red = TeamId::parse("red").unwrap();
+        let reds = Meta {
+            team: Some(red.clone()),
+            ..old
+        };
+        assert_eq!(serde_json::to_value(&reds).unwrap()["teamID"], "red");
     }
 
     #[test]
@@ -865,12 +1076,13 @@ mod tests {
     #[test]
     fn a_claim_counts_only_while_this_process_holds_it() {
         let meta = Meta {
-            id: disk_id("x"),
+            id: disk_id(None, "x"),
             name: "x".into(),
             size_mib: 16,
             attached_to: Some("sbx-from-a-dead-daemon".into()),
             mount_path: Some("/data".into()),
             guest_cid: None,
+            team: None,
         };
         assert_eq!(meta.holder(), None, "a claim nobody holds is stale");
         set_held("sbx-from-a-dead-daemon", true);

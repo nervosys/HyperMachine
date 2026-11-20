@@ -35,7 +35,29 @@ With `hm`: `hm vm disk create workspace --size-mib 1024`, `hm vm disk list`,
 | `DELETE /disks/{diskID}` | Deletes the disk and its image. Refused with 409 while a sandbox holds it. |
 | `"diskMount": {"name","path"}` on `POST /sandboxes` | Attaches the disk and mounts it at `path`. The response is 404 if no disk has that name, and 409 if another sandbox holds it. |
 
-The ID is derived from the name (`disk-…`), as a volume's is.
+The ID is derived from the name (`disk-…`), as a volume's is, and from the team
+too, so two teams can each have a disk of one name.
+
+## Whose a disk is
+
+A disk made for a team belongs to it, as a volume does. The control plane sends
+the team in the `x-hv2-sandbox-team` header, which the node reads only on a
+clustered node with a cluster token (a node without one refuses the header with
+503):
+
+- `GET /disks`, `GET` and `DELETE /disks/{diskID}`: a team sees and deletes only
+  its own disks. Another team's disk is 404, and is not removed.
+- `POST /disks` makes the disk for the caller's team, and `diskMount` on create
+  finds only that team's disk of the name. A request with no header (an
+  administrator's) sees every disk, and its sandbox attaches only a disk with no
+  team.
+- A disk made before teams has no team, so only an administrator sees or attaches
+  it.
+- A checkpoint restore or a fork makes its copy for the same team as the disk.
+
+The control plane has no `/disks` route, so these are the node's own routes, and
+the cluster token is what makes the team header believable: whoever holds it can
+send any team.
 
 ## What holds a disk
 
