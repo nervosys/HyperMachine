@@ -1075,8 +1075,9 @@ struct AppState {
     snapshots: parking_lot::RwLock<BTreeMap<String, Arc<snapshots::Snapshot>>>,
     /// Template builds by steps (E2B's `Template.build`), by build ID.
     step_builds: builds::Builds,
-    /// What each offered `COPY` upload, by files hash, must present.
-    upload_tokens: Mutex<HashMap<String, String>>,
+    /// The upload tokens offered for `COPY` files, each good for one scope's
+    /// upload of one hash to one template.
+    uploads: builds::UploadGrants,
     /// For pulling images to build templates from.
     http: reqwest::Client,
     metrics: NodeMetrics,
@@ -2458,6 +2459,38 @@ fn new_access_token() -> String {
         uuid::Uuid::new_v4().simple(),
         uuid::Uuid::new_v4().simple()
     )
+}
+
+/// SHA-256 of a content token, as lowercase hex: the only form of a token
+/// `meta.json` keeps (volumes), and of an upload token a node keeps (builds).
+/// Tokens are random and long, so an unsalted digest is enough to make a
+/// leaked file useless as a credential.
+pub(crate) fn token_digest(token: &str) -> String {
+    use sha2::Digest;
+    sha2::Sha256::digest(token.as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// The team the control plane says the caller acts for, if any. Shared by
+/// volumes and template builds, which scope what they keep by it.
+// The error is the reply, returned by the handler at once.
+#[allow(clippy::result_large_err)]
+pub(crate) fn caller_team(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<Option<hv2_cluster::ownership::TeamId>, Response> {
+    creator_team(
+        headers,
+        state.node.is_some(),
+        state
+            .opts
+            .cluster_token
+            .as_ref()
+            .is_some_and(|token| !token.is_empty()),
+    )
+    .map_err(|(status, error)| api_error(status, error))
 }
 
 /// A new sandbox ID.
@@ -6940,7 +6973,7 @@ async fn main() -> std::process::ExitCode {
         forwards: forwards::Forwards::default(),
         snapshots: parking_lot::RwLock::new(BTreeMap::new()),
         step_builds: parking_lot::Mutex::new(HashMap::new()),
-        upload_tokens: Mutex::new(HashMap::new()),
+        uploads: builds::UploadGrants::default(),
         // A stalled or endless response from a registry or login server ends:
         // each request has two minutes in all (registry blobs ask for their
         // own, longer, in `oci`), and a connection that goes quiet one.

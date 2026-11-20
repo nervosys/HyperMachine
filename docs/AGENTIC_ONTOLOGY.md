@@ -393,10 +393,14 @@ plane's routers, so every interface the five components serve is described
   `node_` twins, and `node_team_template_sharing`): list, alias lookup, build
   from an image, delete, the v2/v3 build routes, the upload link and the
   upload. The upload `PUT` sits outside the key check and the cluster-token
-  check; its `token` query parameter stands in, held per hash. The uploaded
-  hash is checked only with `--verify-upload-hash` (O8). Uploads, pulled
-  images and cached build steps are shared node-wide, and templates built
-  before scoping are visible to everyone (O14 residuals). The control plane
+  check; its `token` query parameter stands in. The token is offered for one
+  scope (the caller's team, or the node's own for an administrator), template
+  and hash, and expires after 30 minutes; a `PUT` to any other template or
+  hash is refused, and its bytes go to the scope the link was issued to. Uploads
+  and cached build steps are kept per scope, so one team's files cannot stand
+  in for another's. The uploaded hash is checked only with
+  `--verify-upload-hash` (O8). Pulled images are shared node-wide, and
+  templates built before scoping are visible to everyone (O14 residuals). The control plane
   answers 502 to `POST /templates` unless a node answered 202.
 - **Volumes and disks** (`volume_management`, `volume_content`, `node_volume_management`,
   `node_volume_content`, `node_block_disks`): `/volumecontent/*` is authenticated
@@ -505,7 +509,7 @@ its source; the first two are finding O12 in
 - **`snapshot-routes-record-no-vm-state`** (warning; VM snapshot records): nothing is captured (`crates/hv2-api/src/snapshot_routes.rs`).
 - **`template-upload-hash-not-verified-by-default`** (warning; uploads): the hash is checked only with `--verify-upload-hash` ([security/SECURITY_AUDIT_2026-11-16.md](security/SECURITY_AUDIT_2026-11-16.md), O8).
 - **`template-upload-route-needs-no-api-key`** (info; uploads): a URL token stands in for the key.
-- **`template-build-scope-residuals`** (warning; builds): uploads, images and build cache are shared node-wide, and pre-scoping templates are visible to all (O14).
+- **`template-build-scope-residuals`** (warning; builds): pulled images are shared node-wide, uploads and build cache are per scope, and pre-scoping templates are visible to all (O14).
 - **`volume-growth-limits-and-defaults`** (warning; volumes): the reserve guard is on, the byte and inode limits are off (O7).
 - **`volume-content-token-is-the-only-credential`** (warning; volume content): [VOLUMES.md](VOLUMES.md).
 - **`volume-writes-are-not-atomic-and-delete-is-immediate`** (info; volumes): [VOLUMES.md](VOLUMES.md).

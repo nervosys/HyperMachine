@@ -29,9 +29,10 @@ use hv2_agent::AgentVM;
 use hv2_guest_agent::{TemplateDefaults, TEMPLATE_DEFAULTS_PATH};
 
 use super::{
-    api_error, bring_up, build_from_image, create_park, new_access_token, policy_from, reserve,
-    sizes_of, snapshots, valid_template_name, AppState, Arc, Deserialize, IntoResponse, Json,
-    NetworkSpec, Path, Query, Response, Running, Sizes, State, StatusCode,
+    api_error, bring_up, build_from_image, caller_team, create_park, new_access_token,
+    policy_from, reserve, sizes_of, snapshots, token_digest, valid_template_name, AppState, Arc,
+    Deserialize, IntoResponse, Json, NetworkSpec, Path, Query, Response, Running, Sizes, State,
+    StatusCode,
 };
 use crate::env_vars::{join_guest, Member, Unpack};
 use crate::oci::Credentials;
@@ -50,6 +51,11 @@ const MAX_UPLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 /// audit's O8), so these bound what any caller can leave on the disk.
 const MAX_STORED_UPLOADS: usize = 256;
 const MAX_STORED_UPLOAD_BYTES: u64 = 64 * 1024 * 1024 * 1024;
+/// How long an offered upload's token is good for: the SDK sends its `PUT`
+/// straight after the link it was given.
+const UPLOAD_TOKEN_TTL: Duration = Duration::from_secs(30 * 60);
+/// The most offered upload tokens a node keeps at once; the oldest goes first.
+const MAX_UPLOAD_GRANTS: usize = 1024;
 
 /// What an upload may be and what the node will hold: the per-upload cap, the
 /// stored count and bytes, and whether the name must be the content's SHA-256.
@@ -129,6 +135,9 @@ const AGENT_TIMEOUT: Duration = Duration::from_secs(60);
 pub(crate) struct Build {
     template: String,
     build_id: String,
+    /// The scope that made it ([`scope_of`]): its `COPY`s read the uploads of
+    /// that scope, and no other.
+    scope: String,
     /// The size asked for, if any: E2B's `cpuCount` and `memoryMB`.
     sizes: Option<Sizes>,
     state: parking_lot::Mutex<Progress>,
@@ -176,8 +185,13 @@ pub(crate) struct RequestBuild {
 /// created from it afterwards get the new build.
 pub(crate) async fn request(
     State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
     Json(req): Json<RequestBuild>,
 ) -> Response {
+    let team = match caller_team(&state, &headers) {
+        Ok(team) => team,
+        Err(refused) => return refused,
+    };
     let Some(requested) = req.name.or(req.alias) else {
         return api_error(StatusCode::BAD_REQUEST, "a build needs a name");
     };
@@ -218,6 +232,7 @@ pub(crate) async fn request(
     let build = Arc::new(Build {
         template: name.clone(),
         build_id: uuid::Uuid::new_v4().to_string(),
+        scope: scope_of(team.as_ref()),
         sizes,
         state: parking_lot::Mutex::new(Progress {
             status: "waiting",
@@ -243,9 +258,25 @@ pub(crate) async fn request(
         .into_response()
 }
 
-/// Where a `COPY`'s upload for `hash` is kept: in the store when there is
-/// one, so a retried build on another node finds it.
-fn upload_path(state: &AppState, hash: &str) -> Option<std::path::PathBuf> {
+/// The scope a caller's uploads and builds are kept under: its team's, from
+/// the control plane's [`TEAM_HEADER`](hv2_cluster::ownership::TEAM_HEADER),
+/// or none for an administrator and for a node without teams. A `COPY` reads
+/// only the uploads of its build's scope, so one scope cannot supply another's.
+fn scope_of(team: Option<&hv2_cluster::ownership::TeamId>) -> String {
+    team.map_or_else(String::new, |team| format!("team:{}", team.as_str()))
+}
+
+/// The file name an upload of `hash` under `scope` is stored as, beside every
+/// other's: the first 16 hex digits of the scope's digest, then the hash. The
+/// scope part is fixed-width, so two scopes' names cannot meet.
+fn stored_name(scope: &str, hash: &str) -> String {
+    let digest = token_digest(&format!("upload-scope\0{scope}"));
+    format!("{}-{hash}.tar", &digest[..16])
+}
+
+/// Where a `COPY`'s upload for `hash` under `scope` is kept: in the store when
+/// there is one, so a retried build on another node finds it.
+fn upload_path(state: &AppState, scope: &str, hash: &str) -> Option<std::path::PathBuf> {
     let valid = !hash.is_empty()
         && hash.len() <= 128
         && hash
@@ -255,19 +286,89 @@ fn upload_path(state: &AppState, hash: &str) -> Option<std::path::PathBuf> {
         Some(store) => store.dir.join("uploads"),
         None => state.suspend_dir.join("uploads"),
     };
-    valid.then(|| dir.join(format!("{hash}.tar")))
+    valid.then(|| dir.join(stored_name(scope, hash)))
 }
 
-/// `GET /templates/{id}/files/{hash}`: whether a `COPY`'s files are here;
-/// if not, a URL to `PUT` them to, good for that one upload. The URL is
-/// this node's, as the caller reached it -- through a control plane, the
-/// control plane's, which passes the upload on.
+/// What an offered upload may write: one scope's file of one hash, for one
+/// template. Its scope comes from the offer, never from the request.
+#[derive(Clone)]
+pub(crate) struct UploadGrant {
+    digest: String,
+    scope: String,
+    template: String,
+    hash: String,
+    expires: Instant,
+}
+
+/// The upload tokens offered by `GET .../files/{hash}` and not yet used. Only
+/// their digests are kept. A token is compared with every live grant in
+/// constant time, so the time taken does not say which one matched.
+#[derive(Default)]
+pub(crate) struct UploadGrants(parking_lot::Mutex<Vec<UploadGrant>>);
+
+impl UploadGrants {
+    /// A new token for `hash` of `template` under `scope`. An earlier offer
+    /// for the same three is voided; offers for other scopes, templates or
+    /// hashes are not.
+    fn offer(&self, scope: &str, template: &str, hash: &str, now: Instant) -> String {
+        let token = new_access_token();
+        let mut grants = self.0.lock();
+        grants.retain(|g| {
+            g.expires > now && !(g.scope == scope && g.template == template && g.hash == hash)
+        });
+        if grants.len() >= MAX_UPLOAD_GRANTS {
+            grants.remove(0);
+        }
+        grants.push(UploadGrant {
+            digest: token_digest(&token),
+            scope: scope.to_string(),
+            template: template.to_string(),
+            hash: hash.to_string(),
+            expires: now + UPLOAD_TOKEN_TTL,
+        });
+        token
+    }
+
+    /// The grant `token` was offered as, if it is live and was offered for
+    /// this template and hash. Any other answer is the same refusal.
+    fn redeem(&self, token: &str, template: &str, hash: &str, now: Instant) -> Option<UploadGrant> {
+        use subtle::ConstantTimeEq;
+        let digest = token_digest(token);
+        let grants = self.0.lock();
+        let mut matched = None;
+        for grant in grants.iter() {
+            let same = bool::from(grant.digest.as_bytes().ct_eq(digest.as_bytes()));
+            if same && grant.expires > now {
+                matched = Some(grant);
+            }
+        }
+        matched
+            .filter(|g| g.template == template && g.hash == hash)
+            .cloned()
+    }
+
+    /// Uses up a grant once its upload is stored.
+    fn spend(&self, grant: &UploadGrant) {
+        self.0.lock().retain(|g| g.digest != grant.digest);
+    }
+}
+
+/// `GET /templates/{id}/files/{hash}`: whether a `COPY`'s files are here,
+/// under the caller's scope; if not, a URL to `PUT` them to, good for that
+/// one upload to that template and hash. The URL is this node's, as the
+/// caller reached it -- through a control plane, the control plane's, which
+/// passes the upload on.
 pub(crate) async fn file_link(
     State(state): State<Arc<AppState>>,
     Path((template, hash)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    let Some(path) = upload_path(&state, &hash) else {
+    let team = match caller_team(&state, &headers) {
+        Ok(team) => team,
+        Err(refused) => return refused,
+    };
+    let scope = scope_of(team.as_ref());
+    let Some(path) = upload_path(&state, &scope, &hash) else {
         return api_error(StatusCode::BAD_REQUEST, format!("a files hash {hash:?}"));
     };
     if path.exists() {
@@ -278,11 +379,8 @@ pub(crate) async fn file_link(
             return api_error(status, message);
         }
     }
-    let token = uuid::Uuid::new_v4().simple().to_string();
-    state
-        .upload_tokens
-        .lock()
-        .insert(hash.clone(), token.clone());
+    let template = snapshots::untagged(&template);
+    let token = state.uploads.offer(&scope, template, &hash, Instant::now());
     let header = |name: &str| {
         headers
             .get(name)
@@ -293,7 +391,6 @@ pub(crate) async fn file_link(
         .or_else(|| header("host"))
         .unwrap_or_else(|| format!("127.0.0.1:{}", state.opts.port));
     let scheme = header("x-forwarded-proto").unwrap_or_else(|| "http".into());
-    let template = snapshots::untagged(&template);
     (
         StatusCode::CREATED,
         Json(json!({
@@ -311,26 +408,28 @@ pub(crate) struct UploadQuery {
 
 /// `PUT /templates/{id}/files/{hash}?token=...`: a `COPY`'s files, as the
 /// SDK packs them -- a tar, gzipped or not. Not behind the API key: the SDK
-/// sends none with an upload, so the token from `file_link` stands in.
+/// sends none with an upload, so the token from `file_link` stands in. The
+/// token says where the bytes go (its scope, from the offer), and it is good
+/// for its template and hash only.
 pub(crate) async fn upload(
     State(state): State<Arc<AppState>>,
-    Path((_template, hash)): Path<(String, String)>,
+    Path((template, hash)): Path<(String, String)>,
     Query(query): Query<UploadQuery>,
     body: Body,
 ) -> Response {
-    use subtle::ConstantTimeEq;
-    let expected = state.upload_tokens.lock().get(&hash).cloned();
-    let authorized =
-        expected.is_some_and(|t| bool::from(t.as_bytes().ct_eq(query.token.as_bytes())));
-    if !authorized {
+    let template = snapshots::untagged(&template);
+    let Some(grant) = state
+        .uploads
+        .redeem(&query.token, template, &hash, Instant::now())
+    else {
         return api_error(StatusCode::FORBIDDEN, "not an upload this node offered");
-    }
-    let Some(path) = upload_path(&state, &hash) else {
+    };
+    let Some(path) = upload_path(&state, &grant.scope, &hash) else {
         return api_error(StatusCode::BAD_REQUEST, format!("a files hash {hash:?}"));
     };
     match receive(body, &path, &hash, &upload_limits(&state)).await {
         Ok(()) => {
-            state.upload_tokens.lock().remove(&hash);
+            state.uploads.spend(&grant);
             StatusCode::OK.into_response()
         }
         Err(UploadError(status, message)) => api_error(status, message),
@@ -584,15 +683,22 @@ fn image_template(image: &str, sizes: Sizes, default: Sizes) -> String {
 /// its base, its size, and every step, files included by their hash. A
 /// build whose steps are the same starts from it, at the start command --
 /// what E2B's layer cache does for the whole run of them.
-fn step_cache_name(spec: &StartBuild, sizes: Option<Sizes>) -> String {
+fn step_cache_name(spec: &StartBuild, sizes: Option<Sizes>, scope: &str) -> String {
     use sha2::Digest;
     let mut hash = sha2::Sha256::new();
-    let key = json!({
+    let mut key = json!({
         "image": spec.from_image,
         "template": spec.from_template,
         "sizes": sizes.map(|s| (s.cpus, s.memory_mb)),
         "steps": spec.steps.iter().map(|s| json!([s.kind, s.args, s.files_hash])).collect::<Vec<_>>(),
     });
+    // A scope's steps are its own: another's build with the same steps, and
+    // so the same files hashes, must not start from what this one kept.
+    // Unscoped (an administrator's, or a node's without teams), the name is
+    // what it was.
+    if !scope.is_empty() {
+        key["scope"] = json!(scope);
+    }
     hash.update(key.to_string().as_bytes());
     let hex: String = hash
         .finalize()
@@ -605,7 +711,7 @@ fn step_cache_name(spec: &StartBuild, sizes: Option<Sizes>) -> String {
 
 async fn run(state: &Arc<AppState>, build: &Arc<Build>, spec: StartBuild) -> Result<(), Failure> {
     let base_step = at("base");
-    let cache_name = step_cache_name(&spec, build.sizes);
+    let cache_name = step_cache_name(&spec, build.sizes, &build.scope);
     let cached = if spec.force || spec.steps.is_empty() {
         None
     } else {
@@ -1827,7 +1933,7 @@ async fn copy(
         .files_hash
         .as_deref()
         .ok_or("COPY without a filesHash")?;
-    let upload = upload_path(state, hash).ok_or("a bad filesHash")?;
+    let upload = upload_path(state, &build.scope, hash).ok_or("a bad filesHash")?;
     let dest = resolve(&context.cwd, dest);
     let src = src.clone();
 
@@ -2169,6 +2275,119 @@ mod tests {
                 .0,
             StatusCode::INSUFFICIENT_STORAGE
         );
+    }
+
+    #[test]
+    fn a_token_opens_one_template_and_hash_and_no_other() {
+        let grants = UploadGrants::default();
+        let now = Instant::now();
+        let token = grants.offer("team:red", "app", "h1", now);
+        let grant = grants
+            .redeem(&token, "app", "h1", now)
+            .expect("the upload it was offered for");
+        assert_eq!(grant.scope, "team:red");
+        assert!(grants.redeem(&token, "other", "h1", now).is_none());
+        assert!(grants.redeem(&token, "app", "h2", now).is_none());
+        assert!(grants.redeem(&"0".repeat(64), "app", "h1", now).is_none());
+        let later = now + UPLOAD_TOKEN_TTL + Duration::from_secs(1);
+        assert!(grants.redeem(&token, "app", "h1", later).is_none());
+    }
+
+    #[test]
+    fn a_grant_is_used_up_by_its_upload() {
+        let grants = UploadGrants::default();
+        let now = Instant::now();
+        let token = grants.offer("team:red", "app", "h1", now);
+        let grant = grants.redeem(&token, "app", "h1", now).unwrap();
+        grants.spend(&grant);
+        assert!(grants.redeem(&token, "app", "h1", now).is_none());
+    }
+
+    #[test]
+    fn another_scopes_offer_for_the_same_hash_voids_nothing() {
+        let grants = UploadGrants::default();
+        let now = Instant::now();
+        let red = grants.offer("team:red", "app", "h1", now);
+        let blue = grants.offer("team:blue", "app", "h1", now);
+        assert_eq!(
+            grants.redeem(&red, "app", "h1", now).unwrap().scope,
+            "team:red"
+        );
+        assert_eq!(
+            grants.redeem(&blue, "app", "h1", now).unwrap().scope,
+            "team:blue"
+        );
+        // A later offer to the same scope, template and hash does replace it.
+        let again = grants.offer("team:red", "app", "h1", now);
+        assert!(grants.redeem(&red, "app", "h1", now).is_none());
+        assert!(grants.redeem(&again, "app", "h1", now).is_some());
+    }
+
+    #[tokio::test]
+    async fn one_scopes_upload_of_a_hash_does_not_stand_in_for_anothers() {
+        let dir = tempdir::Dir::new();
+        let lax = UploadLimits {
+            verify_hash: false,
+            ..limits()
+        };
+        let red = dir.path.join(stored_name("team:red", "h1"));
+        let blue = dir.path.join(stored_name("team:blue", "h1"));
+        assert_ne!(red, blue, "two scopes, two files");
+        receive(Body::from(b"red's files".to_vec()), &red, "h1", &lax)
+            .await
+            .unwrap();
+        // Blue's upload of the same hash is stored, not refused as present.
+        receive(Body::from(b"blue's".to_vec()), &blue, "h1", &lax)
+            .await
+            .unwrap();
+        assert_eq!(std::fs::read(&red).unwrap(), b"red's files");
+        assert_eq!(std::fs::read(&blue).unwrap(), b"blue's");
+    }
+
+    #[tokio::test]
+    async fn the_normal_flow_offer_upload_then_copy_reads_it() {
+        let dir = upload(&[("main.txt", Some(b"hello"))]);
+        let tar = std::fs::read(dir.path.join("u.tar")).unwrap();
+        let hash = sha(&tar);
+        let grants = UploadGrants::default();
+        let now = Instant::now();
+        let token = grants.offer("team:red", "app", &hash, now);
+        let grant = grants
+            .redeem(&token, "app", &hash, now)
+            .expect("the link's own PUT");
+        let store = tempdir::Dir::new();
+        let stored = store.path.join(stored_name(&grant.scope, &grant.hash));
+        let roomy = UploadLimits {
+            one: 1 << 20,
+            ..limits()
+        };
+        receive(Body::from(tar), &stored, &hash, &roomy)
+            .await
+            .unwrap();
+        grants.spend(&grant);
+        assert!(grants.redeem(&token, "app", &hash, now).is_none());
+        // A COPY of the same scope reads what was stored.
+        let (_, paths) = repack(&stored, "main.txt", "/srv/").unwrap();
+        assert_eq!(paths, vec!["/srv/main.txt".to_string()]);
+    }
+
+    #[test]
+    fn a_team_is_its_own_scope_and_an_administrator_has_none() {
+        let red = hv2_cluster::ownership::TeamId::parse("red").unwrap();
+        let blue = hv2_cluster::ownership::TeamId::parse("blue").unwrap();
+        assert_eq!(scope_of(Some(&red)), "team:red");
+        assert_ne!(scope_of(Some(&red)), scope_of(Some(&blue)));
+        assert_eq!(scope_of(None), "");
+    }
+
+    #[test]
+    fn a_build_cache_is_kept_per_scope() {
+        let spec: StartBuild =
+            serde_json::from_value(json!({"fromImage": "img", "steps": []})).unwrap();
+        let red = step_cache_name(&spec, None, "team:red");
+        assert_eq!(red, step_cache_name(&spec, None, "team:red"));
+        assert_ne!(red, step_cache_name(&spec, None, "team:blue"));
+        assert_ne!(red, step_cache_name(&spec, None, ""));
     }
 
     #[test]

@@ -48,11 +48,15 @@ fn digest(key: &str) -> String {
 
 /// What the node was asked: method, path and query, body.
 type Calls = Arc<Mutex<Vec<(String, String, String)>>>;
+/// Each call's method, path and the team its `TEAM_HEADER` named, if any.
+type Teams = Arc<Mutex<Vec<(String, String, Option<String>)>>>;
 
 /// A node that keeps what the real one keeps of a build: its template's name,
 /// found by build ID alone. Builds are named `build-N`.
 struct FakeNode {
     calls: Calls,
+    /// Each call's path and the team its `TEAM_HEADER` named, if any.
+    teams: Teams,
     address: std::net::SocketAddr,
     _server: Owned,
 }
@@ -60,72 +64,86 @@ struct FakeNode {
 impl FakeNode {
     async fn start() -> Self {
         let calls: Calls = Arc::default();
+        let teams: Teams = Arc::default();
         let builds: Arc<Mutex<BTreeMap<String, String>>> = Arc::default();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let address = listener.local_addr().unwrap();
-        let (seen, kept) = (calls.clone(), builds.clone());
+        let (seen, kept, told) = (calls.clone(), builds.clone(), teams.clone());
         let server = tokio::spawn(async move {
             axum::serve(
                 listener,
-                Router::new().fallback(move |method: Method, uri: axum::http::Uri, body: Bytes| {
-                    let (seen, kept) = (seen.clone(), kept.clone());
-                    async move {
-                        let path = uri.path().to_owned();
-                        let text = String::from_utf8_lossy(&body).into_owned();
-                        seen.lock().push((
-                            method.to_string(),
-                            uri.path_and_query().map_or("", |p| p.as_str()).to_owned(),
-                            text.clone(),
-                        ));
-                        let parts: Vec<&str> = path.split('/').collect();
-                        match (method.as_str(), parts.as_slice()) {
-                            ("POST", ["", "v3", "templates"]) => {
-                                let body: Value = serde_json::from_str(&text).unwrap();
-                                let requested = body["name"]
-                                    .as_str()
-                                    .or_else(|| body["alias"].as_str())
-                                    .unwrap();
-                                let name = requested.split(':').next().unwrap().to_owned();
-                                let id = format!("build-{}", kept.lock().len());
-                                kept.lock().insert(id.clone(), name.clone());
-                                (
-                                    StatusCode::ACCEPTED,
-                                    Json(json!({"templateID": name, "buildID": id})),
-                                )
-                            }
-                            ("GET", ["", "templates", _, "builds", build, "status"]) => {
-                                match kept.lock().get(*build) {
-                                    Some(name) => (
-                                        StatusCode::OK,
-                                        Json(json!({"templateID": name, "buildID": build,
-                                                "status": "ready", "logEntries": []})),
-                                    ),
-                                    None => (StatusCode::NOT_FOUND, Json(json!({}))),
+                Router::new().fallback(
+                    move |method: Method,
+                          uri: axum::http::Uri,
+                          headers: axum::http::HeaderMap,
+                          body: Bytes| {
+                        let (seen, kept, told) = (seen.clone(), kept.clone(), told.clone());
+                        async move {
+                            let path = uri.path().to_owned();
+                            let text = String::from_utf8_lossy(&body).into_owned();
+                            let team = headers
+                                .get(hv2_cluster::ownership::TEAM_HEADER)
+                                .and_then(|value| value.to_str().ok())
+                                .map(str::to_owned);
+                            told.lock().push((method.to_string(), path.clone(), team));
+                            seen.lock().push((
+                                method.to_string(),
+                                uri.path_and_query().map_or("", |p| p.as_str()).to_owned(),
+                                text.clone(),
+                            ));
+                            let parts: Vec<&str> = path.split('/').collect();
+                            match (method.as_str(), parts.as_slice()) {
+                                ("POST", ["", "v3", "templates"]) => {
+                                    let body: Value = serde_json::from_str(&text).unwrap();
+                                    let requested = body["name"]
+                                        .as_str()
+                                        .or_else(|| body["alias"].as_str())
+                                        .unwrap();
+                                    let name = requested.split(':').next().unwrap().to_owned();
+                                    let id = format!("build-{}", kept.lock().len());
+                                    kept.lock().insert(id.clone(), name.clone());
+                                    (
+                                        StatusCode::ACCEPTED,
+                                        Json(json!({"templateID": name, "buildID": id})),
+                                    )
                                 }
+                                ("GET", ["", "templates", _, "builds", build, "status"]) => {
+                                    match kept.lock().get(*build) {
+                                        Some(name) => (
+                                            StatusCode::OK,
+                                            Json(json!({"templateID": name, "buildID": build,
+                                                "status": "ready", "logEntries": []})),
+                                        ),
+                                        None => (StatusCode::NOT_FOUND, Json(json!({}))),
+                                    }
+                                }
+                                ("POST", ["", "v2", "templates", _, "builds", _]) => {
+                                    (StatusCode::ACCEPTED, Json(json!({})))
+                                }
+                                ("GET", ["", "templates", _, "files", _]) => {
+                                    (StatusCode::CREATED, Json(json!({"present": false})))
+                                }
+                                ("DELETE", ["", "templates", _]) => {
+                                    (StatusCode::NO_CONTENT, Json(json!({})))
+                                }
+                                ("POST", ["", "templates"]) => {
+                                    (StatusCode::ACCEPTED, Json(json!({})))
+                                }
+                                ("POST", ["", "sandboxes"]) => {
+                                    (StatusCode::CREATED, Json(json!({"sandboxID": "made"})))
+                                }
+                                _ => (StatusCode::NOT_FOUND, Json(json!({}))),
                             }
-                            ("POST", ["", "v2", "templates", _, "builds", _]) => {
-                                (StatusCode::ACCEPTED, Json(json!({})))
-                            }
-                            ("GET", ["", "templates", _, "files", _]) => {
-                                (StatusCode::CREATED, Json(json!({"present": false})))
-                            }
-                            ("DELETE", ["", "templates", _]) => {
-                                (StatusCode::NO_CONTENT, Json(json!({})))
-                            }
-                            ("POST", ["", "templates"]) => (StatusCode::ACCEPTED, Json(json!({}))),
-                            ("POST", ["", "sandboxes"]) => {
-                                (StatusCode::CREATED, Json(json!({"sandboxID": "made"})))
-                            }
-                            _ => (StatusCode::NOT_FOUND, Json(json!({}))),
                         }
-                    }
-                }),
+                    },
+                ),
             )
             .await
             .unwrap();
         });
         Self {
             calls,
+            teams,
             address,
             _server: Owned(server),
         }
@@ -158,6 +176,11 @@ impl FakeNode {
     /// Calls made so far.
     fn calls(&self) -> Vec<(String, String, String)> {
         self.calls.lock().clone()
+    }
+
+    /// Each call's path and the team it was made for, as the node was told.
+    fn teams(&self) -> Vec<(String, String, Option<String>)> {
+        self.teams.lock().clone()
     }
 }
 
@@ -639,4 +662,53 @@ async fn an_image_build_is_made_under_the_principals_scope() {
         })
         .collect();
     assert_eq!(named, [format!("{}img", scope("alice")), "img".to_owned()]);
+}
+
+/// The node is told which scope each template call is for, and keeps the
+/// uploads a link is for under it. A principal's call carries that
+/// principal's team, the administrator's carries none, and an upload `PUT`,
+/// which has no key, carries none either: the token its link was issued with
+/// decides where its bytes go.
+#[tokio::test]
+async fn a_node_is_told_the_scope_each_template_call_is_for() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let node = FakeNode::start().await;
+    node.offer(&store, &[]).await;
+    let plane = Plane::new(store).await;
+    let team_of = |principal: &str| {
+        TeamId::personal(&OwnerId::parse(principal).unwrap())
+            .as_str()
+            .to_owned()
+    };
+    let link = "/files/abc";
+    for key in ["alice-key", "bob-key", "admin-key"] {
+        assert_eq!(
+            plane
+                .status(Method::GET, &format!("/templates/app{link}"), key)
+                .await,
+            201,
+            "{key}"
+        );
+    }
+    reqwest::Client::new()
+        .put(format!(
+            "{}/templates/app{link}?token=not-issued",
+            plane.base
+        ))
+        .body("bytes")
+        .send()
+        .await
+        .unwrap();
+    let told: Vec<Option<String>> = node
+        .teams()
+        .into_iter()
+        .filter(|(_, path, _)| path.ends_with(link))
+        .map(|(_, _, team)| team)
+        .collect();
+    assert_eq!(
+        told,
+        [Some(team_of("alice")), Some(team_of("bob")), None, None,],
+        "{:?}",
+        node.teams()
+    );
 }

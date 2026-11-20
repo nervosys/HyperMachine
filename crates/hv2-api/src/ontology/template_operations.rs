@@ -447,15 +447,18 @@ impl HyperMachineOntology {
             )
             .about(format!(
                 "Say whether a `COPY` step's files are already on the node, and if not give a \
-                 URL to `PUT` them to. 201 `{{present: true}}` when a file of that hash is \
-                 stored (and the node keeps files by hash across templates, so one stored \
-                 for any template or caller is reused); otherwise 201 `{{present: false, \
-                 url}}`, where the URL is `{{scheme}}://{{host}}/templates/{{template}}/files/{{hash}}?token=...`, \
+                 URL to `PUT` them to. Files are kept per scope: the caller's team's, or the \
+                 node's own for an administrator or a node without teams. 201 `{{present: \
+                 true}}` when a file of that hash is stored for the caller's scope, and \
+                 another scope's file of that hash is neither seen nor reused; otherwise \
+                 201 `{{present: false, url}}`, where the URL is \
+                 `{{scheme}}://{{host}}/templates/{{template}}/files/{{hash}}?token=...`, \
                  the host from `X-Forwarded-Host` or `Host` as the caller reached it \
                  (through a control plane, the control plane's, which relays the upload). \
-                 The token is one random value held in memory per hash: asking again for \
-                 the same hash replaces it and voids the earlier URL, and it is used up \
-                 only by a successful upload. Before it hands one out the node refuses \
+                 The token is one random value, held in memory as its digest, good for 30 \
+                 minutes and for that scope, template and hash alone. Asking again for the \
+                 same scope, template and hash voids the earlier URL; it is used up only by \
+                 a successful upload. Before it hands one out the node refuses \
                  (507) when it already holds 256 uploads or 64 GiB. {} Not an inventory \
                  route: an `inventory` key or an observer is refused, since the answer is a \
                  capability to write.",
@@ -500,11 +503,13 @@ impl HyperMachineOntology {
                  under their hash, from the URL `get_template_file_link` gave. This route \
                  takes no API key and no cluster token: the SDK sends none with an upload, \
                  so the `token` query parameter stands in, compared in constant time with \
-                 the one `get_template_file_link` issued for that hash. The token is for the \
-                 hash, not for the template in the path, and is removed only after a \
-                 successful upload. The body is streamed to a scratch file, then published \
-                 with a hard link, so the first writer of a hash wins and a second upload of \
-                 the same name is told 200 and discarded; nobody can replace another's \
+                 the ones `get_template_file_link` issued. The token is for one scope, \
+                 template and hash: the bytes are stored under the scope the link was issued \
+                 to, and a template or hash in the path other than the link's is refused \
+                 403. It expires after 30 minutes and is removed only after a successful \
+                 upload. The body is streamed to a scratch file, then published with a hard \
+                 link, so within a scope the first writer of a hash wins and a second upload \
+                 of the same name is told 200 and discarded; nobody can replace another's \
                  file. One upload is at most 4 GiB. By default the bytes are not checked \
                  against the hash; with the node's `--verify-upload-hash` they must hash \
                  (SHA-256, hex) to it. {} See the upload guardrails.",
@@ -539,9 +544,10 @@ impl HyperMachineOntology {
             ))
             .answers(fail(
                 403,
-                "`not an upload this node offered`: the token is missing, wrong, or was voided \
-                 by a later link for the same hash (or, through a control plane, the request \
-                 reached a node that issued none)",
+                "`not an upload this node offered`: the token is missing, wrong, expired, \
+                 used, voided by a later link for the same scope, template and hash, or \
+                 offered for another template or hash (or, through a control plane, the \
+                 request reached a node that issued none)",
             ))
             .answers(fail(413, "the upload is larger than 4 GiB"))
             .answers(fail(
@@ -901,13 +907,15 @@ pub(super) fn template_guardrails() -> Vec<Guardrail> {
                     node is told to"
                 .to_string(),
             description: "An upload is stored under the hash in its URL, and the node keeps \
-                one file per hash for every template and every caller. By default the \
+                one file per hash for every template of its scope (a team's, or the node's \
+                own for an administrator), so no other scope shares it. By default the \
                 bytes are not hashed against that name (E2B's SDK names an upload by a hash \
                 of its file list, not of the bytes, so a check that is on by default would \
                 refuse every E2B build). A caller who holds an upload URL for a hash, or who \
-                gets there first, therefore decides what every later `COPY` of that name \
-                runs, on that node, and `get_template_file_link` then says `present` to \
-                everyone. The first writer wins and nobody can replace a stored file, but \
+                gets there first, therefore decides what every later `COPY` of that hash \
+                runs, within its own scope on that node, and `get_template_file_link` then \
+                says `present` to that scope. The first writer wins and nobody can replace a \
+                stored file within its scope, but \
                 the first writer is not checked. Starting the node with \
                 `--verify-upload-hash` makes the name have to be the content's SHA-256 \
                 (422 otherwise), at the cost of refusing the SDK's own names. A node holds \
@@ -940,11 +948,12 @@ pub(super) fn template_guardrails() -> Vec<Guardrail> {
             description: "`PUT /templates/{id}/files/{hash}` is mounted outside the control \
                 plane's key check and the node's cluster-token check, because the SDK sends \
                 no key with an upload. What authorises it is the `token` query parameter \
-                that `get_template_file_link` issued, 128 random bits compared in constant \
-                time. The token is kept in the node's memory per hash, not per template or \
-                caller: whoever asked last for a hash holds the live token (an earlier URL \
-                for the same hash stops working), and the token is used up only by a \
-                successful upload. It travels in a URL, so a proxy that logs URLs logs it. \
+                that `get_template_file_link` issued, 244 random bits compared in constant \
+                time against every live token. The node keeps each token's digest in memory, \
+                for 30 minutes, with the scope, template and hash it was issued for: a token \
+                opens that one upload and no other. Asking again for the same scope, template \
+                and hash voids the earlier URL, and the token is used up only by a successful \
+                upload. It travels in a URL, so a proxy that logs URLs logs it. \
                 A control plane relays the upload to the build node chosen from the template \
                 name in the path."
                 .to_string(),
@@ -964,9 +973,11 @@ pub(super) fn template_guardrails() -> Vec<Guardrail> {
             description: "Only a key with a principal and no team gets a scope: its builds \
                 are stored as `scope.<16 hex>--name`, which no other caller can name, list, \
                 use, build over or delete, and the control plane checks a build ID is the \
-                caller's before a start or status call. What is not scoped: upload hashes, \
-                pulled images and cached build steps are shared node-wide by identical \
-                input; templates built before the scoping existed keep their plain names and \
+                caller's before a start or status call. Uploads and cached build steps are \
+                kept per scope (a team's, or the node's own for an administrator), so one \
+                scope's files and steps are never another's. What is not scoped: pulled \
+                images are shared node-wide by identical input; templates built before the \
+                scoping existed keep their plain names and \
                 are visible to everyone; a key with a team, and an administrator, name \
                 templates in the node's own namespace, so `request_template_build` over a \
                 name another team's build used replaces it in place; and a scoped name \

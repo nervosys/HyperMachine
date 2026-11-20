@@ -34,8 +34,8 @@ use hv2_cluster::model::VolumeMount;
 use hv2_cluster::ownership::TeamId;
 
 use super::{
-    api_error, new_access_token, AppState, Arc, Deserialize, IntoResponse, Json, Path, Query,
-    Response, Serialize, State, StatusCode,
+    api_error, caller_team, new_access_token, token_digest, AppState, Arc, Deserialize,
+    IntoResponse, Json, Path, Query, Response, Serialize, State, StatusCode,
 };
 use crate::ninep::quota::{self, Budget, Cost};
 use crate::ninep::{self, Beneath};
@@ -70,22 +70,6 @@ impl Meta {
     fn reachable_by(&self, team: Option<&TeamId>) -> bool {
         team.is_none_or(|team| self.team.as_ref() == Some(team))
     }
-}
-
-/// The team the control plane says the caller acts for, if any.
-// The error is the reply, returned by the handler at once.
-#[allow(clippy::result_large_err)]
-fn caller_team(state: &AppState, headers: &HeaderMap) -> Result<Option<TeamId>, Response> {
-    super::creator_team(
-        headers,
-        state.node.is_some(),
-        state
-            .opts
-            .cluster_token
-            .as_ref()
-            .is_some_and(|token| !token.is_empty()),
-    )
-    .map_err(|(status, error)| api_error(status, error))
 }
 
 fn root(state: &AppState) -> std::path::PathBuf {
@@ -230,17 +214,6 @@ fn create_metadata_with_sync(
         let _ = std::fs::remove_dir(&directory);
     }
     result
-}
-
-/// SHA-256 of a content token, as lowercase hex: the only form of a token
-/// `meta.json` keeps. Tokens are random and long, so an unsalted digest is
-/// enough to make a leaked metadata file useless as a credential.
-fn token_digest(token: &str) -> String {
-    use sha2::Digest;
-    sha2::Sha256::digest(token.as_bytes())
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
 }
 
 /// A new volume's metadata, and its token, which only the caller keeps.

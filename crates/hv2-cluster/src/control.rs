@@ -3634,7 +3634,11 @@ async fn to_builder(
             }
         }
     }
-    relay(&control, &node, &method, &uri, &headers, body).await
+    // The node scopes uploads and builds by the team the caller acts for. A
+    // key's team goes along; the upload `PUT`, which has no key, goes without
+    // one and is scoped by the token its link was issued with.
+    let team = team.as_ref().and_then(|team| team.0.as_ref());
+    relay_with_team(&control, &node, &method, &uri, &headers, body, team).await
 }
 
 /// Whether `node` holds the build `build` of the template `template`.
@@ -3679,23 +3683,11 @@ fn with_field(body: &Bytes, field: &str, value: &str) -> Bytes {
     }
 }
 
-/// Pass one request to `node`, both bodies streamed: an upload or a
-/// download may be large. The host the caller reached goes along, so links
-/// a node makes point back here; so does a bearer token, but only to the
-/// volume content API, which authenticates with it (see
-/// [`forwards_authorization`]).
-async fn relay(
-    control: &ControlPlane,
-    node: &crate::model::NodeInfo,
-    method: &Method,
-    uri: &axum::http::Uri,
-    headers: &HeaderMap,
-    body: reqwest::Body,
-) -> Response {
-    relay_with_team(control, node, method, uri, headers, body, None).await
-}
-
-/// [`relay`], telling the node which team the caller acts for.
+/// Pass one request to `node`, both bodies streamed: an upload or a download
+/// may be large. The host the caller reached goes along, so links a node makes
+/// point back here; so does a bearer token, but only to the volume content
+/// API, which authenticates with it (see [`forwards_authorization`]). `team`,
+/// if any, is the team the caller acts for, which the node scopes by.
 async fn relay_with_team(
     control: &ControlPlane,
     node: &crate::model::NodeInfo,
