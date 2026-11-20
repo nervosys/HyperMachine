@@ -31,7 +31,11 @@ curl -sS -X DELETE $NODE/environments/web -H "x-api-key: $KEY"
   them. A change to the environment applies to sandboxes created after it;
   one already running keeps what it started with.
 - **Per team.** A team sees, uses and replaces only its own; two teams may
-  each have one of the same name.
+  each have one of the same name. An administrator has no team, so its list is
+  the environments no team holds.
+- **Scope.** The routes need the `sandboxes` scope, which the `developer`
+  preset holds ([API keys](API_KEY_ROTATION.md#presets)). A `machines` or
+  `read-only` key, and an observer, get 403.
 - **Limits:** 1,024 variables and 128 KiB of them; 64 files and 4 MiB of
   them; absolute paths with no `..`; 256 environments a team.
 - **A node and a control plane both serve them**, from the cluster store, so

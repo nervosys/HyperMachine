@@ -72,7 +72,9 @@ Left administrator-only, because the code has no team-scoped form of them:
 - Node routes (`/cluster/nodes/{node}/registrations/pending`,
   `.../registration/reconcile`): they act on a node, which no team owns.
 - `/cluster/events`, and building templates (see "Not yet partitioned" below).
-- Usage and billing: there is no per-owner or per-team usage route to scope.
+- Cluster-wide usage and billing. A team's own key reads its team's usage with
+  the `events` scope ([USAGE.md](USAGE.md)), and keeps its team's environments
+  with the `sandboxes` scope ([ENVIRONMENTS.md](ENVIRONMENTS.md)).
 - Adding, removing or changing members through the policy file. A team-admin
   makes and revokes its own team's keys through the
   [key API](API_KEY_ROTATION.md#managed-keys), which is how it adds and removes

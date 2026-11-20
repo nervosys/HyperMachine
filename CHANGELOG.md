@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Team keys and signed-in members got 403 on `/environments` and `/usage`.** The
+  key check granted no scope for either route, so only an administrator reached
+  them, though the docs describe both as a team's own. `/environments` now needs
+  the `sandboxes` scope and `/usage` the `events` scope (`GET` and `HEAD` only),
+  both in the `developer` preset. The handlers already keep each team to its own
+  environments and usage, and an observer is still refused.
 - **`/sandboxes/{id}/network` answered a wrong method with an empty body
   labelled JSON.** The control plane relayed every method to a node that
   serves only `PUT`, so `GET`, `POST` or `DELETE` came back as the node's bare

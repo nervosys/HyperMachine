@@ -1245,21 +1245,11 @@ pub(super) fn platform_guardrails() -> Vec<Guardrail> {
             reference: "docs/ENVIRONMENTS.md".to_string(),
         },
         Guardrail {
-            id: "environments-and-usage-are-administrator-only-on-the-control-plane".to_string(),
+            id: "administrator-environments-are-not-found-by-team-sandboxes".to_string(),
             severity: GuardrailSeverity::Warning,
-            title: "A team key cannot reach /environments or /usage on the control plane, \
-                though the documents describe them as per team"
+            title: "An environment an administrator makes is not found by a team's sandbox"
                 .to_string(),
-            description: "The control plane's key check (`ApiKeyPolicy::permits`) grants a \
-                scoped key a family of routes by its scope, and `/environments` and `/usage` \
-                are in none: only the `admin` scope, the legacy --api-key key or an open \
-                control plane reaches them, and a team's key, a managed key or a signed-in \
-                member gets 403. The handlers filter by team, and a sandbox created under a \
-                team looks for its environment in that team's scope only (404 `no \
-                environment` otherwise), so an environment an administrator makes (in the \
-                scope with no team) is not found by a team's sandbox. docs/ENVIRONMENTS.md and \
-                docs/USAGE.md describe both as a team's own; docs/TEAMS.md lists usage as \
-                administrator-only. A node serves both with no team at all."
+            description: "On the control plane a team's key reaches `/environments` with the                 `sandboxes` scope (GET, HEAD, PUT, DELETE) and `/usage` with the `events`                 scope (GET, HEAD); observer and read-only keys are refused. Both handlers                 act on the caller's team only: environments are stored per team, and the                 usage report keeps only the caller's team's stretches (an administrator sees                 every team). A sandbox created under a team looks for its environment in that                 team's scope only (404 `no environment` otherwise), so an environment an                 administrator makes, in the scope with no team, is not found by a team's                 sandbox. A node serves both routes with no team at all."
                 .to_string(),
             applies_to: both(&[
                 "sandbox_environments",
@@ -1268,12 +1258,9 @@ pub(super) fn platform_guardrails() -> Vec<Guardrail> {
                 "list_environments",
                 "get_usage",
             ]),
-            condition: "A team expects to keep its own environments or read its own usage \
-                through a control plane."
+            condition: "An administrator makes an environment expecting a team's sandboxes to                 start with it."
                 .to_string(),
-            mitigation: "Read the key's 403 as the answer; use an administrator key for \
-                cluster-wide usage, and do not rely on per-team environments through a \
-                control plane until a scope reaches them."
+            mitigation: "Make a team's environments with that team's key; give a team key the                 `sandboxes` scope for environments and `events` for its usage."
                 .to_string(),
             reference: "docs/TEAMS.md".to_string(),
         },

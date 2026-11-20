@@ -74,6 +74,12 @@ file is loaded or reloaded, to a fixed set of scopes and a role:
 | `machines` | `machines`, `inventory`, `events` | `operator` |
 | `admin` | `admin` | `operator` |
 
+Two routes take a scope the table above does not show. `/environments`, `/environments/{name}` (list, read,
+make or replace, delete) need `sandboxes`, as creating a sandbox does. `/usage` needs `events`, and only
+`GET` or `HEAD`. Both are in `developer`. `machines` and `read-only` do not reach them, and an observer is
+refused both whatever its scopes. A team's key sees only its own team's environments and usage. An
+administrator reaches both: usage for every team, and environments as a list of those no team holds.
+
 ```json
 [
   {"sha256": "<hex digest>", "expires_at": 1893456000, "preset": "developer",

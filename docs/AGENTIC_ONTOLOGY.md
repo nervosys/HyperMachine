@@ -511,7 +511,7 @@ its source; the first two are finding O12 in
 - **`volume-writes-are-not-atomic-and-delete-is-immediate`** (info; volumes): [VOLUMES.md](VOLUMES.md).
 - **`block-disks-are-node-local-and-unscoped`** (warning; disks): [DISKS.md](DISKS.md).
 - **`environments-keep-secrets-unencrypted`** (warning; environments): [ENVIRONMENTS.md](ENVIRONMENTS.md).
-- **`environments-and-usage-are-administrator-only-on-the-control-plane`** (warning): [TEAMS.md](TEAMS.md).
+- **`administrator-environments-are-not-found-by-team-sandboxes`** (warning): [TEAMS.md](TEAMS.md).
 - **`webhook-urls-are-checked-at-delivery`** (warning; the control plane's and node's webhooks): [WEBHOOKS.md](WEBHOOKS.md).
 - **`node-platform-routes-filter-by-no-team`** (warning; node): the node's environments, webhooks and usage routes see every team (`crates/hv2-cluster/src/events.rs`).
 - **`team-telemetry-leaves-the-platform`** (info): [TELEMETRY.md](TELEMETRY.md).

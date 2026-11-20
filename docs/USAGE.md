@@ -32,6 +32,9 @@ hm sandbox vm usage --from 2026-10-01T00:00:00Z --by template
   time, the units compute is commonly billed in.
 - **A caller sees its own team's**, as with events; an operator's key, which
   has no team, sees all.
+- **Scope.** `GET` and `HEAD` need the `events` scope, which the `developer`
+  preset holds ([API keys](API_KEY_ROTATION.md#presets)). A `machines` or
+  `read-only` key, and an observer, get 403.
 - **The node and the control plane both answer**, each from the cluster's
   events: a node alone from its own, a control plane from every node's.
 

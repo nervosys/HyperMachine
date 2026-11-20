@@ -8734,7 +8734,7 @@ mod tests {
             "volume-writes-are-not-atomic-and-delete-is-immediate",
             "block-disks-are-node-local-and-unscoped",
             "environments-keep-secrets-unencrypted",
-            "environments-and-usage-are-administrator-only-on-the-control-plane",
+            "administrator-environments-are-not-found-by-team-sandboxes",
             "webhook-urls-are-checked-at-delivery",
             "node-platform-routes-filter-by-no-team",
             "team-telemetry-leaves-the-platform",

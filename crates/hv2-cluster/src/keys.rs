@@ -714,6 +714,25 @@ impl ApiKeyPolicy {
                 && *method == Method::POST
                 && self.scopes.contains(&ApiScope::Sandboxes);
         }
+        match parts.as_slice() {
+            // A team's environments are the variables and files its sandboxes
+            // start with: the `sandboxes` scope, as creating one is. The
+            // handler lists, reads and changes only the caller's team's.
+            ["environments"] | ["environments", _] => {
+                return matches!(
+                    *method,
+                    Method::GET | Method::HEAD | Method::PUT | Method::DELETE
+                ) && self.scopes.contains(&ApiScope::Sandboxes);
+            }
+            // A team's usage is folded from the cluster's events, so it is
+            // the `events` scope; the handler keeps only the caller's team's
+            // stretches. Read-only.
+            ["usage"] => {
+                return (*method == Method::GET || *method == Method::HEAD)
+                    && self.scopes.contains(&ApiScope::Events);
+            }
+            _ => {}
+        }
         let family = match parts.as_slice() {
             ["v2", "sandboxes", ..] | ["sandboxes" | "sandbox-names", ..] => ApiScope::Sandboxes,
             ["v2" | "v3", "templates", ..] | ["templates" | "snapshots", ..] => ApiScope::Templates,
