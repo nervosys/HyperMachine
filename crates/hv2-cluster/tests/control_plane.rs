@@ -2125,6 +2125,21 @@ async fn a_dead_nodes_sandboxes_are_reaped() {
     assert_eq!((status.as_u16(), d["nodeID"].as_str()), (201, Some("b")));
 }
 
+/// With no node to ask, the volume list is unavailable, not empty: an empty
+/// list would tell a client it has no volumes.
+#[tokio::test]
+async fn the_volume_list_is_unavailable_without_a_live_node() {
+    let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());
+    let base = control_plane(Arc::clone(&store), Some(KEY)).await;
+    let response = client()
+        .get(format!("{base}/volumes"))
+        .header("x-api-key", KEY)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 503);
+}
+
 #[tokio::test]
 async fn the_api_key_is_required_when_set() {
     let store: Arc<dyn ClusterStore> = Arc::new(MemoryStore::new());

@@ -206,13 +206,17 @@ impl HyperMachineOntology {
              a legacy key, anonymous access) sees every volume of every team. The content \
              token is not in the listing. A node that does not answer, or answers anything \
              but 200 (a node on Windows or macOS answers 501), is left out without a word, so \
-             the list can be short without saying so; with no live node it is an empty list, \
-             not an error."
+             the list can be short without saying so. When no node answers 200 (no live node, \
+             or none that serves volumes) the answer is 503, not an empty list."
         })
         .answers(ok(
             200,
             "The volumes, as an array.",
             Some(json!({ "type": "array", "items": volume_listed_schema() })),
+        ))
+        .answers(fail(
+            503,
+            "Control plane only: no live node answered the list with 200.",
         ))
         .answers_all(gate())
         .repeatable();

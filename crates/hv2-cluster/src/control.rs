@@ -3887,6 +3887,14 @@ async fn list_volumes(
         Ok(answers) => answers,
         Err((status, message)) => return api_error(status, message),
     };
+    // With no node answering, an empty list would say "no volumes" when the
+    // truth is "no node to ask": answer that instead.
+    if !answers.iter().any(|(_, status, _)| *status == 200) {
+        return api_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "no live node answered the volume list",
+        );
+    }
     let mut merged: BTreeMap<String, Value> = BTreeMap::new();
     for (_, status, answer) in answers {
         if status == 200 {
