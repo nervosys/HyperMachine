@@ -908,6 +908,13 @@ impl GuestAgent {
                     })?;
                     let done = bytes.is_empty();
                     out.extend_from_slice(&bytes);
+                    // `size` is the guest's word; the limit holds for what
+                    // it actually sent.
+                    if out.len() as u64 > limit {
+                        return Err(AgentError::Script(format!(
+                            "{path}: the guest sent more than the {limit}-byte limit"
+                        )));
+                    }
                     if done || out.len() as u64 >= size {
                         return Ok(out);
                     }
@@ -1538,6 +1545,27 @@ mod tests {
         let refused = agent.remove("/", true, false, t).unwrap_err();
         assert!(refused.to_string().contains("refusing"));
         assert!(!is_unsupported_op(&refused));
+    }
+
+    /// A guest that claims a small file and sends more is refused at the
+    /// limit, which callers rely on to bound what they hold.
+    #[test]
+    fn a_file_read_holds_the_limit_to_the_bytes_sent() {
+        let mut agent = GuestAgent::new(FakeGuest::new(|request| {
+            Some(Response {
+                id: request.id,
+                version: PROTOCOL_VERSION,
+                result: OpResult::FileData {
+                    data: hv2_guest_agent::b64::encode(&[b'x'; 64]),
+                    size: 1,
+                },
+            })
+        }));
+        let t = Duration::from_secs(1);
+        let refused = agent.read_file("/f", 8, t).unwrap_err();
+        assert!(refused.to_string().contains("more than"), "{refused}");
+        // Within the limit, the bytes come back as sent.
+        assert_eq!(agent.read_file("/f", 64, t).unwrap(), vec![b'x'; 64]);
     }
 
     #[test]

@@ -45,6 +45,7 @@ macro_rules! warn_guest_event {
 
 static UNMAPPED_MMIO_EVENTS: AtomicU64 = AtomicU64::new(0);
 static UNKNOWN_EXIT_EVENTS: AtomicU64 = AtomicU64::new(0);
+static UNDELIVERED_IOAPIC_EVENTS: AtomicU64 = AtomicU64::new(0);
 
 /// Linux's calling-thread CPU clock, used only by opt-in cold diagnostics.
 /// Missing clocks or invalid values leave the measurement unavailable.
@@ -1333,7 +1334,10 @@ impl VM {
                         logical,
                     ) {
                         Some(Ok(())) => {}
-                        Some(Err(e)) => tracing::warn!("I/O APIC interrupt not delivered: {e}"),
+                        Some(Err(e)) => warn_guest_event!(
+                            UNDELIVERED_IOAPIC_EVENTS,
+                            "I/O APIC interrupt not delivered: {e}"
+                        ),
                         None => {
                             runtime.spawn(async move {
                                 if let Err(e) = backend
@@ -1344,7 +1348,10 @@ impl VM {
                                     )
                                     .await
                                 {
-                                    tracing::warn!("I/O APIC interrupt not delivered: {e}");
+                                    warn_guest_event!(
+                                        UNDELIVERED_IOAPIC_EVENTS,
+                                        "I/O APIC interrupt not delivered: {e}"
+                                    );
                                 }
                             });
                         }

@@ -714,9 +714,14 @@ impl Prefetch {
             let Some(op) = Self::read_for(path, entry) else {
                 continue;
             };
+            // Sizes come from the guest (a symlink's is not capped), so the
+            // sums saturate rather than overflow.
             if ops.len() >= BATCH_READ_OPS
-                || bytes + entry.size > BATCH_READ_BYTES
-                || self.held_bytes + (bytes as usize) / 3 * 4 > PREFETCH_HELD
+                || bytes.saturating_add(entry.size) > BATCH_READ_BYTES
+                || self
+                    .held_bytes
+                    .saturating_add((bytes as usize / 3).saturating_mul(4))
+                    > PREFETCH_HELD
             {
                 break;
             }
@@ -762,7 +767,9 @@ fn prefetched_file(result: OpResult, limit: u64) -> Option<Result<Vec<u8>, Agent
     match result {
         OpResult::FileData { data, size } if size <= limit.min(BATCH_READ_FILE) => {
             let bytes = hv2_guest_agent::b64::decode(&data)?;
-            (bytes.len() as u64 >= size).then_some(Ok(bytes))
+            // More than the size it claimed, or than the limit, is not a
+            // clean answer: the walk's own read refuses it.
+            (bytes.len() as u64 >= size && bytes.len() as u64 <= limit).then_some(Ok(bytes))
         }
         OpResult::Failed { message } => Some(Err(AgentError::Script(message))),
         _ => None,
@@ -903,7 +910,7 @@ async fn build_archive<G: GuestTree>(guest: &G, root: &str) -> Result<Option<Arc
                 }
             }
             DirEntryKind::File => {
-                let room = MAX_ARCHIVE_INPUT - input;
+                let room = MAX_ARCHIVE_INPUT.saturating_sub(input);
                 let limit = MAX_ARCHIVE_FILE.min(room);
                 if entry.size > limit {
                     return Err(too_big(format!(
@@ -1520,6 +1527,8 @@ mod tests {
         // The file grew past what was asked for, or less came than its size.
         assert!(prefetched_file(ok(BATCH_READ_FILE + 1, "hi"), u64::MAX).is_none());
         assert!(prefetched_file(ok(5, "hi"), 100).is_none());
+        // A guest claiming a small size and sending more than the limit.
+        assert!(prefetched_file(ok(1, "hello"), 3).is_none());
         assert!(prefetched_file(OpResult::Acknowledged, 100).is_none());
         let failed = prefetched_file(
             OpResult::Failed {

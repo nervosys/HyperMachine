@@ -61,9 +61,13 @@ fn process(pid: &str, stat: &str, cmdline: &str, uid: &str, uptime: f64) -> Opti
     // `rest[0]` is field 3, state; so field n is `rest[n - 3]`.
     let field = |n: usize| rest.get(n - 3).copied();
     let number = |n: usize| field(n).and_then(|f| f.parse::<u64>().ok());
-    let ticks = number(14)? + number(15)?;
+    // The guest writes these numbers: arithmetic on them is checked, so
+    // a value chosen to overflow skips the process instead of aborting
+    // the process every VM shares.
+    let ticks = number(14)?.checked_add(number(15)?)?;
     let started = number(22)? as f64 / TICKS;
-    let page_kib = 4;
+    let page_kib: u64 = 4;
+    let rss_kib = number(24)?.checked_mul(page_kib)?;
     let args = cmdline.trim_end_matches('\u{1}').replace('\u{1}', " ");
     Some(json!({
         "pid": pid.parse::<u32>().ok()?,
@@ -73,7 +77,7 @@ fn process(pid: &str, stat: &str, cmdline: &str, uid: &str, uptime: f64) -> Opti
         "command": command,
         "args": args,
         "threads": number(20)?,
-        "rssKiB": number(24)? * page_kib,
+        "rssKiB": rss_kib,
         "cpuSeconds": ticks as f64 / TICKS,
         "startedSecondsAgo": ((uptime - started).max(0.0) * 100.0).round() / 100.0,
     }))
@@ -297,6 +301,18 @@ mod tests {
         };
         assert_eq!(pids(false), vec![1]);
         assert_eq!(pids(true), vec![1, 2, 7]);
+    }
+
+    /// Numbers a guest chose to overflow skip the process.
+    #[test]
+    fn stat_numbers_that_would_overflow_skip_the_process() {
+        let max = u64::MAX.to_string();
+        let good = stat(1, "init", "S", 0);
+        assert!(process("1", &good, "", "0", 1.0).is_some());
+        let ticks = good.replacen(" 150 50 ", &format!(" {max} 1 "), 1);
+        assert!(process("1", &ticks, "", "0", 1.0).is_none());
+        let rss = good.replacen(" 256 ", &format!(" {} ", u64::MAX / 2), 1);
+        assert!(process("1", &rss, "", "0", 1.0).is_none());
     }
 
     #[test]

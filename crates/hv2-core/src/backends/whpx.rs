@@ -1589,6 +1589,15 @@ struct PendingMmioLoad {
     next_rip: u64,
 }
 
+/// The address after an instruction of `length` bytes at `rip`. The guest
+/// chooses `rip`, and an instruction may end at the top of the address space,
+/// so this wraps as the processor does: an overflow check here would abort
+/// the process every VM shares.
+#[cfg(target_os = "windows")]
+fn step_over(rip: u64, length: u64) -> u64 {
+    rip.wrapping_add(length)
+}
+
 /// The sixteen general registers, in encoding order.
 #[cfg(target_os = "windows")]
 const GPRS: [WHV_REGISTER_NAME; 16] = {
@@ -1688,7 +1697,7 @@ impl WhpxVcpu {
                         (WHV_REGISTER_NAME::WHvX64RegisterRdx, c.DefaultResultRdx),
                         (
                             WHV_REGISTER_NAME::WHvX64RegisterRip,
-                            exit_context.VpContext.Rip + length,
+                            step_over(exit_context.VpContext.Rip, length),
                         ),
                     ])?;
                     continue;
@@ -1707,7 +1716,7 @@ impl WhpxVcpu {
                 let string_form = io.AccessInfo.AsUINT32 & 0b11_0000 != 0;
                 let length = (exit_context.VpContext.InstructionLengthAndCr8 & 0x0F) as u64;
                 if !string_form && length != 0 {
-                    self.set_instruction_pointer(exit_context.VpContext.Rip + length)?;
+                    self.set_instruction_pointer(step_over(exit_context.VpContext.Rip, length))?;
                 }
             }
 
@@ -1819,7 +1828,7 @@ impl WhpxVcpu {
                     .ok_or_else(|| refuse("not a plain mov, movzx, movsx or movsxd"))?
             }
         };
-        let next_rip = ctx.VpContext.Rip + decoded.length as u64;
+        let next_rip = step_over(ctx.VpContext.Rip, decoded.length as u64);
 
         match (decoded.access, is_write) {
             (Access::Store { src, size }, true) => {
@@ -5942,6 +5951,15 @@ unsafe impl Sync for WhpxVcpu {}
 #[cfg(all(test, target_os = "windows"))]
 mod tests {
     use super::*;
+
+    /// A guest instruction at the top of the address space steps over to
+    /// the bottom instead of overflowing.
+    #[test]
+    fn stepping_over_the_last_instruction_wraps() {
+        assert_eq!(step_over(0x1000, 2), 0x1002);
+        assert_eq!(step_over(u64::MAX, 1), 0);
+        assert_eq!(step_over(u64::MAX - 1, 15), 13);
+    }
 
     #[tokio::test]
     async fn test_whpx_backend_creation() {

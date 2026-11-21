@@ -50,6 +50,16 @@ const MAX_UPLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 /// audit's O8), so these bound what any caller can leave on the disk.
 const MAX_STORED_UPLOADS: usize = 256;
 const MAX_STORED_UPLOAD_BYTES: u64 = 64 * 1024 * 1024 * 1024;
+/// The guest's `/etc/hv2/image.json`, if it holds a JSON object. A build's
+/// `RUN` steps can write anything there, and indexing a `serde_json::Value`
+/// that is not an object panics, which would abort the process every VM
+/// shares; anything else counts as absent.
+fn launch_config(bytes: &[u8]) -> Option<serde_json::Value> {
+    serde_json::from_slice::<serde_json::Value>(bytes)
+        .ok()
+        .filter(serde_json::Value::is_object)
+}
+
 /// How long an offered upload's token is good for. E2B's JS SDK asks for
 /// every `COPY`'s link at once and spools each archive before its `PUT`, with
 /// an upload timeout of an hour, so a link can wait well over that before it
@@ -1123,7 +1133,7 @@ async fn finalize(
         .read_file_in_guest(launch_path, 1 << 20, AGENT_TIMEOUT)
         .await
         .ok()
-        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .and_then(|bytes| launch_config(&bytes))
         .unwrap_or_else(|| serde_json::json!({}));
     if context.entrypoint.is_some() || context.cmd.is_some() || context.user != "root" {
         if let Some(entrypoint) = &context.entrypoint {
@@ -2352,6 +2362,18 @@ mod tests {
         assert!(grants.redeem(&again, "app", "h1", now).is_some());
         grants.spend(&second);
         assert!(grants.redeem(&again, "app", "h1", now).is_none());
+    }
+
+    /// An image.json a `RUN` step overwrote with something other than an
+    /// object is ignored, so the launch settings can still be written.
+    #[test]
+    fn a_launch_config_that_is_not_an_object_counts_as_absent() {
+        for bad in ["[]", "5", "\"x\"", "null", "{", ""] {
+            assert!(launch_config(bad.as_bytes()).is_none(), "{bad}");
+        }
+        let mut good = launch_config(br#"{"cmd":["sh"]}"#).unwrap();
+        good["user"] = serde_json::json!("app");
+        assert_eq!(good["cmd"][0], "sh");
     }
 
     /// A link outlives the SDK's hour-long upload timeout.
