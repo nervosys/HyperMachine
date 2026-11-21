@@ -194,7 +194,15 @@ impl HyperMachineOntology {
                  nothing, so send `denyOut: [\"0.0.0.0/0\", \"::/0\"]` with it. The \
                  control plane cannot know which default a node has and does not say. \
                  Private, link-local and cloud metadata addresses stay refused whatever the \
-                 rules say, unless the operator granted the range. The `iam` tokens set at \
+                 rules say, unless the operator granted the range. An address opened only \
+                 because an `allowOut` name resolved to it carries that name alone: a TLS \
+                 SNI or plain-HTTP `Host` naming anything else is refused, also when the \
+                 guest sends it after the gateway's 300 ms look or a byte at a time. Not \
+                 covered: a connection there that names nothing (no SNI, not HTTP, such as \
+                 SSH) is allowed; only the first HTTP request on a connection is checked, \
+                 so a later request on a kept-alive plain-HTTP connection can name another \
+                 host the same address serves; and an `egressProxy` is sent the name and \
+                 resolves it itself. The `iam` tokens set at \
                  creation are kept. A sandbox needs a network to have rules: one made \
                  without is 400. A caller limited to a team or an owner reaches only \
                  its own sandboxes. Replacing with the same body is harmless."

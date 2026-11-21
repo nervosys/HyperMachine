@@ -284,6 +284,13 @@ pub struct DecisionSnapshot {
 
 /// DNS answers remembered, address to the names that produced it.
 const RESOLVED_LIMIT: usize = 8192;
+/// Names remembered for one address. A wildcard zone answers any label with
+/// the same address, and every connection to it reads the whole set.
+const NAMES_PER_ADDRESS: usize = 256;
+/// DNS queries one gateway resolves at once; more are dropped, and the
+/// guest's resolver retries. Each one is a lookup on the host's resolver,
+/// which every sandbox on the node shares.
+const DNS_IN_FLIGHT: usize = 64;
 
 struct Shared {
     config: GatewayConfig,
@@ -303,6 +310,8 @@ struct Shared {
     resolved: Mutex<HashMap<IpAddr, BTreeSet<String>>>,
     log: Mutex<DecisionLog>,
     stats: Mutex<GatewayStats>,
+    /// Bounds the DNS lookups in flight; see [`DNS_IN_FLIGHT`].
+    dns_in_flight: Arc<tokio::sync::Semaphore>,
 }
 
 #[derive(Clone)]
@@ -366,10 +375,11 @@ impl Shared {
             resolved.clear();
         }
         for address in addresses {
-            resolved
-                .entry(*address)
-                .or_default()
-                .insert(name.to_string());
+            let names = resolved.entry(*address).or_default();
+            if names.len() >= NAMES_PER_ADDRESS && !names.contains(name) {
+                names.pop_first();
+            }
+            names.insert(name.to_string());
         }
     }
 }
@@ -585,6 +595,7 @@ impl GatewayBuilder {
             resolved: Mutex::new(HashMap::new()),
             log: Mutex::new(DecisionLog::default()),
             stats: Mutex::new(GatewayStats::default()),
+            dns_in_flight: Arc::new(tokio::sync::Semaphore::new(DNS_IN_FLIGHT)),
         });
 
         let (to_stack, frames_in) = mpsc::unbounded_channel();
@@ -1250,11 +1261,16 @@ impl Stack {
                 }
             };
             let Some(query) = query else { continue };
+            let Ok(permit) = Arc::clone(&self.shared.dns_in_flight).try_acquire_owned() else {
+                tracing::debug!("gateway: {DNS_IN_FLIGHT} DNS lookups in flight; a query dropped");
+                continue;
+            };
             let shared = Arc::clone(&self.shared);
             let events = events.clone();
             let dns_addr = SocketAddr::new(IpAddr::V4(shared.config.dns), 53);
             tokio::spawn(async move {
                 let reply = resolve_query(&shared, &query, dns_addr).await;
+                drop(permit);
                 let _ = events.send(Event::Dns { to: from, reply });
             });
         }
@@ -1654,8 +1670,16 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for Prefixed<S> {
 }
 
 /// Read from `guest` until what it sent names something, or can't.
-async fn read_name(guest: &mut GuestStream, wait: Duration) -> (Vec<u8>, Sniffed) {
-    let mut seen = Vec::new();
+async fn read_name<R: AsyncRead + Unpin>(guest: &mut R, wait: Duration) -> (Vec<u8>, Sniffed) {
+    read_name_from(guest, Vec::new(), wait).await
+}
+
+/// [`read_name`], going on from the bytes in `seen`.
+async fn read_name_from<R: AsyncRead + Unpin>(
+    guest: &mut R,
+    mut seen: Vec<u8>,
+    wait: Duration,
+) -> (Vec<u8>, Sniffed) {
     let deadline = tokio::time::Instant::now() + wait;
     let mut chunk = vec![0u8; 4096];
     loop {
@@ -1721,6 +1745,9 @@ async fn connection(
     events: mpsc::UnboundedSender<Event>,
 ) {
     let config = shared.config.clone();
+    // Set when the address was allowed only by name and the client sent
+    // nothing at first: its first bytes are still read for a name.
+    let mut late_name_check = false;
     let refuse = |name: Option<String>, reason: String| {
         shared.record("tcp", destination, name, Verdict::Deny, reason);
         let _ = events.send(Event::Abort(id));
@@ -1767,26 +1794,48 @@ async fn connection(
                 || shared.policy.read().has_transforms()
                 || shared.secrets.read().is_some()
                 || shared.host_credentials.read().is_some();
-            let (prefix, sniffed) = if look {
+            let (mut prefix, mut sniffed) = if look {
                 read_name(&mut guest, config.sniff_wait).await
             } else {
                 (Vec::new(), Sniffed::Incomplete)
             };
-            let name = named(&sniffed).map(str::to_string);
-            if let (Some(allowed), Sniffed::Tls(Some(sni))) = (&via_names, &sniffed) {
-                let verdict = shared.policy.read().decide(destination.ip(), sni).0;
-                if verdict != Verdict::Allow {
-                    refuse(
-                        Some(sni.clone()),
-                        format!(
-                            "SNI names something the policy refuses; the address was allowed \
-                             only as {}",
-                            allowed.join(", ")
-                        ),
-                    );
-                    return;
+            if let Some(allowed) = &via_names {
+                // An address allowed only by name carries only that name: a
+                // client that starts a ClientHello or request must finish
+                // naming before anything goes upstream, or it could dribble
+                // its first bytes past the sniff and name anything.
+                if sniffed == Sniffed::Incomplete && !prefix.is_empty() {
+                    (prefix, sniffed) =
+                        read_name_from(&mut guest, prefix, config.name_timeout).await;
+                    if sniffed == Sniffed::Incomplete {
+                        refuse(
+                            None,
+                            format!(
+                                "the client's first bytes never finished naming anything; the \
+                                 address was allowed only as {}",
+                                allowed.join(", ")
+                            ),
+                        );
+                        return;
+                    }
                 }
+                if let Some(sent) = named(&sniffed) {
+                    let verdict = shared.policy.read().decide(destination.ip(), sent).0;
+                    if verdict != Verdict::Allow {
+                        refuse(
+                            Some(sent.to_string()),
+                            format!(
+                                "the name sent (TLS SNI or HTTP Host) is one the policy \
+                                 refuses; the address was allowed only as {}",
+                                allowed.join(", ")
+                            ),
+                        );
+                        return;
+                    }
+                }
+                late_name_check = prefix.is_empty();
             }
+            let name = named(&sniffed).map(str::to_string);
             let name = name.or_else(|| via_names.and_then(|n| n.into_iter().next()));
             (upstream, prefix, sniffed, name, reason.to_string())
         }
@@ -1928,6 +1977,16 @@ async fn connection(
     }
 
     shared.record("tcp", destination, name, Verdict::Allow, reason);
+    if late_name_check {
+        match relay_naming_late(&shared, destination, guest, upstream).await {
+            Ok(()) => {}
+            Err(LateStop::Refused(name, reason)) => refuse(name, reason),
+            Err(LateStop::Io(_)) => {
+                let _ = events.send(Event::Abort(id));
+            }
+        }
+        return;
+    }
     let mut upstream = upstream;
     if !prefix.is_empty() && upstream.write_all(&prefix).await.is_err() {
         let _ = events.send(Event::Abort(id));
@@ -1941,6 +2000,69 @@ async fn connection(
             let _ = events.send(Event::Abort(id));
         }
     }
+}
+
+/// Why [`relay_naming_late`] stopped early.
+enum LateStop {
+    Refused(Option<String>, String),
+    Io(io::Error),
+}
+
+impl From<io::Error> for LateStop {
+    fn from(e: io::Error) -> Self {
+        Self::Io(e)
+    }
+}
+
+/// Relay a connection to an address allowed only by name whose client sent
+/// nothing during the sniff: a protocol where the server speaks first, or a
+/// client waiting the sniff out. The server's bytes go through at once; the
+/// client's first bytes are held until they name something the policy
+/// allows, or are plainly not TLS or HTTP.
+async fn relay_naming_late(
+    shared: &Shared,
+    destination: SocketAddr,
+    guest: GuestStream,
+    upstream: Box<dyn Upstream>,
+) -> Result<(), LateStop> {
+    let (mut guest_reader, mut guest_writer) = tokio::io::split(guest);
+    let (mut upstream_reader, mut upstream_writer) = tokio::io::split(upstream);
+    let down = async {
+        tokio::io::copy(&mut upstream_reader, &mut guest_writer).await?;
+        guest_writer.shutdown().await?;
+        Ok::<(), LateStop>(())
+    };
+    let up = async {
+        let mut first = vec![0u8; 4096];
+        let n = guest_reader.read(&mut first).await?;
+        if n > 0 {
+            first.truncate(n);
+            let (prefix, sniffed) =
+                read_name_from(&mut guest_reader, first, shared.config.name_timeout).await;
+            if sniffed == Sniffed::Incomplete {
+                return Err(LateStop::Refused(
+                    None,
+                    "the client's first bytes never finished naming anything".to_string(),
+                ));
+            }
+            if let Some(sent) = named(&sniffed) {
+                let verdict = shared.policy.read().decide(destination.ip(), sent).0;
+                if verdict != Verdict::Allow {
+                    return Err(LateStop::Refused(
+                        Some(sent.to_string()),
+                        "the name sent (TLS SNI or HTTP Host), after the sniff, is one the \
+                         policy refuses"
+                            .to_string(),
+                    ));
+                }
+            }
+            upstream_writer.write_all(&prefix).await?;
+            tokio::io::copy(&mut guest_reader, &mut upstream_writer).await?;
+        }
+        upstream_writer.shutdown().await?;
+        Ok::<(), LateStop>(())
+    };
+    tokio::try_join!(down, up).map(|_| ())
 }
 
 #[cfg(test)]

@@ -349,7 +349,8 @@ Each reviewer listed what it checked and found correct. The main items:
   - Published machine ports default to loopback.
 - **Gateway egress.**
   - Reserved and metadata addresses are denied before any name rule.
-  - SNI and Host are pinned to the gateway's own DNS answers.
+  - SNI and Host are pinned to the gateway's own DNS answers. (Overstated: see the
+    2026-11-21 addendum, G1.)
   - Rebinding to private addresses is blocked.
   - IPv6 and ICMP are dropped.
 - **Devices.**
@@ -385,3 +386,62 @@ Each reviewer listed what it checked and found correct. The main items:
 - The userspace IOAPIC.
 - Guest-agent protocol parsing beyond framing.
 - A fuzzing campaign. None was run; the virtio queue code is an obvious target.
+
+## Addendum 2026-11-21: the areas above
+
+A second pass read the areas listed under "Not covered", except fuzzing. Release builds abort on
+overflow and panic, and one `hv2-sandboxd` hosts every VM, so any guest-reachable panic is
+node-wide.
+
+**Fixed (916cabf2), each a guest-reachable abort of the node:**
+
+- **A1. WHPX RIP step.** `Rip + instruction length` at three exit sites overflowed for an instruction
+  ending at the top of the address space. It now wraps, as the processor does.
+- **A2. `image.json`.** A build's `RUN` step could write a non-object to `/etc/hv2/image.json`, and
+  indexing it panicked. Anything but an object now counts as absent.
+- **A3. `/proc/<pid>/stat`.** Tick and RSS arithmetic on guest numbers is checked; overflow skips
+  the process.
+- **A4. Checkpoint archives.** Prefetch sums over guest sizes (a symlink's is not capped) and the
+  archive's remaining input saturate. A guest file read refused only on the size the guest claimed;
+  it now refuses once the bytes received pass the limit.
+- **A5.** Undeliverable IOAPIC interrupts, which a guest can cause, no longer warn each time.
+
+**Fixed (gateway), egress:**
+
+- **G1. Names on a shared address.** An address opened because an `allowOut` name resolved to it was
+  checked against the TLS SNI only. A plain-HTTP `Host` was never checked, and a guest that waited
+  out the 300 ms sniff, or sent its ClientHello a byte at a time, was never checked either. So any
+  name served from the same address (common on CDNs) was reachable. Now every name sent is checked;
+  a first flight that starts naming must finish within the name timeout; and a client that was
+  silent during the sniff has its first bytes checked before any go upstream, while the server's
+  bytes still flow (SSH, SMTP).
+- **G2. DNS.** Each guest query was a spawned host lookup, without limit. At most 64 are in flight
+  per gateway; more are dropped and the guest retries.
+- **G3.** At most 256 names are remembered per address; every connection to it read the whole set.
+
+**Not fixed, recorded:**
+
+- A connection to a name-opened address that names nothing (no SNI, not HTTP) is allowed. Only the
+  first request of a kept-alive plain-HTTP connection is checked.
+- With an `egressProxy`, the proxy is sent the name and resolves it again, so a rebinding answer can
+  differ from the one the gateway checked.
+- TLS header, secret and credential injection does not check that the address connected to is
+  where the SNI resolves; the upstream certificate is verified against the name, so this needs a
+  wildcard or shared-hosting rule to matter.
+- Substituted secrets are not scrubbed from responses; an upstream that echoes a request returns
+  the secret to the guest.
+- Environment variables are written into the guest's filesystem, which a snapshot keeps; a snapshot
+  shared with another team carries them.
+- No aggregate disk quota per team or node; a disk is up to 1 TiB (sparse).
+- A guest file read has no total deadline, only one per chunk, and archive readers are limited to
+  two per node, so a guest answering one byte at a time can hold both.
+- HVF (macOS x86_64) never advances RIP after an exit it handles, so a guest's first `cpuid` or
+  port access repeats forever; WHPX does not emulate string or `rep` port I/O. Both stall only the
+  guest's own VM.
+- The userspace IOAPIC never clears Remote IRR and ignores the delivery mode; intra-VM only.
+- `vswitch` (no MAC-to-port binding, VLAN-blind flooding) and `nat` (full cone) have no production
+  caller.
+
+**Still not covered:** a fuzzing campaign; IPv4 fragments and IPv6 in the gateway; 9P beyond the
+fids reviewed in N5; transcript parsing in `machines/conversations.rs` and `runs.rs`.
+

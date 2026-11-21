@@ -318,15 +318,36 @@ impl Guest {
         port: u16,
         data: &[u8],
     ) -> Option<Vec<u8>> {
+        self.exchange_in_parts(gateway, to, port, &[(Duration::ZERO, data)])
+            .await
+    }
+
+    /// [`Guest::exchange`], sending each part once its delay since the
+    /// connection was established has passed.
+    async fn exchange_in_parts(
+        &mut self,
+        gateway: &Gateway,
+        to: Ipv4Addr,
+        port: u16,
+        parts: &[(Duration, &[u8])],
+    ) -> Option<Vec<u8>> {
         let handle = self.connect(to, port);
-        let mut sent = false;
+        let mut established: Option<std::time::Instant> = None;
+        let total: usize = parts.iter().map(|(_, part)| part.len()).sum();
+        let mut next = 0;
         let mut received = Vec::new();
         let mut reset = false;
-        self.until(gateway, Duration::from_secs(5), |sockets| {
+        self.until(gateway, Duration::from_secs(10), |sockets| {
             let s = sockets.get_mut::<tcp::Socket>(handle);
-            if !sent && s.may_send() {
-                s.send_slice(data).unwrap();
-                sent = true;
+            if established.is_none() && s.may_send() {
+                established = Some(std::time::Instant::now());
+            }
+            while next < parts.len()
+                && s.may_send()
+                && established.is_some_and(|at| at.elapsed() >= parts[next].0)
+            {
+                s.send_slice(parts[next].1).unwrap();
+                next += 1;
             }
             while s.can_recv() {
                 s.recv(|b| {
@@ -339,7 +360,7 @@ impl Guest {
                 reset = received.is_empty();
                 return true;
             }
-            received.len() >= data.len() + 5
+            next == parts.len() && received.len() >= total + 5
         })
         .await;
         self.sockets.get_mut::<tcp::Socket>(handle).abort();
@@ -673,6 +694,88 @@ async fn a_refused_sni_on_an_address_opened_by_dns_is_reset() {
     let hello = sniff::tests::client_hello("example.com");
     let reply = guest.exchange(&gw, EXAMPLE, 443, &hello).await.unwrap();
     assert!(reply.starts_with(b"echo:"));
+}
+
+/// An address the guest reached through an allowed name carries that
+/// name only: a plain HTTP `Host` for another is refused as an SNI is.
+#[tokio::test]
+async fn a_refused_http_host_on_an_address_opened_by_dns_is_reset() {
+    let echo = echo_server().await;
+    let gw = gateway(
+        e2b(&["example.com"], &["0.0.0.0/0"]),
+        &[(EXAMPLE, 80, echo)],
+    );
+    let mut guest = Guest::new();
+    guest.lookup(&gw, "example.com").await;
+    let evil = b"GET / HTTP/1.1\r\nHost: evil.example\r\n\r\n";
+    assert_eq!(guest.exchange(&gw, EXAMPLE, 80, evil).await, None);
+    let good = b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n";
+    let reply = guest.exchange(&gw, EXAMPLE, 80, good).await.unwrap();
+    assert!(reply.starts_with(b"echo:GET / HTTP/1.1"));
+}
+
+/// Waiting out the sniff, or sending a ClientHello a byte at a time past
+/// it, does not get a refused name through.
+#[tokio::test]
+async fn a_refused_sni_sent_late_or_in_pieces_is_reset() {
+    let echo = echo_server().await;
+    let gw = gateway(
+        e2b(&["example.com"], &["0.0.0.0/0"]),
+        &[(EXAMPLE, 443, echo)],
+    );
+    let mut guest = Guest::new();
+    guest.lookup(&gw, "example.com").await;
+    let late = Duration::from_millis(800);
+    let evil = sniff::tests::client_hello("evil.example");
+    assert_eq!(
+        guest
+            .exchange_in_parts(&gw, EXAMPLE, 443, &[(late, &evil)])
+            .await,
+        None
+    );
+    assert_eq!(
+        guest
+            .exchange_in_parts(
+                &gw,
+                EXAMPLE,
+                443,
+                &[(Duration::ZERO, &evil[..1]), (late, &evil[1..])]
+            )
+            .await,
+        None
+    );
+    // The allowed name, late or in pieces, still goes through.
+    let good = sniff::tests::client_hello("example.com");
+    let reply = guest
+        .exchange_in_parts(&gw, EXAMPLE, 443, &[(late, &good)])
+        .await
+        .unwrap();
+    assert!(reply.starts_with(b"echo:"));
+    let reply = guest
+        .exchange_in_parts(
+            &gw,
+            EXAMPLE,
+            443,
+            &[(Duration::ZERO, &good[..1]), (late, &good[1..])],
+        )
+        .await
+        .unwrap();
+    assert!(reply.starts_with(b"echo:"));
+}
+
+/// One address's remembered names are bounded.
+#[tokio::test]
+async fn the_names_remembered_for_one_address_are_bounded() {
+    let gw = gateway(e2b(&["example.com"], &[]), &[]);
+    let shared = &gw.handle().0;
+    let address = IpAddr::V4(EXAMPLE);
+    for i in 0..NAMES_PER_ADDRESS + 100 {
+        shared.remember(&format!("n{i}.zone.example"), &[address]);
+    }
+    assert_eq!(shared.names_for(address).len(), NAMES_PER_ADDRESS);
+    // The newest name is kept.
+    let newest = format!("n{}.zone.example", NAMES_PER_ADDRESS + 99);
+    assert!(shared.names_for(address).contains(&newest));
 }
 
 #[tokio::test]
