@@ -223,6 +223,12 @@ templates called `scope.…` are reserved, so an operator's template must not be
 named that way (it would be hidden from every non-administrator). A principal
 may build a name an operator also uses; for that principal, its own wins.
 Builds made before this have no scope: they are the operator's, as before.
+A build a team asks for is recorded on the node as that team's snapshot, as its
+sandboxes' snapshots are: only that team deletes it or starts from it (unless
+it shares it), and it replaces only that team's own template of the name. A
+name another team or an operator holds is 409 on the node. The control plane
+refuses team keys on builds (403, below), so this is reached by calling a node
+directly with the cluster token.
 Still shared on the node: uploads for `COPY` are content-addressed (a hash of
 the files, whoever sent them), as are pulled images (`image-…`) and cached
 build steps (`build-cache-…`), which two builds with identical inputs share.

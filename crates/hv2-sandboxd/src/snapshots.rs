@@ -237,17 +237,29 @@ pub(crate) async fn keep(
         sizes,
         owned: state.store.is_none(),
     };
-    if let (Some(_), Some(dir)) = (&state.store, snapshot.file.parent()) {
-        let record = record_of(&snapshot);
-        if let Err(e) = publish(dir, name, &record) {
-            let _ = std::fs::remove_file(&snapshot.file);
-            return Err(e);
+    // The check, the store's record and the insert all under one lock, so
+    // two teams building one name cannot both be kept. An administrator's
+    // snapshot (no team) replaces any, as it always did.
+    let replaced = {
+        let mut snapshots = state.snapshots.write();
+        if let Some(team) = &snapshot.team {
+            if snapshots
+                .get(name)
+                .is_some_and(|existing| held_by_other(existing, team))
+            {
+                let _ = std::fs::remove_file(&snapshot.file);
+                return Err(format!("the template name {name} is taken"));
+            }
         }
-    }
-    let replaced = state
-        .snapshots
-        .write()
-        .insert(name.to_string(), Arc::new(snapshot));
+        if let (Some(_), Some(dir)) = (&state.store, snapshot.file.parent()) {
+            let record = record_of(&snapshot);
+            if let Err(e) = publish(dir, name, &record) {
+                let _ = std::fs::remove_file(&snapshot.file);
+                return Err(e);
+            }
+        }
+        snapshots.insert(name.to_string(), Arc::new(snapshot))
+    };
     if let Some(old) = replaced {
         forget_file(state, &old);
     }
@@ -271,6 +283,20 @@ fn record_of(snapshot: &Snapshot) -> Record {
         cpu_count: snapshot.sizes.map(|s| s.cpus),
         memory_mb: snapshot.sizes.map(|s| s.memory_mb),
     }
+}
+
+/// The team a build's snapshot is recorded under. A team's build is that
+/// team's, as its sandboxes' snapshots are. A principal's personal team is
+/// not: its builds are named under its scope ([`TeamId::template_prefix`]) and
+/// stay as they were, and an administrator's build has no team.
+pub(crate) fn build_owner(team: Option<&TeamId>) -> Option<TeamId> {
+    team.filter(|team| !team.is_personal()).cloned()
+}
+
+/// Whether `existing` is another team's, or an operator's, so that a snapshot
+/// of `team` may not replace it. The same team's may be replaced.
+pub(crate) fn held_by_other(existing: &Snapshot, team: &TeamId) -> bool {
+    existing.team.as_ref() != Some(team)
 }
 
 /// Whether a sandbox of `team` may be started from `snapshot`: an operator's
@@ -743,6 +769,27 @@ mod tests {
         assert!(!deletable_by("app", None, Some(&scope_a)));
         assert!(deletable_by("base", None, None));
         assert!(deletable_by("app", None, None));
+    }
+
+    /// A team's build may replace only the same team's snapshot of its name:
+    /// another team's and an operator's are held by someone else.
+    #[test]
+    fn a_team_may_replace_only_its_own_snapshot_of_a_name() {
+        let team = |t: &str| TeamId::parse(t).unwrap();
+        let snap = |owner: Option<TeamId>| Snapshot {
+            base: "base".into(),
+            file: std::path::PathBuf::from("a.snap"),
+            sandbox_id: "sbx".into(),
+            created_ms: 1,
+            team: owner,
+            shared_with: parking_lot::RwLock::new(Vec::new()),
+            sizes: None,
+            owned: false,
+        };
+        let (red, blue) = (team("red"), team("blue"));
+        assert!(!held_by_other(&snap(Some(red.clone())), &red));
+        assert!(held_by_other(&snap(Some(blue)), &red));
+        assert!(held_by_other(&snap(None), &red));
     }
 
     /// A size is kept with a snapshot of a sandbox of its own, and a record

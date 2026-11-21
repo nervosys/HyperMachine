@@ -590,7 +590,10 @@ impl HyperMachineOntology {
                  first among the tags (the default tag is `default`). A name that already \
                  exists is rebuilt in place and sandboxes created from it afterwards get \
                  the new build, so naming an existing template is how to replace it; a name \
-                 that is a template built from an image is 409 instead. The node needs \
+                 that is a template built from an image is 409 instead. A build made for a \
+                 team is that team's snapshot: it replaces only its own team's template of \
+                 the name, and a name another team or an operator holds is 409 (the node \
+                 checks it at the request and again when the build is kept). The node needs \
                  `--guest-kit`, or 501. {}",
                 if node {
                     "The node does not check who is asking."
@@ -599,7 +602,8 @@ impl HyperMachineOntology {
                      key with a principal and no team has its scope prefix put before the \
                      name (before any `:tag`), and a name under another scope is 403. The \
                      request is then relayed to the build node chosen from the name. A key \
-                     with a team, and an administrator, name templates in the node's own \
+                     with a team is refused (403, shared by every team) until templates are \
+                     partitioned by team; an administrator names templates in the node's own \
                      namespace, which is shared by every such caller."
                 }
             ))

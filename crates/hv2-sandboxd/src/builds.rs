@@ -139,6 +139,9 @@ pub(crate) struct Build {
     /// The scope that made it ([`scope_of`]): its `COPY`s read the uploads of
     /// that scope, and no other.
     scope: String,
+    /// The team that asked for it, as the control plane sent it; `None` for
+    /// an administrator. Its snapshots are recorded under it ([`Build::owner`]).
+    team: Option<hv2_cluster::ownership::TeamId>,
     /// The size asked for, if any: E2B's `cpuCount` and `memoryMB`.
     sizes: Option<Sizes>,
     state: parking_lot::Mutex<Progress>,
@@ -166,6 +169,12 @@ impl Build {
 
     fn set_status(&self, status: &'static str) {
         self.state.lock().status = status;
+    }
+
+    /// The team the snapshots this build keeps are recorded under: the
+    /// requesting team's, or none for an administrator and a principal.
+    fn owner(&self) -> Option<hv2_cluster::ownership::TeamId> {
+        snapshots::build_owner(self.team.as_ref())
     }
 }
 
@@ -209,6 +218,19 @@ pub(crate) async fn request(
             format!("{name} is a template built from an image; build under another name"),
         );
     }
+    // A team's build may not replace another team's or an operator's
+    // template of the name: the name is refused now, and again when the
+    // build is kept, under the lock that inserts it.
+    if let Some(owner) = snapshots::build_owner(team.as_ref()) {
+        if snapshots::lookup(&state, &name)
+            .is_some_and(|existing| snapshots::held_by_other(&existing, &owner))
+        {
+            return api_error(
+                StatusCode::CONFLICT,
+                format!("the template name {name} is taken"),
+            );
+        }
+    }
     if state.opts.guest_kit.is_none() {
         return api_error(
             StatusCode::NOT_IMPLEMENTED,
@@ -234,6 +256,7 @@ pub(crate) async fn request(
         template: name.clone(),
         build_id: uuid::Uuid::new_v4().to_string(),
         scope: scope_of(team.as_ref()),
+        team: team.clone(),
         sizes,
         state: parking_lot::Mutex::new(Progress {
             status: "waiting",
@@ -1048,7 +1071,7 @@ async fn steps_then_snapshot(
                 base.to_string(),
                 file,
                 sandbox_id.to_string(),
-                None,
+                build.owner(),
                 None,
             )
             .await?;
@@ -1239,7 +1262,7 @@ async fn finalize(
         base.to_string(),
         file,
         sandbox_id.to_string(),
-        None,
+        build.owner(),
         None,
     )
     .await
@@ -2396,6 +2419,38 @@ mod tests {
         assert_eq!(scope_of(Some(&red)), "team:red");
         assert_ne!(scope_of(Some(&red)), scope_of(Some(&blue)));
         assert_eq!(scope_of(None), "");
+    }
+
+    /// A team's build is recorded under that team, so the team deletes and
+    /// lists its template as its own and no other team does. An
+    /// administrator's has no team, and so does a principal's, whose builds
+    /// are named under its scope as they were.
+    #[test]
+    fn a_team_build_is_recorded_under_that_team() {
+        use hv2_cluster::ownership::{OwnerId, TeamId};
+        let team = |t: &str| TeamId::parse(t).unwrap();
+        let build = |team: Option<TeamId>| Build {
+            template: "app".into(),
+            build_id: "b".into(),
+            scope: scope_of(team.as_ref()),
+            team,
+            sizes: None,
+            state: parking_lot::Mutex::new(Progress::default()),
+        };
+        let (red, blue) = (team("red"), team("blue"));
+        assert_eq!(build(Some(red.clone())).owner(), Some(red.clone()));
+        assert_eq!(build(None).owner(), None);
+
+        let owner = build(Some(red.clone())).owner();
+        assert!(snapshots::deletable_by("app", owner.as_ref(), Some(&red)));
+        assert!(!snapshots::deletable_by("app", owner.as_ref(), Some(&blue)));
+        assert!(snapshots::deletable_by("app", owner.as_ref(), None));
+
+        let alice = TeamId::personal(&OwnerId::parse("alice").unwrap());
+        assert_eq!(build(Some(alice.clone())).owner(), None);
+        let mine = format!("{}app", alice.template_prefix().unwrap());
+        assert!(snapshots::deletable_by(&mine, None, Some(&alice)));
+        assert!(!snapshots::deletable_by(&mine, None, Some(&red)));
     }
 
     #[test]
