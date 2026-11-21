@@ -109,7 +109,12 @@ def main():
                 winner = winners[0]
                 volume = root / 'volumes' / winner['volumeID']
                 metadata = (volume / 'meta.json').read_bytes()
-                require(json.loads(metadata)['token'] == winner['token'], 'winner token differs from disk')
+                on_disk = json.loads(metadata)
+                require('token' not in on_disk and winner['token'].encode() not in metadata,
+                        'plaintext token on disk')
+                require(on_disk['tokenSHA256'] == hashlib.sha256(winner['token'].encode()).hexdigest(),
+                        'winner token digest differs from disk')
+                require(on_disk.get('tokenSealed'), 'token not sealed on disk')
                 (volume / 'data' / 'marker').write_bytes(b'owned persistent marker')
                 require(api('POST', '/volumes', {'name': 'owned-concurrent'})[0] == 409, 'duplicate did not conflict')
                 require((volume / 'meta.json').read_bytes() == metadata, 'duplicate changed metadata')

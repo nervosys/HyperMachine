@@ -36,13 +36,12 @@ fn volume_with_token_schema() -> Value {
         "token": { "type": "string", "description": "the volume's content bearer token, for `/volumecontent`" } } })
 }
 
-/// What `get_volume` answers: the volume, its `token` always null. The key is
-/// kept because E2B's `VolumeAndToken` requires it.
+/// What `get_volume` answers: E2B's `VolumeAndToken`, the token unsealed.
 fn volume_info_schema() -> Value {
     json!({ "type": "object", "properties": {
         "volumeID": { "type": "string" },
         "name": { "type": "string" },
-        "token": { "type": "null", "description": "always null: the token is shown by `create_volume` and `rotate_volume_token` only" } } })
+        "token": { "type": ["string", "null"], "description": "the volume's content bearer token, unsealed from `meta.json`; null only for a volume whose token was stored as a digest alone (before tokens were sealed) until it is rotated" } } })
 }
 
 /// A listed volume: the token is not in a listing.
@@ -120,8 +119,8 @@ fn relay_failures() -> Vec<OperationResponse> {
 fn content_failures() -> Vec<OperationResponse> {
     vec![
         fail(
-            404,
-            "`no volume <id>`: no such volume, the ID is not 1 to 64 letters, digits, `_` and `-`, or the request carries no bearer token or not this volume's token. These are one answer with one body, so a caller cannot tell which volume IDs exist. The token is compared as a digest in constant time.",
+            401,
+            "`invalid volume token`: no such volume, the ID is not 1 to 64 letters, digits, `_` and `-`, or the request carries no bearer token or not this volume's token. These are one answer with one body, so a caller cannot tell which volume IDs exist; E2B's SDK raises it as an authentication error. The token is compared as a digest in constant time.",
         ),
         plain(
             400,
@@ -192,8 +191,8 @@ impl HyperMachineOntology {
         .about(if node {
             "List the volumes of this node's volume directory, sorted by name: each volume's \
              `volumeID`, `name` and `teamID` (null for a volume made outside a team). The \
-             content token is not in the listing, nor in `get_volume`; only `create_volume` \
-             and `rotate_volume_token` return it. When the control \
+             content token is not in the listing; `create_volume`, `get_volume` and \
+             `rotate_volume_token` return it. When the control \
              plane relayed the call with a team, only that team's volumes are listed; a call \
              with no team context sees every volume, including those of every team. A \
              node on a shared volume directory lists what every node holds; a node whose \
@@ -287,10 +286,14 @@ impl HyperMachineOntology {
             },
         )
         .about(
-            "Read one volume: its `volumeID` and `name`. The `token` key is present and always \
-             null: the content token is returned once, by `create_volume` and by \
-             `rotate_volume_token`, and is stored only as a digest, so a caller who can read \
-             a volume's metadata cannot read its credential. A volume of another team is not \
+            "Read one volume: its `volumeID`, `name` and content `token`, as E2B's \
+             `Volume.connect` needs to authenticate later content calls. `meta.json` keeps \
+             the token's SHA-256 and the token sealed with AES-256-GCM under a key in the \
+             volume root (`.token-key`, bound to the volume ID), never the plaintext; the \
+             token is unsealed for this answer. A volume whose token was stored as a digest \
+             alone (before tokens were sealed) answers a null `token` until it is rotated. \
+             Any caller allowed to manage the volume can therefore read its token, as on \
+             E2B. A volume of another team is not \
              forbidden but missing: 404, the same as one that does not exist. A call with no \
              team context reaches every volume. An ID that is not 1 to 64 letters, digits, \
              `_` and `-` is 404 too. The control plane relays the call to the node picked for \
@@ -301,7 +304,7 @@ impl HyperMachineOntology {
         ))
         .answers(ok(
             200,
-            "The volume, with `token` null.",
+            "The volume and its content token.",
             Some(volume_info_schema()),
         ))
         .answers(fail(
@@ -425,8 +428,12 @@ impl HyperMachineOntology {
                     "Whatever the node answered, with its status and body (the node's per-method operations describe them).",
                 ))
                 .answers(fail(
+                    401,
+                    "`invalid volume token`, from the node: no such volume, or a wrong or missing bearer token (one answer, so volume IDs cannot be probed); also a node picked that does not hold the volume (nodes without a shared volume directory)",
+                ))
+                .answers(fail(
                     404,
-                    "`no volume <id>`, from the node: no such volume, a wrong or missing bearer token (the same answer as a missing volume), the node picked does not hold it (nodes without a shared volume directory), or the path inside it does not exist",
+                    "from the node: the path inside the volume does not exist",
                 ))
                 .answers(plain(
                     405,
@@ -986,18 +993,20 @@ impl HyperMachineOntology {
                 description: "The content routes are outside the control plane's key check and \
                     outside the node's cluster-token gate: the volume's bearer token is the \
                     only credential, compared as a SHA-256 digest in constant time. The token \
-                    is random and is returned once, by `create_volume` and by \
-                    `rotate_volume_token`; `meta.json` (mode 0600) keeps only its digest, and \
-                    volumes written before that were migrated when first read. `get_volume` \
-                    and `list_volumes` never return it (`get_volume` carries a null `token`). \
+                    is random. `meta.json` (mode 0600) keeps its digest and the token sealed \
+                    with AES-256-GCM under the volume root's `.token-key` (mode 0600, bound to \
+                    the volume ID), never the plaintext; volumes written with a plaintext token \
+                    are migrated when first read. `create_volume`, `get_volume` and \
+                    `rotate_volume_token` return it, as E2B's `Volume.connect` needs; \
+                    `list_volumes` does not. Anyone who can read both `meta.json` and the key \
+                    file (the volume root, or a backup of it) can unseal every token. \
                     `rotate_volume_token` replaces it, and the old token stops working when the \
-                    new digest is published. Rotation is management, authorised as \
-                    `get_volume` is: a key with the `volumes` scope in the volume's team, never \
-                    the content token itself. A key with that scope can therefore rotate a \
-                    volume's token and obtain a working one, so `volumes` keys still reach \
-                    every volume of their team. The content routes do not look at a team, so \
-                    the token works for whoever has it. A volume that does not exist and a \
-                    wrong or missing token are one 404 with one body, so an unauthenticated \
+                    new digest is published. Reading and rotating are management, authorised \
+                    as `get_volume` is: a key with the `volumes` scope in the volume's team, \
+                    never the content token itself, so `volumes` keys reach every volume of \
+                    their team. The content routes do not look at a team, so the token works \
+                    for whoever has it. A volume that does not exist and a wrong or missing \
+                    token are one 401 with one body, so an unauthenticated \
                     caller cannot tell which volume IDs exist (the IDs derive from names with a \
                     non-cryptographic hash, so a caller who knows a name can still derive its \
                     ID). The control plane repeats a caller's `Authorization` header to the node \

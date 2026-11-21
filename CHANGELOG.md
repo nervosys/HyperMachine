@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **E2B's `Volume.connect()` failed on every volume after tokens were hashed.** The SDK reads the content token from `GET /volumes/{id}`, which had started answering `"token": null`, so it sent no credential. The node now also keeps the token sealed with AES-256-GCM (IronCrypto, under a `.token-key` in the volume root, bound to the volume ID) and `GET` returns it again; the plaintext is still never on disk. A wrong token or a missing volume now answers `401` (one body), which the SDK raises as an authentication error, instead of `404`, which it raised as a missing path. Volumes made while tokens were only hashed answer a null token until rotated.
 - **`GET /volumes` on the control plane answered an empty list when no node answered.** A client could not tell "no volumes" from "no node to ask". It now answers 503 when no live node answers 200.
 - **`POST /sandboxes/{id}/refreshes` always answered 404.** The control plane relayed it, but no node served the route, so E2B's keep-alive failed on every call. The node now serves it: `{"duration": seconds}` (default 300, 0 to 3600, otherwise 400) moves a sandbox's end to that many seconds from now when that is later than its current end, and never brings it in; 204 on success, with the same 401/403/404 checks as `/timeout`.
 - **Team keys and signed-in members got 403 on `/environments` and `/usage`.** The

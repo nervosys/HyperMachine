@@ -5,8 +5,10 @@
 //!
 //! - `POST /volumes`, `GET /volumes`, `GET` and `DELETE /volumes/{id}`, and
 //!   `POST /volumes/{id}/token` (rotate): E2B's volume API, behind the API
-//!   key. The content token is returned by create and rotate only; the node
-//!   keeps just its SHA-256.
+//!   key. Create, get and rotate return the content token, as E2B's
+//!   `Volume.connect` needs; the node keeps its SHA-256, to check requests
+//!   against, and the token sealed with AES-256-GCM under a key in the volume
+//!   root, never the plaintext.
 //! - `/volumecontent/{id}/{file,dir,path}`: E2B's volume content API, which
 //!   the SDK's `Volume` calls with the volume's own bearer token.
 //! - A mount is a 9P2000.L server ([`crate::ninep`]) on a vsock connection
@@ -51,10 +53,21 @@ pub(crate) struct Meta {
     #[serde(rename = "volumeID")]
     id: String,
     name: String,
-    /// SHA-256 of the content token, lowercase hex. The token itself is never
-    /// written: it is returned once, by create and by rotate.
+    /// SHA-256 of the content token, lowercase hex: what a request's token is
+    /// checked against.
     #[serde(rename = "tokenSHA256", default)]
     token_sha256: String,
+    /// The content token sealed with AES-256-GCM under the volume root's key
+    /// ([`seal_token`]), so `GET /volumes/{id}` can return it as E2B's
+    /// `Volume.connect` needs, without the plaintext on disk. `None` for a
+    /// volume whose token was hashed before tokens were sealed: its GET shows
+    /// a null token until the token is rotated.
+    #[serde(
+        rename = "tokenSealed",
+        default,
+        skip_serializing_if = "Option::is_none"
+    )]
+    token_sealed: Option<String>,
     /// The token of a volume made before tokens were hashed. Read only to
     /// migrate it (see `read_meta`); never written back.
     #[serde(rename = "token", default, skip_serializing)]
@@ -159,15 +172,132 @@ fn valid_name(name: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
-/// What create and rotate answer: the volume and its token, once.
-fn with_token(meta: &Meta, token: &str) -> Value {
+/// What create, get and rotate answer: E2B's `VolumeAndToken`. `token` is
+/// null only for a volume whose token cannot be unsealed (see
+/// [`Meta::token_sealed`]).
+fn with_token(meta: &Meta, token: Option<&str>) -> Value {
     json!({ "volumeID": meta.id, "name": meta.name, "token": token })
 }
 
-/// What get answers: the volume with no token. The key stays, because E2B's
-/// `VolumeAndToken` schema requires it; it is null.
-fn without_token(meta: &Meta) -> Value {
-    json!({ "volumeID": meta.id, "name": meta.name, "token": Value::Null })
+// ── Sealed tokens ───────────────────────────────────────────────────────────
+
+/// The file in the volume root that holds the key tokens are sealed under.
+/// It sits beside the volumes, so nodes that share a volume directory share
+/// it, and its dot keeps it out of the volume listing.
+const TOKEN_KEY_FILE: &str = ".token-key";
+
+/// Associated data for a sealed token: binds it to its volume, so a sealed
+/// token copied into another volume's metadata does not open.
+fn token_aad(id: &str) -> Vec<u8> {
+    [b"hv2-volume-token\0".as_slice(), id.as_bytes()].concat()
+}
+
+/// The process's FIPS-disciplined crypto (IronCrypto, self-tested once).
+fn crypto() -> std::io::Result<&'static hv2_core::crypto::fips::FipsCrypto> {
+    use hv2_core::crypto::fips::{FipsCrypto, FipsMode};
+    static CRYPTO: std::sync::OnceLock<Result<FipsCrypto, String>> = std::sync::OnceLock::new();
+    CRYPTO
+        .get_or_init(|| FipsCrypto::new(FipsMode::Enabled).map_err(|e| e.to_string()))
+        .as_ref()
+        .map_err(|e| std::io::Error::other(format!("crypto self-test: {e}")))
+}
+
+/// The 32-byte key in `root`, made on first use. It is written to a private
+/// temporary file and hard-linked into place, so two nodes making it at once
+/// on a shared directory both end up with whichever landed first, and a
+/// reader never sees half a key.
+fn token_key(root: &std::path::Path) -> std::io::Result<[u8; 32]> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+
+    let path = root.join(TOKEN_KEY_FILE);
+    let read = |path: &std::path::Path| -> std::io::Result<[u8; 32]> {
+        let bytes = std::fs::read(path)?;
+        <[u8; 32]>::try_from(bytes.as_slice())
+            .map_err(|_| std::io::Error::other(format!("{}: not a 32-byte key", path.display())))
+    };
+    match read(&path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        other => return other,
+    }
+    std::fs::create_dir_all(root)?;
+    let mut key = [0u8; 32];
+    crypto()?
+        .random_bytes(&mut key)
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    let temporary = root.join(format!(".token-key.{}", uuid::Uuid::new_v4()));
+    let written = (|| {
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temporary)?;
+        file.write_all(&key)?;
+        file.sync_all()?;
+        match std::fs::hard_link(&temporary, &path) {
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(()),
+            other => other,
+        }
+    })();
+    let _ = std::fs::remove_file(&temporary);
+    written?;
+    std::fs::File::open(root)?.sync_all()?;
+    read(&path)
+}
+
+fn to_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn from_hex(text: &str) -> Option<Vec<u8>> {
+    if !text.len().is_multiple_of(2) {
+        return None;
+    }
+    (0..text.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(text.get(i..i + 2)?, 16).ok())
+        .collect()
+}
+
+/// `token` sealed for the volume `id` under `root`'s key: hex of the 12-byte
+/// nonce followed by the ciphertext and its tag.
+fn seal_token(root: &std::path::Path, id: &str, token: &str) -> std::io::Result<String> {
+    let key = token_key(root)?;
+    let sealed = crypto()?
+        .aes_gcm_encrypt(&key, token.as_bytes(), &token_aad(id))
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    Ok(to_hex(&[sealed.nonce, sealed.ciphertext].concat()))
+}
+
+/// `meta`'s token, unsealed, if it has a sealed one that opens under
+/// `root`'s key and still matches the digest requests are checked against.
+fn open_token(root: &std::path::Path, meta: &Meta) -> Option<String> {
+    let bytes = from_hex(meta.token_sealed.as_deref()?)?;
+    if bytes.len() < 12 + 16 {
+        return None;
+    }
+    let (nonce, ciphertext) = bytes.split_at(12);
+    let sealed = hv2_core::crypto::fips::AesGcmCiphertext {
+        nonce: nonce.to_vec(),
+        ciphertext: ciphertext.to_vec(),
+        tag_length: 16,
+    };
+    let opened = token_key(root)
+        .ok()
+        .and_then(|key| {
+            crypto()
+                .ok()?
+                .aes_gcm_decrypt(&key, &sealed, &token_aad(&meta.id))
+                .ok()
+        })
+        .and_then(|plain| String::from_utf8(plain).ok());
+    match opened {
+        Some(token) if token_digest(&token) == meta.token_sha256 => Some(token),
+        _ => {
+            tracing::warn!("volume {}: its sealed token does not open", meta.id);
+            None
+        }
+    }
 }
 
 /// Reserve the deterministic ID before publishing metadata. An existing
@@ -224,6 +354,7 @@ fn new_meta(name: String, team: Option<TeamId>) -> (Meta, String) {
         name,
         token_sha256: token_digest(&token),
         legacy_token: None,
+        token_sealed: None,
         team,
     };
     (meta, token)
@@ -253,6 +384,17 @@ fn read_meta(directory: &std::path::Path) -> Option<Meta> {
     let mut meta = parse()?;
     if let Some(token) = meta.legacy_token.take() {
         meta.token_sha256 = token_digest(&token);
+        // The volume root is the directory above the volume's own.
+        meta.token_sealed =
+            directory
+                .parent()
+                .and_then(|root| match seal_token(root, &meta.id, &token) {
+                    Ok(sealed) => Some(sealed),
+                    Err(e) => {
+                        tracing::warn!("volume {}: sealing its token: {e}", meta.id);
+                        None
+                    }
+                });
         if let Err(e) = publish_metadata(directory, &meta) {
             tracing::warn!(
                 "volume {}: its token is not yet hashed on disk: {e}",
@@ -300,6 +442,7 @@ fn rotate_in(root: &std::path::Path, meta: Meta) -> std::io::Result<(Meta, Strin
     let updated = Meta {
         token_sha256: token_digest(&token),
         legacy_token: None,
+        token_sealed: Some(seal_token(root, &meta.id, &token)?),
         ..meta
     };
     let _writing = METADATA_WRITES
@@ -333,7 +476,11 @@ pub(crate) async fn create(
     if by_name(&state, team.as_ref(), &req.name).is_some() {
         return api_error(StatusCode::CONFLICT, format!("volume {} exists", req.name));
     }
-    let (meta, token) = new_meta(req.name, team);
+    let (mut meta, token) = new_meta(req.name, team);
+    meta.token_sealed = match seal_token(&root(&state), &meta.id, &token) {
+        Ok(sealed) => Some(sealed),
+        Err(e) => return api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
+    };
     let dir = root(&state).join(&meta.id);
     let made = create_metadata(&root(&state), &meta);
     if let Err(e) = made {
@@ -345,7 +492,7 @@ pub(crate) async fn create(
             format!("{}: {e}", dir.display()),
         );
     }
-    (StatusCode::CREATED, Json(with_token(&meta, &token))).into_response()
+    (StatusCode::CREATED, Json(with_token(&meta, Some(&token)))).into_response()
 }
 
 #[cfg(test)]
@@ -465,6 +612,7 @@ mod creation_tests {
                 name: "owned".into(),
                 token_sha256: token_digest("owned-token"),
                 legacy_token: None,
+                token_sealed: None,
                 team: None,
             };
             let mut stage = 0;
@@ -508,6 +656,7 @@ mod creation_tests {
                         name: "owned".into(),
                         token_sha256: token_digest(&index.to_string()),
                         legacy_token: None,
+                        token_sealed: None,
                         team: None,
                     };
                     barrier.wait();
@@ -542,6 +691,7 @@ mod creation_tests {
             name: "owned".into(),
             token_sha256: token_digest("replacement"),
             legacy_token: None,
+            token_sealed: None,
             team: None,
         };
         assert_eq!(
@@ -564,6 +714,7 @@ mod creation_tests {
             name: "owned".into(),
             token_sha256: token_digest("replacement"),
             legacy_token: None,
+            token_sealed: None,
             team: None,
         };
         assert_eq!(
@@ -624,13 +775,78 @@ mod token_tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
-    /// Get's answer carries no token; the key stays, as null.
+    /// The token is sealed on disk, opens for get (E2B's `Volume.connect`
+    /// authenticates with it), and does not open for another volume or under
+    /// another root's key.
     #[test]
-    fn get_never_shows_the_token() {
-        let (meta, token) = new_meta("shown".into(), None);
-        let answer = serde_json::to_string(&without_token(&meta)).unwrap();
-        assert!(!answer.contains(&token));
-        assert!(without_token(&meta)["token"].is_null());
+    fn a_sealed_token_opens_for_its_own_volume_only() {
+        let root = scratch("sealed");
+        let (mut meta, token) = new_meta("sealed".into(), None);
+        meta.token_sealed = Some(seal_token(&root, &meta.id, &token).unwrap());
+        create_metadata(&root, &meta).unwrap();
+        let on_disk = std::fs::read_to_string(root.join(&meta.id).join("meta.json")).unwrap();
+        assert!(!on_disk.contains(&token), "plaintext token on disk");
+        let stored = by_id_in(&root, &meta.id).unwrap();
+        assert_eq!(open_token(&root, &stored).as_deref(), Some(token.as_str()));
+        assert_eq!(
+            with_token(&stored, open_token(&root, &stored).as_deref())["token"],
+            token
+        );
+
+        // Moved to another volume's metadata, it does not open.
+        let mut moved = stored.clone();
+        moved.id = "vol-other".into();
+        assert!(open_token(&root, &moved).is_none());
+        // Under another root's key, it does not open.
+        let elsewhere = scratch("sealed-elsewhere");
+        assert!(open_token(&elsewhere, &stored).is_none());
+        // A volume hashed before sealing shows a null token.
+        let mut unsealed = stored.clone();
+        unsealed.token_sealed = None;
+        assert!(with_token(&unsealed, open_token(&root, &unsealed).as_deref())["token"].is_null());
+
+        let key = std::fs::metadata(root.join(TOKEN_KEY_FILE)).unwrap();
+        assert_eq!(key.len(), 32);
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            key.permissions().mode() & 0o077,
+            0,
+            "key readable by others"
+        );
+        assert!(
+            all_in(&root).iter().all(|v| v.id == meta.id),
+            "key listed as a volume"
+        );
+        std::fs::remove_dir_all(root).unwrap();
+        let _ = std::fs::remove_dir_all(elsewhere);
+    }
+
+    /// Rotation and migration seal the token too, so get returns it.
+    #[test]
+    fn rotation_and_migration_seal_the_token() {
+        let root = scratch("seal-rotate");
+        let (meta, _) = new_meta("rotated".into(), None);
+        create_metadata(&root, &meta).unwrap();
+        let (updated, new) = rotate_in(&root, meta).unwrap();
+        assert_eq!(open_token(&root, &updated).as_deref(), Some(new.as_str()));
+
+        let directory = root.join("vol-legacy");
+        std::fs::create_dir_all(directory.join("data")).unwrap();
+        let legacy = "t".repeat(32);
+        let old = json!({ "volumeID": "vol-legacy", "name": "legacy", "token": legacy });
+        std::fs::write(
+            directory.join("meta.json"),
+            serde_json::to_vec(&old).unwrap(),
+        )
+        .unwrap();
+        let migrated = by_id_in(&root, "vol-legacy").unwrap();
+        assert_eq!(
+            open_token(&root, &migrated).as_deref(),
+            Some(legacy.as_str())
+        );
+        let reread = by_id_in(&root, "vol-legacy").unwrap();
+        assert_eq!(open_token(&root, &reread).as_deref(), Some(legacy.as_str()));
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     /// Rotation: the new token works, the old one stops, the volume and its
@@ -663,13 +879,11 @@ mod token_tests {
         let missing = authorize(&root, "vol-absent", &"w".repeat(64))
             .err()
             .unwrap();
-        assert_eq!(wrong.0, StatusCode::NOT_FOUND);
-        assert_eq!(empty.0, StatusCode::NOT_FOUND);
-        assert_eq!(missing.0, StatusCode::NOT_FOUND);
-        // The body names the ID asked for, so compare it with the ID removed.
-        assert_eq!(wrong.1.replace(&meta.id, "ID"), "no volume ID");
-        assert_eq!(empty.1.replace(&meta.id, "ID"), "no volume ID");
-        assert_eq!(missing.1.replace("vol-absent", "ID"), "no volume ID");
+        assert_eq!(wrong.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(empty.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(missing.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(wrong.1, missing.1);
+        assert_eq!(empty.1, missing.1);
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -717,7 +931,10 @@ pub(crate) async fn get(
     Path(id): Path<String>,
 ) -> Response {
     match reachable(&state, &headers, &id) {
-        Ok(meta) => Json(without_token(&meta)).into_response(),
+        Ok(meta) => {
+            let token = open_token(&root(&state), &meta);
+            Json(with_token(&meta, token.as_deref())).into_response()
+        }
         Err(response) => response,
     }
 }
@@ -764,7 +981,7 @@ pub(crate) async fn rotate_token(
         Err(response) => return response,
     };
     match rotate_in(&root(&state), meta) {
-        Ok((updated, token)) => Json(with_token(&updated, &token)).into_response(),
+        Ok((updated, token)) => Json(with_token(&updated, Some(&token))).into_response(),
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
@@ -867,14 +1084,15 @@ fn token_matches(meta: Option<&Meta>, presented: &str) -> bool {
 }
 
 /// The volume `id` under `root`, if `token` is its token. A volume that does
-/// not exist and a wrong token are one refusal: 404 with the same body, so a
-/// caller cannot tell which volume IDs exist.
+/// not exist and a wrong token are one refusal: 401 with the same body, so a
+/// caller cannot tell which volume IDs exist, and E2B's SDK raises it as an
+/// authentication error rather than a missing path.
 fn authorize(root: &std::path::Path, id: &str, token: &str) -> Result<Meta, (StatusCode, String)> {
     let meta = by_id_in(root, id);
     let ok = token_matches(meta.as_ref(), token);
     match meta {
         Some(meta) if ok => Ok(meta),
-        _ => Err((StatusCode::NOT_FOUND, format!("no volume {id}"))),
+        _ => Err((StatusCode::UNAUTHORIZED, "invalid volume token".to_string())),
     }
 }
 
