@@ -142,10 +142,11 @@ Configure `HV2_API_KEY` for the management endpoint, then use the node or sandbo
 hm sandbox vm --endpoint https://control.example volume create workspace
 hm sandbox vm --endpoint https://control.example volume list
 hm sandbox vm --endpoint https://control.example volume inspect vol-your-volume
+hm sandbox vm --endpoint https://control.example volume rotate vol-your-volume
 hm sandbox vm --endpoint https://control.example volume delete vol-your-volume
 ```
 
-Creation prints JSON including the content bearer token. Inspection prints the volume with its token (see [Volume tokens](#volume-tokens)). The CLI has no rotate command; rotation is the HTTP route `POST /volumes/{id}/token`. Successful deletion prints nothing and removes the volume contents. Names and IDs accept 1–64 ASCII letters, digits, underscores or hyphens. Existing `--api-ca-cert` and `--request-timeout` options apply. Management responses are bounded to 64 KiB and listings to 1 MiB. Use the integrated streamed upload command below, or the Python helper, for atomic/create-only uploads. [Management CLI evidence](benchmarks/2026-10-03/volume-management-cli/README.md) verifies shipped-binary protocol behavior, existing CLI regressions, and real shared-storage operations through the control-plane router.
+Creation prints JSON including the content bearer token. Inspection prints the volume with its token (see [Volume tokens](#volume-tokens)). `volume rotate` replaces the content token and prints JSON with the new one (`volumeID`, `name`, `token`), as the HTTP route `POST /volumes/{id}/token` answers; the old token stops working once the new digest is published. Like `inspect`, it needs the platform API key, not the content token. Successful deletion prints nothing and removes the volume contents. Names and IDs accept 1–64 ASCII letters, digits, underscores or hyphens. Existing `--api-ca-cert` and `--request-timeout` options apply. Management responses are bounded to 64 KiB and listings to 1 MiB. Use the integrated streamed upload command below, or the Python helper, for atomic/create-only uploads. [Management CLI evidence](benchmarks/2026-10-03/volume-management-cli/README.md) verifies shipped-binary protocol behavior, existing CLI regressions, and real shared-storage operations through the control-plane router.
 
 ## Streamed upload with hm
 

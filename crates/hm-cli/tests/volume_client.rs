@@ -409,3 +409,99 @@ async fn volume_upload_streams_binary_without_management_credentials() {
     server.abort();
     assert!(server.await.unwrap_err().is_cancelled());
 }
+
+#[tokio::test]
+async fn volume_rotate_posts_with_management_key_and_prints_new_token() {
+    let token = "t".repeat(32);
+    let rotated = token.clone();
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let seen = observed.clone();
+    let app = Router::new().fallback(move |request: Request| {
+        let seen = seen.clone();
+        let rotated = rotated.clone();
+        async move {
+            if request
+                .headers()
+                .get("x-api-key")
+                .and_then(|value| value.to_str().ok())
+                != Some("owned-volume-key")
+            {
+                return StatusCode::UNAUTHORIZED.into_response();
+            }
+            assert!(!request.headers().contains_key("authorization"));
+            let method = request.method().to_string();
+            let path = request.uri().path().to_string();
+            seen.lock().unwrap().push((method.clone(), path.clone()));
+            if path == "/volumes/missing/token" {
+                return (StatusCode::NOT_FOUND, "volume not found").into_response();
+            }
+            if method == "POST" && path == "/volumes/vol-owned/token" {
+                Json(json!({"volumeID":"vol-owned","name":"owned","token":rotated})).into_response()
+            } else {
+                StatusCode::METHOD_NOT_ALLOWED.into_response()
+            }
+        }
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+    let result = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args([
+            "sandbox",
+            "vm",
+            "--endpoint",
+            &endpoint,
+            "volume",
+            "rotate",
+            "vol-owned",
+        ])
+        .env("HV2_API_KEY", "owned-volume-key")
+        .env("HV2_VOLUME_TOKEN", "unused-content-token")
+        .output()
+        .await
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(!String::from_utf8_lossy(&result.stderr).contains(&token));
+    let printed: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(
+        printed,
+        json!({"volumeID":"vol-owned","name":"owned","token":token})
+    );
+
+    let missing = tokio::process::Command::new(env!("CARGO_BIN_EXE_hm"))
+        .args([
+            "sandbox",
+            "vm",
+            "--endpoint",
+            &endpoint,
+            "volume",
+            "rotate",
+            "missing",
+        ])
+        .env("HV2_API_KEY", "owned-volume-key")
+        .output()
+        .await
+        .unwrap();
+    assert!(!missing.status.success());
+    let stderr = String::from_utf8_lossy(&missing.stderr);
+    assert!(stderr.contains("404"), "{stderr}");
+    assert!(stderr.contains("POST /volumes/missing/token"), "{stderr}");
+
+    {
+        let requests = observed.lock().unwrap();
+        assert_eq!(
+            *requests,
+            [
+                ("POST".to_string(), "/volumes/vol-owned/token".to_string()),
+                ("POST".to_string(), "/volumes/missing/token".to_string()),
+            ]
+        );
+    }
+    server.abort();
+    assert!(server.await.unwrap_err().is_cancelled());
+}

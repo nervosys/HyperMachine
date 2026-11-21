@@ -1041,6 +1041,11 @@ pub enum VolumeCommand {
         #[arg(value_parser = volume_name)]
         id: String,
     },
+    /// Rotate a volume's content token; prints it with the new token, and the old one stops working
+    Rotate {
+        #[arg(value_parser = volume_name)]
+        id: String,
+    },
     /// Delete a volume and its contents
     Delete {
         #[arg(value_parser = volume_name)]
@@ -1888,6 +1893,10 @@ pub async fn run(args: VmArgs) -> Result<i32> {
             }
             VolumeCommand::Inspect { id } => {
                 api.request_bounded(Method::GET, &["volumes", &id], None, 65536)
+                    .await?
+            }
+            VolumeCommand::Rotate { id } => {
+                api.request_bounded(Method::POST, &["volumes", &id, "token"], None, 65536)
                     .await?
             }
             VolumeCommand::Delete { id } => confirm(
@@ -5368,6 +5377,22 @@ mod tests {
         assert!(
             matches!(parsed.vm.command,VmCommand::PendingRegistrations { node_id,after } if node_id=="node-a" && after.as_deref()==Some("sbx-001"))
         );
+    }
+
+    #[test]
+    fn volume_rotate_cli_takes_a_valid_volume_id() {
+        use clap::Parser;
+        #[derive(Parser)]
+        struct Command {
+            #[command(flatten)]
+            vm: VmArgs,
+        }
+        let parsed = Command::try_parse_from(["hm", "volume", "rotate", "vol-owned"]).unwrap();
+        assert!(
+            matches!(parsed.vm.command, VmCommand::Volume { command: VolumeCommand::Rotate { ref id } } if id == "vol-owned")
+        );
+        assert!(Command::try_parse_from(["hm", "volume", "rotate"]).is_err());
+        assert!(Command::try_parse_from(["hm", "volume", "rotate", "../escape"]).is_err());
     }
 
     #[test]
