@@ -459,10 +459,12 @@ impl HyperMachineOntology {
                  `{{scheme}}://{{host}}/templates/{{template}}/files/{{hash}}?token=...`, \
                  the host from `X-Forwarded-Host` or `Host` as the caller reached it \
                  (through a control plane, the control plane's, which relays the upload). \
-                 The token is one random value, held in memory as its digest, good for 30 \
-                 minutes and for that scope, template and hash alone. Asking again for the \
-                 same scope, template and hash voids the earlier URL; it is used up only by \
-                 a successful upload. Before it hands one out the node refuses \
+                 The token is one random value, held in memory as its digest, good for two \
+                 hours and for that scope, template and hash alone. Asking again for the \
+                 same scope, template and hash gives a second URL and leaves the first \
+                 standing (the SDK asks once per `COPY`, and two `COPY`s of the same files \
+                 share a hash); each is used up only by its own successful upload. Before \
+                 it hands one out the node refuses \
                  (507) when it already holds 256 uploads or 64 GiB. {} Not an inventory \
                  route: an `inventory` key or an observer is refused, since the answer is a \
                  capability to write.",
@@ -510,7 +512,7 @@ impl HyperMachineOntology {
                  the ones `get_template_file_link` issued. The token is for one scope, \
                  template and hash: the bytes are stored under the scope the link was issued \
                  to, and a template or hash in the path other than the link's is refused \
-                 403. It expires after 30 minutes and is removed only after a successful \
+                 403. It expires after two hours and is removed only after a successful \
                  upload. The body is streamed to a scratch file, then published with a hard \
                  link, so within a scope the first writer of a hash wins and a second upload \
                  of the same name is told 200 and discarded; nobody can replace another's \
@@ -954,10 +956,11 @@ pub(super) fn template_guardrails() -> Vec<Guardrail> {
                 no key with an upload. What authorises it is the `token` query parameter \
                 that `get_template_file_link` issued, 244 random bits compared in constant \
                 time against every live token. The node keeps each token's digest in memory, \
-                for 30 minutes, with the scope, template and hash it was issued for: a token \
+                for two hours, with the scope, template and hash it was issued for: a token \
                 opens that one upload and no other. Asking again for the same scope, template \
-                and hash voids the earlier URL, and the token is used up only by a successful \
-                upload. It travels in a URL, so a proxy that logs URLs logs it. \
+                and hash gives another token and leaves the first standing; each is used up \
+                only by its own successful upload. It travels in a URL, so a proxy that logs \
+                URLs logs it, and an unused one stays good until it expires. \
                 A control plane relays the upload to the build node chosen from the template \
                 name in the path."
                 .to_string(),

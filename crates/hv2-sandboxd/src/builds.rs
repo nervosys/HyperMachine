@@ -50,9 +50,11 @@ const MAX_UPLOAD_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 /// audit's O8), so these bound what any caller can leave on the disk.
 const MAX_STORED_UPLOADS: usize = 256;
 const MAX_STORED_UPLOAD_BYTES: u64 = 64 * 1024 * 1024 * 1024;
-/// How long an offered upload's token is good for: the SDK sends its `PUT`
-/// straight after the link it was given.
-const UPLOAD_TOKEN_TTL: Duration = Duration::from_secs(30 * 60);
+/// How long an offered upload's token is good for. E2B's JS SDK asks for
+/// every `COPY`'s link at once and spools each archive before its `PUT`, with
+/// an upload timeout of an hour, so a link can wait well over that before it
+/// is used: two hours covers it.
+const UPLOAD_TOKEN_TTL: Duration = Duration::from_secs(2 * 60 * 60);
 /// The most offered upload tokens a node keeps at once; the oldest goes first.
 const MAX_UPLOAD_GRANTS: usize = 1024;
 
@@ -306,15 +308,15 @@ pub(crate) struct UploadGrant {
 pub(crate) struct UploadGrants(parking_lot::Mutex<Vec<UploadGrant>>);
 
 impl UploadGrants {
-    /// A new token for `hash` of `template` under `scope`. An earlier offer
-    /// for the same three is voided; offers for other scopes, templates or
-    /// hashes are not.
+    /// A new token for `hash` of `template` under `scope`. Earlier offers
+    /// stand, even for the same three: E2B's SDK asks once per `COPY`, and
+    /// two `COPY`s of the same files share a hash, so voiding the first would
+    /// fail its upload. Each token is still good for one upload, and a second
+    /// upload of a stored hash is accepted without replacing it.
     fn offer(&self, scope: &str, template: &str, hash: &str, now: Instant) -> String {
         let token = new_access_token();
         let mut grants = self.0.lock();
-        grants.retain(|g| {
-            g.expires > now && !(g.scope == scope && g.template == template && g.hash == hash)
-        });
+        grants.retain(|g| g.expires > now);
         if grants.len() >= MAX_UPLOAD_GRANTS {
             grants.remove(0);
         }
@@ -2316,10 +2318,27 @@ mod tests {
             grants.redeem(&blue, "app", "h1", now).unwrap().scope,
             "team:blue"
         );
-        // A later offer to the same scope, template and hash does replace it.
+        // A later offer to the same scope, template and hash leaves the first
+        // standing: two COPYs of the same files ask for the same hash at once.
         let again = grants.offer("team:red", "app", "h1", now);
+        let first = grants.redeem(&red, "app", "h1", now).unwrap();
+        let second = grants.redeem(&again, "app", "h1", now).unwrap();
+        // Each is still used up by its own upload, and only by it.
+        grants.spend(&first);
         assert!(grants.redeem(&red, "app", "h1", now).is_none());
         assert!(grants.redeem(&again, "app", "h1", now).is_some());
+        grants.spend(&second);
+        assert!(grants.redeem(&again, "app", "h1", now).is_none());
+    }
+
+    /// A link outlives the SDK's hour-long upload timeout.
+    #[test]
+    fn a_link_lasts_longer_than_the_sdks_upload_timeout() {
+        let grants = UploadGrants::default();
+        let now = Instant::now();
+        let token = grants.offer("team:red", "app", "h1", now);
+        let after_an_hour = now + Duration::from_secs(61 * 60);
+        assert!(grants.redeem(&token, "app", "h1", after_an_hour).is_some());
     }
 
     #[tokio::test]

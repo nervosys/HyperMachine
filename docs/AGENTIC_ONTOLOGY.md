@@ -395,7 +395,7 @@ plane's routers, so every interface the five components serve is described
   upload. The upload `PUT` sits outside the key check and the cluster-token
   check; its `token` query parameter stands in. The token is offered for one
   scope (the caller's team, or the node's own for an administrator), template
-  and hash, and expires after 30 minutes; a `PUT` to any other template or
+  and hash, and expires after two hours; a `PUT` to any other template or
   hash is refused, and its bytes go to the scope the link was issued to. Uploads
   and cached build steps are kept per scope, so one team's files cannot stand
   in for another's. The uploaded hash is checked only with
