@@ -763,6 +763,96 @@ async fn a_refused_sni_sent_late_or_in_pieces_is_reset() {
     assert!(reply.starts_with(b"echo:"));
 }
 
+/// TLS and HTTP that name no one host are refused on an address opened by
+/// name, sent at once or late; a ClientHello in two records is read whole.
+#[tokio::test]
+async fn unnamed_tls_and_http_on_an_address_opened_by_dns_are_reset() {
+    let echo = echo_server().await;
+    let gw = gateway(
+        e2b(&["example.com"], &["0.0.0.0/0"]),
+        &[(EXAMPLE, 443, echo), (EXAMPLE, 25, echo)],
+    );
+    let mut guest = Guest::new();
+    guest.lookup(&gw, "example.com").await;
+    let late = Duration::from_millis(800);
+    let evil = sniff::tests::fragmented_client_hello("evil.example", 10);
+    let absolute = b"GET http://evil.example/ HTTP/1.1\r\nHost: example.com\r\n\r\n";
+    let twice = b"GET / HTTP/1.1\r\nHost: b!\r\nHost: example.com\r\n\r\n";
+    let cases: [&[u8]; 4] = [&evil, absolute, twice, &[0x15, 3, 1, 0, 2, 1, 90]];
+    for bytes in cases {
+        assert_eq!(guest.exchange(&gw, EXAMPLE, 443, bytes).await, None);
+        let parts = [(late, bytes)];
+        assert_eq!(
+            guest.exchange_in_parts(&gw, EXAMPLE, 443, &parts).await,
+            None
+        );
+    }
+    let good = sniff::tests::fragmented_client_hello("example.com", 10);
+    assert!(guest.exchange(&gw, EXAMPLE, 443, &good).await.is_some());
+    // Neither TLS nor HTTP: it goes by address, as before.
+    let ehlo = guest.exchange(&gw, EXAMPLE, 25, b"EHLO x\r\n").await;
+    assert_eq!(ehlo.as_deref(), Some(&b"echo:EHLO x\r\n"[..]));
+}
+
+/// A secret bound to a name is not sent to an address the name does not
+/// resolve to, whatever certificate answers there.
+#[tokio::test]
+async fn secrets_are_not_injected_at_an_address_the_name_does_not_resolve_to() {
+    let (upstream, root) = header_echo_upstream("api.example.com").await;
+    let authority = Arc::new(mitm::Authority::generate().unwrap());
+    // The address is allowed as an address; the name resolves elsewhere.
+    let names = HashMap::from([("api.example.com".into(), vec![IpAddr::V4(OTHER)])]);
+    let routes = HashMap::from([(SocketAddr::new(IpAddr::V4(EXAMPLE), 443), upstream)]);
+    let gateway = Gateway::builder(NetworkPolicy::new(Verdict::Allow))
+        .resolver(Arc::new(MapResolver(names)))
+        .dialer(Arc::new(MapDialer(routes)))
+        .intercept_with(authority)
+        .upstream_root(root)
+        .build()
+        .unwrap();
+    let store = crate::secret_substitution::Store::new(vec![crate::secret_substitution::Binding {
+        placeholder: format!("hms_{}", "a".repeat(64)),
+        value: "s".repeat(12).into_bytes(),
+        hosts: vec!["api.example.com".into()],
+    }])
+    .unwrap();
+    gateway
+        .handle()
+        .set_secret_store(Some(Arc::new(store)))
+        .unwrap();
+    let mut guest = Guest::new();
+    let hello = sniff::tests::client_hello("api.example.com");
+    assert_eq!(guest.exchange(&gateway, EXAMPLE, 443, &hello).await, None);
+    let log = gateway.handle().decisions();
+    assert!(log
+        .iter()
+        .any(|d| d.reason.contains("is not where it resolves")));
+    assert!(!log.iter().any(|d| d.kind == "https-intercept"));
+}
+
+/// Queries beyond the cap on lookups in flight are dropped, and one made
+/// when there is room again is answered.
+#[tokio::test]
+async fn dns_lookups_in_flight_are_bounded() {
+    let gw = gateway(e2b(&["example.com"], &[]), &[]);
+    let handle = gw.handle();
+    let all = u32::try_from(DNS_IN_FLIGHT).unwrap();
+    let held = Arc::clone(&handle.0.dns_in_flight)
+        .try_acquire_many_owned(all)
+        .unwrap();
+    let before = handle.decisions().len();
+    let mut guest = Guest::new();
+    let refused =
+        tokio::time::timeout(Duration::from_secs(1), guest.lookup(&gw, "example.com")).await;
+    assert!(refused.is_err(), "no answer while every lookup is taken");
+    assert_eq!(handle.decisions().len(), before);
+    drop(held);
+    let (rcode, addresses) = Guest::new().lookup(&gw, "example.com").await;
+    assert_eq!((rcode, addresses), (0, vec![EXAMPLE]));
+    // The permit came back.
+    assert_eq!(handle.0.dns_in_flight.available_permits(), DNS_IN_FLIGHT);
+}
+
 /// One address's remembered names are bounded.
 #[tokio::test]
 async fn the_names_remembered_for_one_address_are_bounded() {

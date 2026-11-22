@@ -1819,19 +1819,15 @@ async fn connection(
                         return;
                     }
                 }
-                if let Some(sent) = named(&sniffed) {
-                    let verdict = shared.policy.read().decide(destination.ip(), sent).0;
-                    if verdict != Verdict::Allow {
-                        refuse(
-                            Some(sent.to_string()),
-                            format!(
-                                "the name sent (TLS SNI or HTTP Host) is one the policy \
-                                 refuses; the address was allowed only as {}",
-                                allowed.join(", ")
-                            ),
-                        );
-                        return;
-                    }
+                if let Err((sent, why)) = check_name_opened(&shared, destination, &sniffed) {
+                    refuse(
+                        sent,
+                        format!(
+                            "{why}; the address was allowed only as {}",
+                            allowed.join(", ")
+                        ),
+                    );
+                    return;
                 }
                 late_name_check = prefix.is_empty();
             }
@@ -1896,6 +1892,25 @@ async fn connection(
                 credentials,
             });
         if headers.is_some() || secrets.is_some() || credentials.is_some() {
+            // The upstream certificate vouches for the name, but a wildcard or
+            // shared certificate vouches for servers the rule did not mean. The
+            // address must be one the name resolves to as well: by an answer
+            // this gateway gave, or now.
+            let resolves_here = shared.names_for(destination.ip()).contains(sni)
+                || shared
+                    .resolver
+                    .resolve(sni)
+                    .await
+                    .is_ok_and(|addresses| addresses.contains(&destination.ip()));
+            if !resolves_here {
+                refuse(
+                    Some(sni.clone()),
+                    "a rule sends credentials or headers to this name, and the address \
+                     connected to is not where it resolves"
+                        .to_string(),
+                );
+                return;
+            }
             let headers = headers.unwrap_or_default();
             let Some(intercept) = shared.intercept.clone() else {
                 refuse(
@@ -2002,6 +2017,32 @@ async fn connection(
     }
 }
 
+/// Whether what a client sent may go to an address opened only because an
+/// allowed name resolved to it. TLS and HTTP must name something the policy
+/// allows; without a name, or with one the sniff could not be sure of, the
+/// server would choose. Anything else names nothing, and goes by address.
+fn check_name_opened(
+    shared: &Shared,
+    destination: SocketAddr,
+    sniffed: &Sniffed,
+) -> Result<(), (Option<String>, String)> {
+    match sniffed {
+        Sniffed::Tls(Some(sent)) | Sniffed::Http(Some(sent)) => {
+            match shared.policy.read().decide(destination.ip(), sent).0 {
+                Verdict::Allow => Ok(()),
+                _ => Err((
+                    Some(sent.clone()),
+                    "the name sent (TLS SNI or HTTP Host) is one the policy refuses".to_string(),
+                )),
+            }
+        }
+        Sniffed::Tls(None) | Sniffed::Http(None) => {
+            Err((None, "TLS or HTTP that names no one host".to_string()))
+        }
+        Sniffed::Other | Sniffed::Incomplete => Ok(()),
+    }
+}
+
 /// Why [`relay_naming_late`] stopped early.
 enum LateStop {
     Refused(Option<String>, String),
@@ -2045,17 +2086,8 @@ async fn relay_naming_late(
                     "the client's first bytes never finished naming anything".to_string(),
                 ));
             }
-            if let Some(sent) = named(&sniffed) {
-                let verdict = shared.policy.read().decide(destination.ip(), sent).0;
-                if verdict != Verdict::Allow {
-                    return Err(LateStop::Refused(
-                        Some(sent.to_string()),
-                        "the name sent (TLS SNI or HTTP Host), after the sniff, is one the \
-                         policy refuses"
-                            .to_string(),
-                    ));
-                }
-            }
+            check_name_opened(shared, destination, &sniffed)
+                .map_err(|(sent, why)| LateStop::Refused(sent, why))?;
             upstream_writer.write_all(&prefix).await?;
             tokio::io::copy(&mut guest_reader, &mut upstream_writer).await?;
         }

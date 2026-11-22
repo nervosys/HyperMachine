@@ -411,23 +411,32 @@ node-wide.
 - **G1. Names on a shared address.** An address opened because an `allowOut` name resolved to it was
   checked against the TLS SNI only. A plain-HTTP `Host` was never checked, and a guest that waited
   out the 300 ms sniff, or sent its ClientHello a byte at a time, was never checked either. So any
-  name served from the same address (common on CDNs) was reachable. Now every name sent is checked;
-  a first flight that starts naming must finish within the name timeout; and a client that was
-  silent during the sniff has its first bytes checked before any go upstream, while the server's
-  bytes still flow (SSH, SMTP).
+  name served from the same address (common on CDNs) was reachable. 02f2bceb checked each name the
+  sniffer extracted, read on until a first flight that starts naming has finished, and checked a
+  silent client's first bytes before any go upstream while the server's bytes still flow (SSH,
+  SMTP). **That was not enough, and its commit message and changelog entry overstated it:** a
+  connection the sniffer found no name in was let through, so a ClientHello split over two TLS
+  records, a TLS alert before it, an absolute-form HTTP target, an invalid `Host` before an allowed
+  one, or an unlisted method still reached any site there. The follow-up puts the handshake back
+  together across records, gives no name to HTTP that could be read as naming two hosts, and
+  refuses TLS or HTTP without one clear name on such an address.
 - **G2. DNS.** Each guest query was a spawned host lookup, without limit. At most 64 are in flight
   per gateway; more are dropped and the guest retries.
 - **G3.** At most 256 names are remembered per address; every connection to it read the whole set.
+- **G4.** TLS header, secret and credential injection did not check that the address connected to is
+  where the SNI resolves, as plain HTTP does. The upstream certificate was verified against the
+  name, so this needed a wildcard or shared certificate. The address must now be one the name
+  resolves to, by an answer the gateway gave or at that moment.
 
 **Not fixed, recorded:**
 
-- A connection to a name-opened address that names nothing (no SNI, not HTTP) is allowed. Only the
-  first request of a kept-alive plain-HTTP connection is checked.
+- A name-opened address is not isolation between the sites that share it. Only the first request
+  of a plain-HTTP connection is checked, so a second can name another site. Inside TLS the gateway
+  sees neither the `Host` (domain fronting) nor an encrypted SNI. What is neither TLS nor
+  recognisable HTTP goes by address, including HTTP with a method not in capitals sent in pieces,
+  which some servers accept.
 - With an `egressProxy`, the proxy is sent the name and resolves it again, so a rebinding answer can
   differ from the one the gateway checked.
-- TLS header, secret and credential injection does not check that the address connected to is
-  where the SNI resolves; the upstream certificate is verified against the name, so this needs a
-  wildcard or shared-hosting rule to matter.
 - Substituted secrets are not scrubbed from responses; an upstream that echoes a request returns
   the secret to the guest.
 - Environment variables are written into the guest's filesystem, which a snapshot keeps; a snapshot

@@ -195,14 +195,18 @@ impl HyperMachineOntology {
                  control plane cannot know which default a node has and does not say. \
                  Private, link-local and cloud metadata addresses stay refused whatever the \
                  rules say, unless the operator granted the range. An address opened only \
-                 because an `allowOut` name resolved to it carries that name alone: a TLS \
-                 SNI or plain-HTTP `Host` naming anything else is refused, also when the \
-                 guest sends it after the gateway's 300 ms look or a byte at a time. Not \
-                 covered: a connection there that names nothing (no SNI, not HTTP, such as \
-                 SSH) is allowed; only the first HTTP request on a connection is checked, \
-                 so a later request on a kept-alive plain-HTTP connection can name another \
-                 host the same address serves; and an `egressProxy` is sent the name and \
-                 resolves it itself. The `iam` tokens set at \
+                 because an `allowOut` name resolved to it is checked against the name the \
+                 connection starts with: a TLS SNI or plain-HTTP `Host` the policy refuses, \
+                 and TLS or HTTP that names no one host (no SNI, two `Host`s, a target \
+                 naming another host), is refused, also when sent late, in pieces or over \
+                 several TLS records. Warning: this is not isolation between sites that \
+                 share an address. Only the first plain-HTTP request on a connection is \
+                 checked, so a later one can name another site there; inside TLS the \
+                 gateway does not see the `Host` (domain fronting) or an encrypted SNI; \
+                 what is neither TLS nor recognisable HTTP (SSH, SMTP) goes by address; \
+                 and an `egressProxy` is sent the name and resolves it itself. Headers, \
+                 secrets and credentials are put into a connection only at an address \
+                 their name resolves to. The `iam` tokens set at \
                  creation are kept. A sandbox needs a network to have rules: one made \
                  without is 400. A caller limited to a team or an owner reaches only \
                  its own sandboxes. Replacing with the same body is harmless."
