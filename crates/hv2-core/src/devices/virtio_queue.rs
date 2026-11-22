@@ -558,6 +558,14 @@ impl GuestQueue {
             let desc = self.read_desc(mem, idx)?;
 
             if desc.flags & desc_flags::INDIRECT != 0 {
+                // Virtio 1.2, 2.7.5.3.1: a driver must not set both. Allowed, a
+                // chain could name a full-size table per ring slot, each read
+                // whole, with zero-length entries no byte budget counts.
+                if desc.has_next() {
+                    return Err(Error::Device(
+                        "an indirect descriptor may not continue the chain".to_string(),
+                    ));
+                }
                 self.walk_indirect(mem, &desc, &mut chain, &mut total_bytes)?;
             } else {
                 self.push_buffer(
@@ -989,6 +997,31 @@ mod tests {
         let chain = q.pop(&mem).expect("pop").expect("a chain was available");
         assert_eq!(chain.readable, vec![(DATA_BASE, 4)]);
         assert_eq!(chain.writable, vec![(DATA_BASE + 64, 8)]);
+    }
+
+    #[test]
+    fn an_indirect_descriptor_may_not_continue_the_chain() {
+        let mem = memory();
+        let mut q = ready_queue();
+        // A table of one empty entry, named by every descriptor of a chain.
+        let table = DATA_BASE + 0x200;
+        mem.write_bytes(table, &[0u8; 16]).expect("indirect table");
+        let mut indirect = Descriptor {
+            addr: table,
+            len: 16,
+            flags: desc_flags::INDIRECT | desc_flags::NEXT,
+            next: 1,
+        };
+        write_desc(&mem, 0, indirect);
+        indirect.flags = desc_flags::INDIRECT;
+        write_desc(&mem, 1, indirect);
+        make_available(&mem, 0, 0);
+
+        let err = q.pop(&mem).expect_err("two tables in one chain");
+        assert!(
+            err.to_string().contains("may not continue the chain"),
+            "unexpected error: {err}"
+        );
     }
 
     #[test]

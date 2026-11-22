@@ -451,6 +451,12 @@ node-wide.
 - `vswitch` (no MAC-to-port binding, VLAN-blind flooding) and `nat` (full cone) have no production
   caller.
 
+**Fixed (virtio):**
+
+- **V1.** A descriptor with both `INDIRECT` and `NEXT`, which the specification forbids, let one chain
+  name a full-size table in every ring slot. Each was read and decoded whole, and zero-length
+  entries counted against no byte budget. It is now refused.
+
 **Still not covered:** a fuzzing campaign; IPv4 fragments and IPv6 in the gateway; 9P beyond the
 fids reviewed in N5; transcript parsing in `machines/conversations.rs` and `runs.rs`.
 
