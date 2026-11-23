@@ -419,6 +419,10 @@ impl GuestExec {
     }
 }
 
+/// The slowest a guest may send a file, in bytes a second, before
+/// [`GuestAgent::read_file`] gives up on it.
+const SLOWEST_READ: u64 = 256 * 1024;
+
 /// A client for the agent inside a guest.
 pub struct GuestAgent {
     channel: Box<dyn GuestChannel>,
@@ -882,20 +886,34 @@ impl GuestAgent {
 
     /// Read all of `path` in the guest, up to `limit` bytes.
     ///
+    /// Each answer has `timeout`, and the whole file `timeout` and the time
+    /// `limit` bytes take at [`SLOWEST_READ`]: a guest that answers every
+    /// request, a byte at a time, does not hold the caller for days.
+    ///
     /// # Errors
     ///
-    /// Propagates a transport failure, the guest's reason for refusing, or
-    /// a file larger than `limit`.
+    /// Propagates a transport failure, the guest's reason for refusing, a
+    /// file larger than `limit`, or one not read in time.
     pub fn read_file(&mut self, path: &str, limit: u64, timeout: Duration) -> Result<Vec<u8>> {
+        let started = std::time::Instant::now();
+        let allowed =
+            timeout.saturating_add(Duration::from_secs((limit / SLOWEST_READ).min(60 * 60)));
         let mut out = Vec::new();
         loop {
+            let left = allowed.saturating_sub(started.elapsed());
+            if left.is_zero() {
+                return Err(AgentError::Timeout(format!(
+                    "reading {path}: {} bytes after {allowed:?}",
+                    out.len()
+                )));
+            }
             match self.request(
                 Operation::ReadFile {
                     path: path.to_string(),
                     offset: out.len() as u64,
                     length: hv2_guest_agent::FILE_CHUNK as u64,
                 },
-                timeout,
+                timeout.min(left),
             )? {
                 OpResult::FileData { data, size } => {
                     if size > limit {
@@ -1566,6 +1584,29 @@ mod tests {
         assert!(refused.to_string().contains("more than"), "{refused}");
         // Within the limit, the bytes come back as sent.
         assert_eq!(agent.read_file("/f", 64, t).unwrap(), vec![b'x'; 64]);
+    }
+
+    /// Answering each request, a byte at a time, does not extend a read.
+    #[test]
+    fn a_file_read_has_a_deadline_of_its_own() {
+        let mut agent = GuestAgent::new(FakeGuest::new(|request| {
+            std::thread::sleep(Duration::from_millis(5));
+            Some(Response {
+                id: request.id,
+                version: PROTOCOL_VERSION,
+                result: OpResult::FileData {
+                    data: hv2_guest_agent::b64::encode(b"x"),
+                    size: 400,
+                },
+            })
+        }));
+        let late = agent
+            .read_file("/f", 400, Duration::from_millis(100))
+            .unwrap_err();
+        assert!(matches!(late, AgentError::Timeout(_)), "{late}");
+        // With time enough, the same guest is read to the end.
+        let all = agent.read_file("/f", 400, Duration::from_secs(60)).unwrap();
+        assert_eq!(all, vec![b'x'; 400]);
     }
 
     #[test]

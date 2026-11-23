@@ -442,8 +442,9 @@ node-wide.
 - Environment variables are written into the guest's filesystem, which a snapshot keeps; a snapshot
   shared with another team carries them.
 - No aggregate disk quota per team or node; a disk is up to 1 TiB (sparse).
-- A guest file read has no total deadline, only one per chunk, and archive readers are limited to
-  two per node, so a guest answering one byte at a time can hold both.
+- Archive readers are limited to two per node. A guest file read now has a total deadline (its
+  timeout plus its size limit at 256 KiB/s, about five minutes for 64 MiB), and stopping a
+  checkpoint's processes has three minutes, so a slow guest holds a reader for minutes, not days.
 - HVF (macOS x86_64) never advances RIP after an exit it handles, so a guest's first `cpuid` or
   port access repeats forever; WHPX does not emulate string or `rep` port I/O. Both stall only the
   guest's own VM.

@@ -390,8 +390,10 @@ fn is_signal_refusal(error: &AgentError) -> bool {
 
 /// Stop every process but init and the agent with `signal_process`, with no
 /// shell in the guest. A process that exits between the listing and its
-/// signal is not a failure.
+/// signal is not a failure. The guest says how many there are and how fast it
+/// answers, so all of it has [`ARCHIVE_DEADLINE`].
 async fn freeze_by_agent(vm: &AgentVM) -> Result<(), FreezeError> {
+    let started = std::time::Instant::now();
     let (listed, truncated) = match vm.list_dir_in_guest("/proc", 0, READ_TIMEOUT).await {
         Ok(listed) => listed,
         Err(e) if is_unsupported_op(&e) => return Err(FreezeError::Unsupported),
@@ -403,6 +405,11 @@ async fn freeze_by_agent(vm: &AgentVM) -> Result<(), FreezeError> {
         ));
     }
     for pid in freeze_targets(&listed) {
+        if started.elapsed() > ARCHIVE_DEADLINE {
+            return Err(FreezeError::Failed(format!(
+                "not done in {ARCHIVE_DEADLINE:?}"
+            )));
+        }
         match vm
             .signal_process_in_guest(pid, SignalName::Stop, READ_TIMEOUT)
             .await
