@@ -327,7 +327,8 @@ impl PreambleVerifier {
         let Ok(ts) = ts.parse::<i64>() else {
             return false;
         };
-        if ts.saturating_sub(now).abs() > PREAMBLE_SKEW_SECS {
+        // Not `abs()`: the stranger's i64::MIN is an overflow.
+        if ts.abs_diff(now) > PREAMBLE_SKEW_SECS.unsigned_abs() {
             return false;
         }
         let expected = preamble_mac(&self.token, nonce, ts);
@@ -1520,6 +1521,11 @@ mod tests {
         assert!(!verifier.verify(&stale, now));
         let future = line_text(&build_preamble_at(TOKEN, NONCE, now + 61));
         assert!(!verifier.verify(&future, now));
+        for ts in [i64::MIN, i64::MAX] {
+            let far = line_text(&build_preamble_at(TOKEN, NONCE, ts));
+            assert!(!verifier.verify(&far, now));
+            assert!(!verifier.verify(&far, -now));
+        }
         // A good MAC for one timestamp does not carry to another.
         let good = line_text(&build_preamble_at(TOKEN, NONCE, now));
         let moved = good.replacen(&now.to_string(), &(now + 1).to_string(), 1);

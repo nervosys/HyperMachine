@@ -340,7 +340,8 @@ async fn pump(
                 if let Some((observer, key)) = &observer {
                     if !output.stdout.is_empty()
                         || !output.stderr.is_empty()
-                        || output.stdout_dropped + output.stderr_dropped > 0
+                        || output.stdout_dropped > 0
+                        || output.stderr_dropped > 0
                     {
                         observer.printed(
                             *key,
@@ -373,7 +374,7 @@ async fn pump(
                     // indistinguishable from the error arm below.
                     let exit_code = output
                         .exit_code
-                        .or_else(|| output.signal.map(|s| 128 + s))
+                        .or_else(|| output.signal.map(|s| 128i32.saturating_add(s)))
                         .unwrap_or(-1);
                     let _ = events.send(ProcessEvent {
                         event: Some(ProcessEventKind::End(EndEvent {

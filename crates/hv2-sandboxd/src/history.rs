@@ -61,14 +61,14 @@ pub(crate) struct Stream {
 
 impl Stream {
     fn total(&self) -> u64 {
-        self.dropped + self.kept.len() as u64
+        self.dropped.saturating_add(self.kept.len() as u64)
     }
 
     /// `text`, after `gap` bytes that were written and never seen.
     fn append(&mut self, text: &str, gap: u64) {
         if gap > 0 {
             // The kept part is one unbroken piece of the stream.
-            self.dropped = self.total() + gap;
+            self.dropped = self.total().saturating_add(gap);
             self.kept.clear();
         }
         self.kept.push_str(text);
@@ -78,7 +78,7 @@ impl Stream {
                 cut += 1;
             }
             self.kept.drain(..cut);
-            self.dropped += cut as u64;
+            self.dropped = self.dropped.saturating_add(cut as u64);
         }
     }
 
@@ -90,7 +90,11 @@ impl Stream {
         while !self.kept.is_char_boundary(at) {
             at += 1;
         }
-        (self.dropped + at as u64, &self.kept[at..], total)
+        (
+            self.dropped.saturating_add(at as u64),
+            &self.kept[at..],
+            total,
+        )
     }
 }
 

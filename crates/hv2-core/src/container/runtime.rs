@@ -878,7 +878,7 @@ impl ContainerRuntime {
         if state != ContainerState::Running {
             return Err(RuntimeError::InvalidState(state, "kill"));
         }
-        container.stop(128 + signal)
+        container.stop(128i32.saturating_add(signal))
     }
 
     /// Delete a container

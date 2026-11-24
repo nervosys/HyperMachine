@@ -458,6 +458,94 @@ node-wide.
   name a full-size table in every ring slot. Each was read and decoded whole, and zero-length
   entries counted against no byte budget. It is now refused.
 
-**Still not covered:** a fuzzing campaign; IPv4 fragments and IPv6 in the gateway; 9P beyond the
-fids reviewed in N5; transcript parsing in `machines/conversations.rs` and `runs.rs`.
+**Third pass (2026-11-23): 9P, gateway packets, transcripts, and a sweep for panics.**
+
+Each of these aborted the node or let one caller exhaust it:
+
+- **P1. Any API caller could abort the node with one number.** `idleTimeout` had no upper bound and
+  was multiplied by 1000 every second; `timeout_secs` on `POST /sandboxes/{id}/exec` was not clamped
+  (the machine route's was), and a deadline that far away overflows `Instant`. The multiply
+  saturates, exec timeouts are clamped to a day, and no guest wait is set past 30 days.
+- **P2. The sandbox proxy's authentication line.** A timestamp of `i64::MIN` overflowed `abs()`
+  before the MAC was checked, so anyone who could reach the proxy port could abort the node.
+- **P3. Guest numbers in output accounting.** A poll reply's dropped-byte counts were added up
+  unchecked in `envd_process.rs`, `runs.rs` and `history.rs`. They are capped at 4 GiB a poll and
+  the sums saturate.
+- **P4. A guest's partition table.** Listing or reading a snapshot's files multiplied GPT sector
+  numbers unchecked. A table whose numbers do not fit is now no table.
+- **P5. File watch output.** Guest output was cut at a byte count, which panics inside a character.
+- **P6. A template build's `COPY` archive** sized an allocation from its tar header; a terabyte
+  there aborted the node.
+- **P7. 9P replies.** Every request already received was answered into one buffer before any was
+  sent: thousands of 23-byte reads asking for half a megabyte each made gigabytes. At most one
+  `msize` of replies now waits, and nothing more is read while a request waits.
+- **P8. 9P disk reserve.** A truncate makes a hole without taking space, and a write inside a file's
+  size was not checked against the host disk's reserve, so a guest could fill the host disk through
+  a sparse file (O7, by another route). A write into a file with holes is now held to the reserve.
+- **P9. 9P listings** held a host directory open per fid outside the N5 open-file caps; each counts
+  as one now.
+- **P10. Prompts and conversations.** A machine's prompts were kept until the machine was deleted,
+  after their runs were gone; they now go with their runs. Messages to one conversation are capped
+  at 2 MiB in all. Prompt and transcript output is parsed outside the lock every run on the node
+  shares.
+- **P11.** A guest's TCP SYN was read from a later IPv4 fragment, whose bytes are data, and started
+  a dial the stack never completed (bounded, no policy bypass).
+- **P12. VM memory.** `POST /api/v1/vms` (the ontology's `create_vm`) multiplied a caller's
+  `memory_gb` into bytes unchecked, as did `hv2-agent`'s MCP `vm.create`, `vm.resize` and
+  `vm.metrics` (a library: no server here serves its `call_tool`; `hm`'s `/mcp/call` is its own).
+  The schemas said 4096 at most, but nothing enforces a schema: `call_tool` does not validate
+  parameters, and the API's schema validation is off by default. It is refused outside 1 to 4096
+  now, and MCP `vm.create`'s `cpu_cores`, cast to `u32` so that a large one wrapped to a small one,
+  outside 1 to 128.
+- **P13. envd `POST /files`.** A multipart body that stopped right after a boundary was sliced past
+  its end.
+- **P14.** A guest-reported signal near `i32::MAX` overflowed `128 + n`.
+- **P15. GPU reservations.** `POST /api/v1/gpu-fabric/capacity/reservations` multiplied a caller's
+  `duration_hours` by 3600 unchecked, before looking at the class, and added the result to the
+  clock unchecked: any key that could reserve aborted the node. Hours are 1 to 8784 now (400
+  `INVALID_DURATION`), and an expiry that does not fit is refused.
+- **P16. Secret substitution.** Each string of a JSON body, and each name and value of a query or
+  form, looked up the host's bindings again: up to 128 bindings of 64 hosts, a few hundred thousand
+  times in a 1 MiB body, on a worker thread. They are looked up once a request.
+- **P17. Opt-in middleware.** The request quota kept a count for every `x-api-key` a request sent,
+  and the replay check's nonce store went on growing once full of fresh nonces. The quota tracks
+  65,536 keys, and new ones share one count while it is full; a full nonce store refuses (409).
+
+**Not fixed, recorded:**
+
+- A 9P `readdir` at an offset other than where the last stopped reads the directory again from the
+  start: CPU on that mount's thread only. A FIFO placed in a volume by the host would block its
+  mount (a guest cannot make one). The 9P server has no read-only mode.
+- `session()` and a full conversation `describe` still parse every turn's output under the
+  conversation lock, and a conversation `from` another builds its whole transcript before cutting
+  it: up to a machine's 256 runs of 4 MiB.
+- Each `ENV` pair of a build copies the environment so far, which is quadratic in the pairs.
+- Every refused SYN logs an `info` line.
+- A full replay-nonce store (opt-in) refuses signed requests until its nonces age out, rather than
+  grow: a caller who can send that many nonces can hold others off for `max_age`. While the opt-in
+  quota is full of keys, new keys share one count, which one caller can spend.
+- A conversation that has been sent 2 MiB refuses more for good; another must be started `from` it.
+- The 9P disk check counts a file as having holes when it has fewer blocks than bytes, which is
+  also true of inline and compressed files: a write to one is held to the reserve as if it grew.
+- In `hv2-agent` as a library, unreachable from the servers here: MCP `guest.*` requests are kept in
+  session state and never removed; `gpu.register` adds devices without limit to a host every
+  session shares; a policy on `gpu.attach`/`gpu.detach` matches the VM and never the device;
+  `sandbox.run` holds a blocking thread up to 600 s a call; `RetryPolicy`, `ExperienceBuffer` and
+  `limits.rs` panic on a negative delay, a capacity of 0 and a huge window or count.
+- Tool parameters are not checked against their declared JSON schemas, by MCP or by the API, so a
+  schema's bounds are documentation; each handler must check its own.
+- The request quota (off by default) counts by the `x-api-key` header as sent, whether or not it is
+  a key, so a caller who changes it each request is not held to the quota. The body limit (off by
+  default) checks only a `Content-Length` it can parse; axum's default 2 MiB limit still holds for handlers that
+  extract a whole body.
+- A GPU reservation is a record with no limit on how many one tenant makes.
+- The TLS interception makes a certificate for each server name a guest asks for, up to 1,024 kept:
+  a guest can make it sign without end, held only by the gateway's connection limits.
+- `hv2_net::virtio` (no caller today) sizes its transmit buffers by guest descriptor lengths; it
+  must bound them before anything uses it.
+
+**Still not covered:** a fuzzing campaign; IPv6 in the gateway (the stack is built IPv4-only, and IPv6
+frames are dropped). The panic sweep read `hv2-net`, `hv2-api`'s tunnels, middleware and route
+modules, `hv2-cluster`'s `control.rs` and Redis parsing, and `hv2-agent`'s `mcp.rs`; the rest of
+`hv2-agent` was searched for the patterns that panic, not read whole.
 

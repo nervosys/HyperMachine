@@ -56,7 +56,7 @@ pub(crate) async fn pause_idle(state: &Arc<AppState>, now: u64) {
         .iter()
         .filter(|(_, live)| live.lifecycle.idle_pause_secs > 0 && !live.activity.busy())
         .filter_map(|(id, live)| {
-            let since = now.saturating_sub(live.lifecycle.idle_pause_secs * 1000);
+            let since = now.saturating_sub(live.lifecycle.idle_pause_secs.saturating_mul(1000));
             (live.activity.last_active_ms() <= since).then(|| (id.clone(), since))
         })
         .collect();

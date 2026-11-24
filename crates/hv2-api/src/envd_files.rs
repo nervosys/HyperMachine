@@ -197,8 +197,10 @@ async fn write(vm: Arc<AgentVM>, request: Request<Incoming>) -> Response<Connect
 fn parse_multipart(body: &[u8], boundary: &str) -> Result<Vec<(Option<String>, Bytes)>, String> {
     let delimiter = format!("--{boundary}");
     let delimiter = delimiter.as_bytes();
+    // `from` can be past the end: a body may stop right after a delimiter.
     let find = |haystack: &[u8], needle: &[u8], from: usize| {
-        haystack[from..]
+        haystack
+            .get(from..)?
             .windows(needle.len())
             .position(|w| w == needle)
             .map(|at| at + from)
@@ -237,6 +239,13 @@ fn parse_multipart(body: &[u8], boundary: &str) -> Result<Vec<(Option<String>, B
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_body_that_stops_after_a_delimiter_is_refused() {
+        for body in [&b"--B"[..], b"--B\r", b"--Bx", b"x--B"] {
+            assert!(parse_multipart(body, "B").is_err(), "{body:?}");
+        }
+    }
 
     #[test]
     fn multipart_parts_come_out_with_their_filenames_and_exact_bytes() {

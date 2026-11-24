@@ -189,6 +189,9 @@ fn default_max_instances() -> u32 {
     u32::MAX
 }
 
+/// The longest reservation, in hours: a leap year.
+const MAX_RESERVATION_HOURS: u64 = 24 * 366;
+
 #[derive(Debug, Deserialize)]
 pub struct CreateReservationRequest {
     pub tenant_id: String,
@@ -535,6 +538,17 @@ async fn create_reservation(
                 .into_response();
         }
     }
+    // A caller's number: in seconds a large one overflows and aborts the server.
+    if !(1..=MAX_RESERVATION_HOURS).contains(&req.duration_hours) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(FabricErrorResponse {
+                error: format!("duration_hours must be from 1 to {MAX_RESERVATION_HOURS}"),
+                code: "INVALID_DURATION".into(),
+            }),
+        )
+            .into_response();
+    }
     let duration = std::time::Duration::from_secs(req.duration_hours * 3600);
     match state
         .capacity
@@ -687,6 +701,30 @@ mod tests {
             .unwrap();
         let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         v["reservation_id"].as_str().unwrap().to_string()
+    }
+
+    #[tokio::test]
+    async fn a_reservation_s_hours_are_bounded() {
+        let app = test_app();
+        reserve_as(&app, "t1").await;
+        for hours in [0, MAX_RESERVATION_HOURS + 1, u64::MAX / 3600 + 1, u64::MAX] {
+            let body = serde_json::json!({
+                "tenant_id": "t1", "vm_class": "gpu-a100-2x", "count": 1, "duration_hours": hours
+            });
+            let resp = app
+                .clone()
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri("/api/v1/gpu-fabric/capacity/reservations")
+                        .header("content-type", "application/json")
+                        .body(Body::from(serde_json::to_vec(&body).unwrap()))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(resp.status(), StatusCode::BAD_REQUEST, "{hours}");
+        }
     }
 
     async fn cancel_as(app: &Router, id: &str, tenant: Option<&str>) -> StatusCode {

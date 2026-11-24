@@ -434,7 +434,11 @@ fn take_snapshots(buffer: &mut String) -> Vec<String> {
             // two reads at worst, so keep only that much rather than letting
             // unrecognised output accumulate for the life of the watcher.
             if buffer.len() > SNAP_BEGIN.len() {
-                let keep = buffer.len() - SNAP_BEGIN.len();
+                // Between characters: the guest's output need not be ASCII.
+                let mut keep = buffer.len() - SNAP_BEGIN.len();
+                while !buffer.is_char_boundary(keep) {
+                    keep += 1;
+                }
                 buffer.drain(..keep);
             }
             break;
@@ -868,6 +872,13 @@ mod tests {
         }
         let mut buffer = whole.clone();
         assert_eq!(take_snapshots(&mut buffer).len(), 1);
+        // Output that is not ASCII is cut between characters: the padding
+        // comes last, so the cut moves through each byte of a character.
+        for pad in 0..4 {
+            let mut buffer = format!("{}{}", "\u{20ac}".repeat(40), "x".repeat(pad));
+            assert!(take_snapshots(&mut buffer).is_empty());
+            assert!(buffer.len() <= SNAP_BEGIN.len() + 3);
+        }
     }
 
     #[test]

@@ -726,8 +726,9 @@ impl HyperMachineOntology {
                  for `duration_hours`, and answer its id (`rsv-<n>`). It is a record with an \
                  expiry and nothing more: it does not check the class's instance limit, the \
                  topology, the GPUs free or other reservations, and it holds no GPU; \
-                 `tenant_id` is whatever the caller sends, unless the key is bound to a tenant: then it must be that tenant, or the answer is 403 `TENANT_MISMATCH`. It is refused (422 \
-                 `RESERVATION_FAILED`) only for an unknown class or a `count` of 0. Not \
+                 `tenant_id` is whatever the caller sends, unless the key is bound to a tenant: then it must be that tenant, or the answer is 403 `TENANT_MISMATCH`. It is refused (400 \
+                 `INVALID_DURATION`) for a `duration_hours` outside 1 to 8784, and (422 \
+                 `RESERVATION_FAILED`) for an unknown class or a `count` of 0. Not \
                  idempotent: each call is a new reservation. Open unless an API key is \
                  configured.",
             )
@@ -739,7 +740,7 @@ impl HyperMachineOntology {
                         "tenant_id": { "type": "string" },
                         "vm_class": { "type": "string" },
                         "count": { "type": "integer", "minimum": 1 },
-                        "duration_hours": { "type": "integer" }
+                        "duration_hours": { "type": "integer", "minimum": 1, "maximum": 8784 }
                     }
                 }),
                 true,

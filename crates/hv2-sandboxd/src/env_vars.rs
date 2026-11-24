@@ -219,7 +219,9 @@ pub(crate) fn members_of(tar_bytes: &[u8], what: &str) -> Result<Vec<Member>, Un
         } else if kind.is_file() {
             // Whatever `chown` would have left: it clears set-user-ID and
             // set-group-ID on a file.
-            let mut data = Vec::with_capacity(entry.size() as usize);
+            // Not sized from the header: its size is the sender's word,
+            // and a terabyte there is an abort.
+            let mut data = Vec::new();
             std::io::Read::read_to_end(&mut entry, &mut data).map_err(bad)?;
             out.push(Member::File {
                 rel,
@@ -652,6 +654,20 @@ mod tests {
             .iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect()
+    }
+
+    /// A header that says a member is a terabyte, with a byte after it.
+    #[test]
+    fn a_member_s_size_is_not_taken_on_its_word() {
+        let mut header = tar::Header::new_gnu();
+        header.set_path("big").unwrap();
+        header.set_entry_type(tar::EntryType::Regular);
+        header.set_mode(0o644);
+        header.set_size(1 << 40);
+        header.set_cksum();
+        let mut bytes = header.as_bytes().to_vec();
+        bytes.extend_from_slice(&[0u8; 1024]);
+        assert!(members_of(&bytes, "x").is_err());
     }
 
     fn tar_of(build: impl FnOnce(&mut tar::Builder<Vec<u8>>)) -> Vec<u8> {

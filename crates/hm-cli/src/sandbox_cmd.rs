@@ -549,7 +549,7 @@ pub async fn run(args: RunArgs) -> Result<i32> {
                     125
                 }
                 (None, Some(code), _) => code,
-                (None, None, Some(signal)) => 128 + signal,
+                (None, None, Some(signal)) => 128i32.saturating_add(signal),
                 (None, None, None) => 1,
             }
         }

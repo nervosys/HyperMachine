@@ -87,7 +87,7 @@ struct Log {
 impl Log {
     /// Every byte the program wrote to this stream, kept or not.
     fn total(&self) -> u64 {
-        self.dropped + self.kept.len() as u64
+        self.dropped.saturating_add(self.kept.len() as u64)
     }
 
     fn append(&mut self, text: &str) {
@@ -99,7 +99,7 @@ impl Log {
                 cut += 1;
             }
             self.kept.drain(..cut);
-            self.dropped += cut as u64;
+            self.dropped = self.dropped.saturating_add(cut as u64);
         }
     }
 
@@ -115,7 +115,11 @@ impl Log {
         while !self.kept.is_char_boundary(at) {
             at += 1;
         }
-        (self.dropped + at as u64, &self.kept[at..], total)
+        (
+            self.dropped.saturating_add(at as u64),
+            &self.kept[at..],
+            total,
+        )
     }
 }
 
@@ -353,7 +357,7 @@ fn add(log: &mut Log, stream: &'static str, text: &str, gap: u64, to_disk: &mut 
     if gap > 0 {
         // What is kept no longer runs on into what comes next, and the kept
         // part of a stream is one piece: it goes, counted, with the gap.
-        log.dropped = log.total() + gap;
+        log.dropped = log.total().saturating_add(gap);
         log.kept.clear();
     }
     log.append(text);
@@ -415,7 +419,7 @@ fn read_run(record_path: &FsPath, record: &Value, now: u64) -> Option<Run> {
         }
         Log {
             kept: text[cut..].to_string(),
-            dropped: base + cut as u64,
+            dropped: base.saturating_add(cut as u64),
             base,
             on_disk,
         }
@@ -974,6 +978,19 @@ mod tests {
 
     /// A stream twice what is kept is cut back to it, and where its file
     /// starts is recorded, so offsets stay the program's.
+    /// How much was dropped is the guest's word.
+    #[test]
+    fn no_dropped_count_overflows_a_log() {
+        let mut log = Log::default();
+        let mut to_disk = ToDisk::default();
+        add(&mut log, "stdout", "abc", u64::MAX - 1, &mut to_disk);
+        add(&mut log, "stdout", "abc", u64::MAX, &mut to_disk);
+        log.append(&"x".repeat(MAX_LOG));
+        assert_eq!(log.total(), u64::MAX);
+        let (at, _, next) = log.from(u64::MAX);
+        assert_eq!((at, next), (u64::MAX, u64::MAX));
+    }
+
     #[test]
     fn a_long_stream_is_cut_back_on_disk() {
         let mut log = Log::default();

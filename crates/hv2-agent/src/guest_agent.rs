@@ -132,7 +132,7 @@ impl VsockChannel {
     /// distinguishable from out here, and the message says so rather than
     /// guessing.
     pub fn connect(device: Arc<Mutex<VsockDevice>>, timeout: Duration) -> Result<Self> {
-        let deadline = Instant::now() + timeout;
+        let deadline = deadline_in(timeout);
         let mut refusals = 0u32;
         let progress = device.lock().progress();
 
@@ -419,6 +419,19 @@ impl GuestExec {
     }
 }
 
+/// The longest a guest is waited for, whatever was asked: an [`Instant`] and a
+/// longer one overflow, which is a panic.
+const MAX_WAIT: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+
+/// When `timeout` from now is.
+fn deadline_in(timeout: Duration) -> Instant {
+    Instant::now() + timeout.min(MAX_WAIT)
+}
+
+/// The most bytes of a stream one poll may say the guest dropped. The count is
+/// the guest's word, and callers add it up.
+const MAX_DROPPED: u64 = u32::MAX as u64;
+
 /// The slowest a guest may send a file, in bytes a second, before
 /// [`GuestAgent::read_file`] gives up on it.
 const SLOWEST_READ: u64 = 256 * 1024;
@@ -630,8 +643,8 @@ impl GuestAgent {
                 running,
                 exit_code,
                 signal,
-                stdout_dropped,
-                stderr_dropped,
+                stdout_dropped: stdout_dropped.min(MAX_DROPPED),
+                stderr_dropped: stderr_dropped.min(MAX_DROPPED),
             }),
             OpResult::Failed { message } => Err(AgentError::Script(format!(
                 "the guest agent could not poll pid {pid}: {message}"
@@ -1293,7 +1306,7 @@ impl GuestAgent {
         let frame = encode(&request)
             .map_err(|e| AgentError::Script(format!("could not encode a guest request: {e}")))?;
 
-        let deadline = Instant::now() + timeout;
+        let deadline = deadline_in(timeout);
         self.write_all(&frame, deadline)?;
         self.read_response(id, deadline)
     }
@@ -1584,6 +1597,30 @@ mod tests {
         assert!(refused.to_string().contains("more than"), "{refused}");
         // Within the limit, the bytes come back as sent.
         assert_eq!(agent.read_file("/f", 64, t).unwrap(), vec![b'x'; 64]);
+    }
+
+    #[test]
+    fn no_timeout_overflows_a_deadline() {
+        assert!(deadline_in(Duration::MAX) > Instant::now());
+        let mut agent = GuestAgent::new(FakeGuest::new(|request| {
+            Some(Response {
+                id: request.id,
+                version: PROTOCOL_VERSION,
+                result: OpResult::Output {
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    pty: false,
+                    running: true,
+                    exit_code: None,
+                    signal: None,
+                    stdout_dropped: u64::MAX,
+                    stderr_dropped: 1,
+                },
+            })
+        }));
+        // What a guest says it dropped is bounded: callers add it up.
+        let out = agent.poll(1, Duration::MAX).unwrap();
+        assert_eq!((out.stdout_dropped, out.stderr_dropped), (MAX_DROPPED, 1));
     }
 
     /// Answering each request, a byte at a time, does not extend a read.

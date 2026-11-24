@@ -1600,6 +1600,36 @@ async fn captured_private_fragments(gw: &Gateway) -> (Vec<Vec<u8>>, Vec<u8>) {
     .more_frags());
     (frames, payload)
 }
+/// A TCP SYN from the guest to 10.0.0.9:443, at `frag_offset`.
+fn syn_frame(frag_offset: u16) -> Vec<u8> {
+    let mut frame = vec![0u8; 14 + 20 + 20];
+    let mut eth = EthernetFrame::new_unchecked(frame.as_mut_slice());
+    eth.set_ethertype(EthernetProtocol::Ipv4);
+    let mut ip = Ipv4Packet::new_unchecked(eth.payload_mut());
+    ip.set_version(4);
+    ip.set_header_len(20);
+    ip.set_total_len(40);
+    ip.set_next_header(IpProtocol::Tcp);
+    ip.set_hop_limit(64);
+    ip.set_frag_offset(frag_offset);
+    ip.set_src_addr(std::net::Ipv4Addr::new(10, 0, 0, 2));
+    ip.set_dst_addr(std::net::Ipv4Addr::new(10, 0, 0, 9));
+    let mut tcp = TcpPacket::new_unchecked(ip.payload_mut());
+    tcp.set_header_len(20);
+    tcp.set_src_port(40000);
+    tcp.set_dst_port(443);
+    tcp.set_syn(true);
+    frame
+}
+
+/// A later fragment's bytes are data, wherever a TCP header would be.
+#[test]
+fn a_later_fragment_is_not_read_as_a_syn() {
+    let (_, to) = syn_of(&syn_frame(0)).expect("a SYN");
+    assert_eq!(to, "10.0.0.9:443".parse().unwrap());
+    assert_eq!(syn_of(&syn_frame(8)), None);
+}
+
 fn fragment_ident(frames: &[Vec<u8>], ident: u16) -> Vec<Vec<u8>> {
     frames
         .iter()

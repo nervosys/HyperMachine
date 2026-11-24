@@ -1393,7 +1393,8 @@ fn syn_of(frame: &[u8]) -> Option<(SocketAddr, SocketAddr)> {
         return None;
     }
     let ip = Ipv4Packet::new_checked(eth.payload()).ok()?;
-    if ip.next_header() != IpProtocol::Tcp {
+    // A later fragment has no TCP header: what is where one would be is data.
+    if ip.next_header() != IpProtocol::Tcp || ip.frag_offset() != 0 {
         return None;
     }
     let tcp = TcpPacket::new_checked(ip.payload()).ok()?;

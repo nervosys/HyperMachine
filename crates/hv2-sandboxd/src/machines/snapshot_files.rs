@@ -109,7 +109,10 @@ fn find_ext(
     partition: Option<u32>,
     read_at: impl Fn(u64) -> Option<[u8; 2]>,
 ) -> Result<(u64, Option<u32>), String> {
-    let is_ext = |offset: u64| read_at(offset + EXT_MAGIC_AT) == Some(EXT_MAGIC);
+    // The guest wrote the partition table: no sum of what it says is known to
+    // fit.
+    let is_ext =
+        |offset: u64| offset.checked_add(EXT_MAGIC_AT).and_then(&read_at) == Some(EXT_MAGIC);
     if partition.is_none() && is_ext(0) {
         return Ok((0, None));
     }
@@ -123,17 +126,24 @@ fn find_ext(
             let count = le32(&head[512 + 80..512 + 84]).min(256);
             let size = u64::from(le32(&head[512 + 84..512 + 88]));
             for index in 0..count {
-                let at = entries_lba * SECTOR + u64::from(index) * size;
-                let (Some(entry), true) = (head.get(at as usize..(at + 48) as usize), size >= 48)
-                else {
+                let entry = entries_lba
+                    .checked_mul(SECTOR)
+                    .and_then(|table| table.checked_add(u64::from(index) * size))
+                    .and_then(|at| usize::try_from(at).ok())
+                    .and_then(|at| head.get(at..at.checked_add(48)?));
+                let (Some(entry), true) = (entry, size >= 48) else {
                     break;
                 };
                 if entry[..16].iter().all(|b| *b == 0) {
                     continue;
                 }
                 let (first, last) = (le64(&entry[32..40]), le64(&entry[40..48]));
-                if last >= first {
-                    parts.push((index + 1, first * SECTOR, (last - first + 1) * SECTOR));
+                let start = first.checked_mul(SECTOR);
+                let length = last
+                    .checked_sub(first)
+                    .and_then(|n| n.checked_add(1)?.checked_mul(SECTOR));
+                if let (Some(start), Some(length)) = (start, length) {
+                    parts.push((index + 1, start, length));
                 }
             }
         } else {
@@ -844,6 +854,30 @@ mod tests {
         assert!(find_ext(&head, Some(9), &read)
             .unwrap_err()
             .contains("no partition 9"));
+        // A table whose numbers do not fit is no table.
+        for (at, value) in [
+            (512 + 72, 1u64 << 56),
+            (512 + 72, u64::MAX / 512),
+            (1024 + 32, u64::MAX / 512),
+            (1024 + 32, 0),
+            (1024 + 40, u64::MAX),
+            (1024 + 40, 1 << 56),
+        ] {
+            let mut gpt = vec![0u8; 4096];
+            gpt[510] = 0x55;
+            gpt[511] = 0xAA;
+            gpt[0x1BE + 4] = 0xEE;
+            gpt[512..520].copy_from_slice(b"EFI PART");
+            gpt[512 + 72..512 + 80].copy_from_slice(&2u64.to_le_bytes());
+            gpt[512 + 80..512 + 84].copy_from_slice(&1u32.to_le_bytes());
+            gpt[512 + 84..512 + 88].copy_from_slice(&128u32.to_le_bytes());
+            gpt[1024] = 1;
+            gpt[1024 + 32..1024 + 40].copy_from_slice(&2048u64.to_le_bytes());
+            gpt[1024 + 40..1024 + 48].copy_from_slice(&u64::MAX.to_le_bytes());
+            gpt[at..at + 8].copy_from_slice(&value.to_le_bytes());
+            assert!(find_ext(&gpt, None, |_| None).is_err(), "{at} {value}");
+            assert!(find_ext(&gpt, Some(1), |_| None).is_err(), "{at} {value}");
+        }
         // MBR.
         let mut mbr = vec![0u8; 512];
         mbr[510] = 0x55;

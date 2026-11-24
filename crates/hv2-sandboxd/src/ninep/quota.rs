@@ -101,7 +101,8 @@ pub struct Cost {
     /// Apparent bytes, against the volume's byte quota.
     pub size: u64,
     /// Bytes the host will really have to find, against the disk's reserve
-    /// (less than `size` for a write past a hole, none for a sparse truncate).
+    /// (less than `size` for a write past a hole, none for a sparse truncate,
+    /// and more for a write into what that made).
     pub disk: u64,
     /// Entries, against both the inode quota and the disk's inode reserve.
     pub inodes: u64,
@@ -373,4 +374,13 @@ pub fn forget(dir: &Path) {
 /// The apparent size of the file behind `fd`.
 pub fn size_of(fd: i32) -> Result<u64> {
     Ok(u64::try_from(fstat(fd)?.st_size).unwrap_or(0))
+}
+
+/// [`size_of`], and whether the file has holes: less allocated to it than its
+/// size, so a write inside it can take space.
+pub fn size_and_holes(fd: i32) -> Result<(u64, bool)> {
+    let stat = fstat(fd)?;
+    let size = u64::try_from(stat.st_size).unwrap_or(0);
+    let allocated = u64::try_from(stat.st_blocks).unwrap_or(0);
+    Ok((size, allocated.saturating_mul(512) < size))
 }

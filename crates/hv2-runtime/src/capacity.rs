@@ -432,6 +432,9 @@ impl CapacityManager {
         }
 
         let now = SystemTime::now();
+        let expires_at = now
+            .checked_add(duration)
+            .ok_or_else(|| CapacityError::InvalidConfig("duration is too long".into()))?;
         let id = format!(
             "rsv-{}",
             self.counter
@@ -445,7 +448,7 @@ impl CapacityManager {
             instance_count,
             instances_used: 0,
             starts_at: now,
-            expires_at: now + duration,
+            expires_at,
             state: ReservationState::Active,
             created_at: now,
         };
@@ -651,6 +654,14 @@ mod tests {
         assert_eq!(rsv.tenant_id, "tenant-1");
         assert_eq!(rsv.instance_count, 10);
         assert_eq!(rsv.state, ReservationState::Active);
+    }
+
+    #[test]
+    fn a_reservation_too_long_is_refused() {
+        let cm = setup();
+        assert!(cm
+            .create_reservation("t1", "gpu-a100-premium", 1, Duration::MAX)
+            .is_err());
     }
 
     #[test]

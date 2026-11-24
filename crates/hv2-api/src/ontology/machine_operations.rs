@@ -1137,8 +1137,11 @@ impl HyperMachineOntology {
                  that turn's standard input and steers it (202); a steering message is given \
                  the environment its turn started with. Codex takes a turn at a time, so a \
                  message while one runs is refused (409): interrupt it or wait. The prompt \
-                 is at most 128 KiB. This runs the agent with the conversation's `user` and \
-                 `unattended` setting. Not idempotent.",
+                 is at most 128 KiB, and all of a conversation's messages together at most \
+                 2 MiB, each counted as its length and 256 bytes: past that a message is \
+                 refused (409) for good: start another `from` this one. This runs \
+                 the agent with the conversation's `user` and `unattended` setting. Not \
+                 idempotent.",
             )
             .with(machine_param())
             .with(conversation())

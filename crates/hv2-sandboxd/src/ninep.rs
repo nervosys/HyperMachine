@@ -470,6 +470,8 @@ type DirEntry = (Qid, u8, String);
 /// that asks for somewhere else costs a second pass over the directory.
 struct Listing {
     entries: std::fs::ReadDir,
+    /// The directory `entries` holds open is one of the mount's open files.
+    _share: Reservation,
     /// The index of the next entry to give.
     next: u64,
     /// An entry read and not given, because it did not fit.
@@ -1064,8 +1066,10 @@ impl Server {
                     .ok_or_else(|| Error::from_raw_os_error(libc::EBADF))?;
                 // Only what passes the end of the file is new: an append
                 // (which ignores the offset) is all new, a rewrite is not.
+                // The host may have to find space for a rewrite of a file
+                // with holes, which a truncate makes of any size.
                 let fd = file.as_raw_fd();
-                let size = quota::size_of(fd)?;
+                let (size, holes) = quota::size_and_holes(fd)?;
                 let appending = unsafe { libc::fcntl(fd, libc::F_GETFL) } & libc::O_APPEND != 0;
                 let end = if appending {
                     size.saturating_add(count as u64)
@@ -1075,14 +1079,19 @@ impl Server {
                 let growth = end.saturating_sub(size);
                 let charge = Cost {
                     size: growth,
-                    disk: growth.min(count as u64),
+                    disk: if holes {
+                        count as u64
+                    } else {
+                        growth.min(count as u64)
+                    },
                     inodes: 0,
                 };
-                if growth > 0 {
+                let charged = charge.size > 0 || charge.disk > 0;
+                if charged {
                     self.budget.admit(charge)?;
                 }
                 if let Err(e) = file.write_all_at(data, offset) {
-                    if growth > 0 {
+                    if charged {
                         self.budget.release(charge);
                     }
                     return Err(e);
@@ -1172,11 +1181,14 @@ impl Server {
         let parts = self.fid(fid)?.parts.clone();
         let here_dir = self.fs.dir(&parts)?;
         let here = fstat(here_dir.as_raw_fd())?;
-        let mut listing = match self.fid_mut(fid)?.listing.take() {
+        let kept = self.fid_mut(fid)?.listing.take();
+        let mut listing = match kept {
             Some(listing) if listing.next == offset => listing,
             // From the start, or from somewhere other than where the last
             // reply stopped: read the directory again, up to there.
-            _ => {
+            stale => {
+                drop(stale);
+                let share = self.reserve_file()?;
                 let path = proc_path(here_dir.as_raw_fd());
                 let mut entries =
                     std::fs::read_dir(std::ffi::OsStr::new(path.to_str().expect("ascii")))?;
@@ -1187,6 +1199,7 @@ impl Server {
                 }
                 Listing {
                     entries,
+                    _share: share,
                     next: offset,
                     held: None,
                 }
@@ -1259,21 +1272,35 @@ fn read_at_full(file: &File, buf: &mut [u8], offset: u64) -> std::io::Result<usi
     Ok(done)
 }
 
+/// Whether `pending` starts with a whole message, as it says its size is.
+fn is_whole(pending: &[u8]) -> bool {
+    pending
+        .first_chunk::<4>()
+        .is_some_and(|size| pending.len() >= u32::from_le_bytes(*size) as usize)
+}
+
 /// Serve 9P on `channel` until the guest unmounts or the VM stops: read
 /// whole messages, answer each. `pending` is what already arrived with the
 /// mount's acknowledgement.
+///
+/// What is not yet sent is at most [`MAX_MSIZE`] and one reply: a 23-byte
+/// request can ask for half a megabyte, and a guest can send thousands of them
+/// at once.
 pub fn serve(mut channel: Box<dyn GuestChannel>, mut pending: Vec<u8>, mut server: Server) {
     let mut outbox: Vec<u8> = Vec::new();
     loop {
         if !channel.open() {
             return;
         }
-        match channel.recv() {
-            Ok(bytes) => pending.extend_from_slice(&bytes),
-            Err(_) => return,
+        // Nothing more is taken while a request already here waits.
+        if !is_whole(&pending) {
+            match channel.recv() {
+                Ok(bytes) => pending.extend_from_slice(&bytes),
+                Err(_) => return,
+            }
         }
         let mut progressed = false;
-        while pending.len() >= 4 {
+        while pending.len() >= 4 && outbox.len() < MAX_MSIZE as usize {
             let size = u32::from_le_bytes(pending[..4].try_into().expect("4")) as usize;
             if size < 7 || size > MAX_MSIZE as usize + 4096 {
                 return; // not 9P: drop the connection
@@ -1904,6 +1931,120 @@ mod tests {
         assert!(budget.admit(grow(10 * mib)).is_ok());
         let r = budget.admit(grow(10 * mib));
         assert_eq!(r.unwrap_err().raw_os_error(), Some(libc::ENOSPC));
+    }
+
+    /// A truncate past the end takes no space; the writes into it do.
+    #[test]
+    fn a_write_into_a_hole_is_held_to_the_reserve() {
+        let tmp = Tmp::new();
+        let disk = Disk::new(10 * GIB);
+        let policy = quota::Policy {
+            reserve_percent: 5,
+            ..quota_of(0, 0)
+        };
+        let budget = disk.budget(policy, Duration::ZERO);
+        let mut s = served(&tmp.0, &budget);
+        assert_eq!(kind(&make(&mut s, 2, "full")), 15);
+        assert_eq!(kind(&write(&mut s, 2, 0, &[1; 8192])), 119);
+        assert_eq!(kind(&make(&mut s, 3, "hole")), 15);
+        assert_ne!(kind(&set_size(&mut s, 3, GIB)), RLERROR);
+        assert_eq!(kind(&write(&mut s, 3, 4096, &[1; 4096])), 119);
+        // The disk is now under its reserve.
+        disk.avail.store(1 << 20, Ordering::SeqCst);
+        assert_eq!(
+            error(&write(&mut s, 3, GIB / 2, &[1; 4096])),
+            Some(libc::ENOSPC)
+        );
+        // What has its space already can still be written over.
+        assert_eq!(kind(&write(&mut s, 2, 0, &[2; 8192])), 119);
+    }
+
+    /// A directory being listed is an open file, counted as one.
+    #[test]
+    fn a_listing_is_one_of_the_open_files() {
+        let tmp = Tmp::new();
+        for name in ["a", "b", "c"] {
+            std::fs::create_dir(tmp.0.join(name)).unwrap();
+        }
+        let mut s = attached(&tmp.0);
+        s.max_open_files = 2;
+        let list = |s: &mut Server, fid: u32| {
+            s.handle(&msg(40, |o| {
+                o.u32(fid).u64(0).u32(4096);
+            }))
+        };
+        for (fid, name) in [(1, "a"), (2, "b"), (3, "c")] {
+            assert_eq!(kind(&walk(&mut s, 0, fid, &[name])), 111);
+        }
+        assert_eq!(kind(&list(&mut s, 1)), 41);
+        assert_eq!(kind(&list(&mut s, 2)), 41);
+        assert_eq!(error(&list(&mut s, 3)), Some(libc::EMFILE));
+        // Read again from the start, one is not two; let go, it is none.
+        assert_eq!(kind(&list(&mut s, 2)), 41);
+        let clunk = s.handle(&msg(120, |o| {
+            o.u32(1);
+        }));
+        assert_eq!(kind(&clunk), 121);
+        assert_eq!(kind(&list(&mut s, 3)), 41);
+    }
+
+    /// A guest that sends many requests at once, and takes each answer.
+    struct Burst {
+        requests: Vec<u8>,
+        answers: usize,
+        of: usize,
+        largest: Arc<AtomicUsize>,
+        answered: Arc<AtomicUsize>,
+    }
+
+    impl GuestChannel for Burst {
+        fn send(&mut self, data: &[u8]) -> hv2_agent::Result<usize> {
+            self.largest.fetch_max(data.len(), Ordering::SeqCst);
+            let mut at = 0;
+            while at < data.len() {
+                let size = u32::from_le_bytes(data[at..at + 4].try_into().unwrap());
+                assert_eq!(data[at + 4], 117, "a read's answer");
+                at += size as usize;
+                self.answers += 1;
+            }
+            self.answered.store(self.answers, Ordering::SeqCst);
+            Ok(data.len())
+        }
+        fn recv(&mut self) -> hv2_agent::Result<Vec<u8>> {
+            Ok(std::mem::take(&mut self.requests))
+        }
+        fn open(&self) -> bool {
+            self.answers < self.of
+        }
+    }
+
+    #[test]
+    fn answers_not_yet_sent_are_bounded() {
+        const READS: usize = 200;
+        let tmp = Tmp::new();
+        std::fs::write(tmp.0.join("big"), vec![7u8; 1 << 20]).unwrap();
+        let mut s = attached(&tmp.0);
+        assert_eq!(kind(&walk(&mut s, 0, 1, &["big"])), 111);
+        let opened = s.handle(&msg(12, |o| {
+            o.u32(1).u32(0);
+        }));
+        assert_eq!(kind(&opened), 13);
+        let read = msg(116, |o| {
+            o.u32(1).u64(0).u32(u32::MAX);
+        });
+        let (largest, answered) = (Arc::default(), Arc::default());
+        let channel = Burst {
+            // With the last one cut short, until the rest of it arrives.
+            requests: read.repeat(READS)[..read.len() * READS - 5].to_vec(),
+            answers: 0,
+            of: READS - 1,
+            largest: Arc::clone(&largest),
+            answered: Arc::clone(&answered),
+        };
+        serve(Box::new(channel), Vec::new(), s);
+        assert_eq!(answered.load(Ordering::SeqCst), READS - 1);
+        let largest = largest.load(Ordering::SeqCst);
+        assert!(largest <= MAX_MSIZE as usize + 65536, "{largest}");
     }
 
     #[test]

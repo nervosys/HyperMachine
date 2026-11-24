@@ -93,9 +93,20 @@ pub(crate) fn forget(machine_id: &str) {
 }
 
 /// Keep `prompt` as the prompt of the machine's run `id`, which a caller in
-/// this crate started.
+/// this crate started. The prompts of runs no longer kept go.
 pub(super) fn remember(machine_id: String, id: u64, prompt: Prompt) {
-    prompts(|all| all.entry(machine_id).or_default().insert(id, prompt));
+    prompts(|all| {
+        let kept = all.entry(machine_id.clone()).or_default();
+        kept.insert(id, prompt);
+        forget_unless(kept, |id| runs::with_run(&machine_id, id, |_| ()).is_some());
+    });
+}
+
+/// Drop the prompts of runs `is_kept` does not know, but the newest one's: a
+/// machine's runs are bounded, and so are its prompts.
+fn forget_unless(kept: &mut BTreeMap<u64, Prompt>, is_kept: impl Fn(u64) -> bool) {
+    let newest = kept.keys().next_back().copied();
+    kept.retain(|id, _| Some(*id) == newest || is_kept(*id));
 }
 
 /// What a caller chose about how a harness is run.
@@ -418,13 +429,17 @@ pub(crate) async fn get(
         let prompt = all.get(&machine.id)?.get(&id)?;
         runs::with_run(&machine.id, id, |run| {
             let (offset, text, _) = run.stdout_from(query.after.unwrap_or(0));
-            let (found, next) = events(text, offset, !run.is_running());
-            let mut reply = describe(run.describe(), prompt);
-            reply["session"] = json!(session_in(&found));
-            reply["events"] = json!(found);
-            reply["next"] = json!(next);
-            reply
+            let reply = describe(run.describe(), prompt);
+            (reply, offset, text.to_string(), !run.is_running())
         })
+    });
+    // Read outside the locks: every run on the node waits for them.
+    let found = found.map(|(mut reply, offset, text, ended)| {
+        let (found, next) = events(&text, offset, ended);
+        reply["session"] = json!(session_in(&found));
+        reply["events"] = json!(found);
+        reply["next"] = json!(next);
+        reply
     });
     match found {
         Some(reply) => Json(reply).into_response(),
@@ -465,6 +480,20 @@ pub(crate) async fn interrupt(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_the_prompts_of_kept_runs_are_kept() {
+        let prompt = || Prompt {
+            provider: "claude".into(),
+            prompt: "p".into(),
+            model: None,
+            resume: None,
+        };
+        let mut kept: BTreeMap<u64, Prompt> = (1..=5).map(|id| (id, prompt())).collect();
+        // The newest is kept whatever: its run was only just started.
+        forget_unless(&mut kept, |id| id == 2);
+        assert_eq!(kept.keys().copied().collect::<Vec<_>>(), vec![2, 5]);
+    }
 
     const PLAIN: Choices = Choices {
         model: false,

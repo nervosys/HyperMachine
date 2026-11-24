@@ -40,6 +40,41 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AgentVM, Capability, CapabilitySet};
 
+/// The most memory a VM may be given, in gigabytes, as the tools' schemas say.
+pub const MAX_MEMORY_GB: u64 = 4096;
+
+/// Refuse a `memory_gb` that is not from 1 to [`MAX_MEMORY_GB`]: it is a
+/// caller's number, and in bytes a large one overflows.
+///
+/// # Errors
+///
+/// Says what the range is.
+pub fn check_memory_gb(gb: u64) -> Result<(), String> {
+    if (1..=MAX_MEMORY_GB).contains(&gb) {
+        Ok(())
+    } else {
+        Err(format!(
+            "memory_gb must be from 1 to {MAX_MEMORY_GB}, not {gb}"
+        ))
+    }
+}
+
+/// The most vCPUs a VM may be given, as the tools' schemas say.
+pub const MAX_CPU_CORES: u32 = 128;
+
+/// A caller's `cpu_cores`, refused unless it is from 1 to [`MAX_CPU_CORES`]:
+/// cast to `u32` unchecked, a large one wraps to a small one.
+///
+/// # Errors
+///
+/// Says what the range is.
+pub fn check_cpu_cores(cores: u64) -> Result<u32, String> {
+    u32::try_from(cores)
+        .ok()
+        .filter(|c| (1..=MAX_CPU_CORES).contains(c))
+        .ok_or_else(|| format!("cpu_cores must be from 1 to {MAX_CPU_CORES}, not {cores}"))
+}
+
 /// What an agent asked for when it called `vm.create`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VmSpec {
@@ -161,7 +196,7 @@ impl VmMetrics {
             vm_id: descriptor.vm_id.clone(),
             status: descriptor.status.clone(),
             vcpu_count: descriptor.cpu_cores,
-            memory_total_bytes: descriptor.memory_gb * 1024 * 1024 * 1024,
+            memory_total_bytes: descriptor.memory_gb.saturating_mul(1 << 30),
             uptime_seconds: None,
             cpu_usage_percent: None,
             memory_used_bytes: None,
@@ -434,9 +469,7 @@ impl VmHost for LocalVmHost {
         if spec.cpu_cores == 0 {
             return Err("cpu_cores must be at least 1".to_string());
         }
-        if spec.memory_gb == 0 {
-            return Err("memory_gb must be at least 1".to_string());
-        }
+        check_memory_gb(spec.memory_gb)?;
         // Fail on an unusable boot image now, while the agent can still
         // correct it, rather than at start time.
         if let Some(source) = &spec.boot {
@@ -624,6 +657,24 @@ impl VmHost for LocalVmHost {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn memory_is_from_one_to_the_most() {
+        assert!(check_memory_gb(0).is_err());
+        assert!(check_memory_gb(1).is_ok());
+        assert!(check_memory_gb(MAX_MEMORY_GB).is_ok());
+        assert!(check_memory_gb(MAX_MEMORY_GB + 1).is_err());
+        assert!(check_memory_gb(u64::MAX).is_err());
+        assert_eq!(check_cpu_cores(1), Ok(1));
+        assert_eq!(check_cpu_cores(128), Ok(128));
+        for cores in [0, 129, u64::from(u32::MAX) + 2, u64::MAX] {
+            assert!(check_cpu_cores(cores).is_err(), "{cores}");
+        }
+        // Nor does a size that slipped past it overflow.
+        let _ = crate::AgentVM::builder()
+            .memory_gb(u64::MAX)
+            .memory_mb(u64::MAX);
+    }
 
     #[tokio::test]
     async fn create_registers_a_vm_and_returns_its_id() {

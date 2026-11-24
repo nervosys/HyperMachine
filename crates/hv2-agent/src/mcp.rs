@@ -2488,9 +2488,10 @@ impl McpServer {
 
                 let mut spec = VmSpec::new(name);
                 if let Some(cores) = params.get("cpu_cores").and_then(|v| v.as_u64()) {
-                    spec.cpu_cores = cores as u32;
+                    spec.cpu_cores = crate::vm_host::check_cpu_cores(cores)?;
                 }
                 if let Some(memory) = params.get("memory_gb").and_then(|v| v.as_u64()) {
+                    crate::vm_host::check_memory_gb(memory)?;
                     spec.memory_gb = memory;
                 }
                 if let Some(boot) = params.get("boot") {
@@ -2993,6 +2994,7 @@ impl McpServer {
                     .get("memory_gb")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(4);
+                crate::vm_host::check_memory_gb(memory_gb)?;
                 let vm_id = fresh_id();
 
                 // Record the VM in the session's owned_vms
@@ -3153,6 +3155,7 @@ impl McpServer {
                     vm["cpu_cores"] = json!(cpu_cores);
                 }
                 if let Some(memory_gb) = params.get("memory_gb").and_then(|v| v.as_u64()) {
+                    crate::vm_host::check_memory_gb(memory_gb)?;
                     vm["memory_gb"] = json!(memory_gb);
                 }
                 Ok(json!({ "vm_id": vm_id, "status": "resized", "vm": vm.clone() }))
@@ -3179,7 +3182,7 @@ impl McpServer {
                     "memory_total_bytes": record
                         .get("memory_gb")
                         .and_then(|v| v.as_u64())
-                        .map(|gb| json!(gb * 1024 * 1024 * 1024))
+                        .map(|gb| json!(gb.saturating_mul(1 << 30)))
                         .unwrap_or(JsonValue::Null),
                     "uptime_seconds": JsonValue::Null,
                     "cpu_usage_percent": JsonValue::Null,

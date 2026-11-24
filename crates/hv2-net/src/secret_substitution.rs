@@ -315,12 +315,13 @@ impl Bindings {
     /// Rewrite JSON string values, preserving keys and all other source bytes.
     /// RawValue validates the document without rounding its numeric literals.
     pub fn replace_json(&self, authenticated_host: &str, input: &[u8]) -> io::Result<Vec<u8>> {
-        host(authenticated_host)?;
+        let name = host(authenticated_host)?;
         if input.len() > LIMIT {
             return Err(invalid());
         }
         let _: &serde_json::value::RawValue =
             serde_json::from_slice(input).map_err(|_| invalid())?;
+        let eligible = self.eligible(&name);
         let mut output = Zeroizing::new(Vec::with_capacity(input.len()));
         let mut offset = 0;
         while offset < input.len() {
@@ -351,7 +352,7 @@ impl Bindings {
             }
             let decoded =
                 Zeroizing::new(serde_json::from_slice::<String>(literal).map_err(|_| invalid())?);
-            let replaced = Zeroizing::new(self.replace(authenticated_host, decoded.as_bytes())?);
+            let replaced = Zeroizing::new(Self::replace_with(&eligible, decoded.as_bytes())?);
             if replaced.as_slice() == decoded.as_bytes() {
                 append_bounded(&mut output, literal)?;
             } else {
@@ -520,7 +521,7 @@ impl Bindings {
         input: &[u8],
         form: bool,
     ) -> io::Result<Vec<u8>> {
-        host(authenticated_host)?;
+        let eligible = self.eligible(&host(authenticated_host)?);
         if input.len() > LIMIT {
             return Err(invalid());
         }
@@ -530,29 +531,18 @@ impl Bindings {
                 append_bounded(&mut output, b"&")?;
             }
             if let Some(separator) = parameter.iter().position(|c| *c == b'=') {
-                self.query_component(
-                    authenticated_host,
-                    &parameter[..separator],
-                    &mut output,
-                    form,
-                )?;
+                Self::query_component(&eligible, &parameter[..separator], &mut output, form)?;
                 append_bounded(&mut output, b"=")?;
-                self.query_component(
-                    authenticated_host,
-                    &parameter[separator + 1..],
-                    &mut output,
-                    form,
-                )?;
+                Self::query_component(&eligible, &parameter[separator + 1..], &mut output, form)?;
             } else {
-                self.query_component(authenticated_host, parameter, &mut output, form)?;
+                Self::query_component(&eligible, parameter, &mut output, form)?;
             }
         }
         Ok(std::mem::take(&mut *output))
     }
 
     fn query_component(
-        &self,
-        hostname: &str,
+        eligible: &[&Binding],
         input: &[u8],
         output: &mut Vec<u8>,
         form: bool,
@@ -575,7 +565,7 @@ impl Bindings {
                 offset += 1;
             }
         }
-        let replaced = Zeroizing::new(self.replace(hostname, &decoded)?);
+        let replaced = Zeroizing::new(Self::replace_with(eligible, &decoded)?);
         if *decoded == *replaced {
             return append_bounded(output, input);
         }
@@ -674,10 +664,23 @@ impl Bindings {
     /// Encoded query/Basic-auth forms and streaming framing belong to the caller.
     pub fn replace(&self, authenticated_host: &str, input: &[u8]) -> io::Result<Vec<u8>> {
         let name = host(authenticated_host)?;
+        Self::replace_with(&self.eligible(&name), input)
+    }
+
+    /// The bindings for one host. A request works this out once, not once for
+    /// each of its strings or parameters: there can be 128 bindings of 64 hosts,
+    /// and a body of a few hundred thousand strings.
+    fn eligible(&self, name: &str) -> Vec<&Binding> {
+        self.0
+            .iter()
+            .filter(|b| b.hosts.iter().any(|h| h == name))
+            .collect()
+    }
+
+    fn replace_with(eligible: &[&Binding], input: &[u8]) -> io::Result<Vec<u8>> {
         if input.len() > LIMIT {
             return Err(invalid());
         }
-        let eligible: Vec<_> = self.0.iter().filter(|b| b.hosts.contains(&name)).collect();
         if eligible.is_empty() {
             return Ok(input.to_vec());
         }

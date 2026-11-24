@@ -6464,7 +6464,7 @@ async fn exec(
         Ok(parts) => parts,
         Err(message) => return api_error(StatusCode::BAD_REQUEST, message),
     };
-    let timeout = Duration::from_secs(req.timeout_secs.unwrap_or(30));
+    let timeout = Duration::from_secs(req.timeout_secs.unwrap_or(30).min(MAX_TIMEOUT_SECS));
     let n = history::begin(
         &sandbox_id,
         history::Begun {

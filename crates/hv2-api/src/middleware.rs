@@ -4039,6 +4039,10 @@ impl Default for RequestQuotaConfig {
     }
 }
 
+/// The most clients a [`QuotaState`] tracks one by one. A client is whatever
+/// `x-api-key` a request sends, so a caller could otherwise add one per request.
+const MAX_QUOTA_CLIENTS: usize = 65_536;
+
 /// Shared state for quota tracking.
 ///
 /// Uses a `parking_lot::Mutex` around a map of client identifiers to
@@ -4046,6 +4050,8 @@ impl Default for RequestQuotaConfig {
 #[derive(Debug, Clone)]
 pub struct QuotaState {
     inner: std::sync::Arc<parking_lot::Mutex<std::collections::HashMap<String, (u64, u64)>>>,
+    /// The second of the last scan for clients whose window is over.
+    purged: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl Default for QuotaState {
@@ -4059,6 +4065,7 @@ impl QuotaState {
     pub fn new() -> Self {
         Self {
             inner: std::sync::Arc::new(parking_lot::Mutex::new(std::collections::HashMap::new())),
+            purged: std::sync::Arc::default(),
         }
     }
 
@@ -4070,6 +4077,18 @@ impl QuotaState {
             .as_secs();
 
         let mut map = self.inner.lock();
+        let mut client_id = client_id;
+        if map.len() >= MAX_QUOTA_CLIENTS && !map.contains_key(client_id) {
+            // A scan of every client, at most once a second: each new key
+            // sent while the map is full would otherwise pay for one.
+            if self.purged.swap(now, std::sync::atomic::Ordering::Relaxed) != now {
+                map.retain(|_, (_, start)| now.saturating_sub(*start) < window_secs);
+            }
+            if map.len() >= MAX_QUOTA_CLIENTS {
+                // New clients share one quota until there is room.
+                client_id = "\u{0}overflow";
+            }
+        }
         let entry = map.entry(client_id.to_string()).or_insert((0, now));
 
         // Check if window has reset
@@ -4245,7 +4264,9 @@ impl NonceStore {
     }
 
     /// Attempts to insert a nonce. Returns `true` if the nonce was new,
-    /// `false` if it was already present (replay detected).
+    /// `false` if it was already present (replay detected), or if the store
+    /// is full of nonces too young to forget: callers pick their own nonces,
+    /// so a store that grew past `max_size` could be grown without end.
     /// Also purges entries older than `max_age_secs`.
     pub fn try_insert(&self, nonce: String, now: u64, max_age: u64, max_size: usize) -> bool {
         let mut map = self.inner.lock();
@@ -4253,6 +4274,9 @@ impl NonceStore {
         if map.len() >= max_size {
             let cutoff = now.saturating_sub(max_age);
             map.retain(|_, ts| *ts > cutoff);
+            if map.len() >= max_size {
+                return false;
+            }
         }
         // Check for duplicate
         if map.contains_key(&nonce) {
@@ -4347,7 +4371,7 @@ async fn replay_protection_handler(
                 // Replay detected
                 let body = serde_json::json!({
                     "error": "REPLAY_DETECTED",
-                    "message": "This request nonce has already been used"
+                    "message": "This request nonce has already been used, or too many recent nonces are held to take another"
                 });
                 return Response::builder()
                     .status(axum::http::StatusCode::CONFLICT)
@@ -19358,6 +19382,26 @@ mod tests {
         assert_eq!(store.len(), 1);
         assert!(store.try_insert("n2".into(), now, 300, 100));
         assert_eq!(store.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_full_nonce_store_refuses_rather_than_grows() {
+        let store = NonceStore::new();
+        assert!(store.try_insert("a".into(), 1000, 300, 2));
+        assert!(store.try_insert("b".into(), 1000, 300, 2));
+        assert!(!store.try_insert("c".into(), 1000, 300, 2));
+        assert_eq!(store.len(), 2);
+        // Once those are old enough to forget, there is room again.
+        assert!(store.try_insert("c".into(), 1400, 300, 2));
+    }
+
+    #[test]
+    fn the_quota_map_is_bounded() {
+        let state = QuotaState::new();
+        for i in 0..MAX_QUOTA_CLIENTS + 10 {
+            assert!(state.check(&format!("k{i}"), 1_000_000, 3600).0);
+        }
+        assert!(state.inner.lock().len() <= MAX_QUOTA_CLIENTS + 1);
     }
 
     #[tokio::test]

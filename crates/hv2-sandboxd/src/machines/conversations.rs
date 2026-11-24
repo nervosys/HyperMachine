@@ -74,6 +74,9 @@ pub(crate) const MAX_CONVERSATIONS: usize = 64;
 /// The most of another conversation's transcript carried into a new one.
 pub(crate) const MAX_CARRIED: usize = 64 << 10;
 
+/// The most that may be said to one conversation, over all its messages.
+pub(crate) const MAX_SAID: usize = 2 << 20;
+
 /// The providers a conversation can be with.
 const PROVIDERS: [&str; 2] = ["claude", "codex"];
 
@@ -132,6 +135,14 @@ fn conversations<T>(f: impl FnOnce(&mut HashMap<String, MachineConversations>) -
     f(guard.get_or_insert_with(HashMap::new))
 }
 
+/// Whether one more message, `prompt`, fits among `messages`: what was said to
+/// a conversation is kept, and returned, whole.
+fn has_room(messages: &[Message], prompt: &str) -> bool {
+    // With something for each message, so that empty ones are not free.
+    let cost = |text: &str| text.len() + 256;
+    messages.iter().map(|m| cost(&m.prompt)).sum::<usize>() + cost(prompt) <= MAX_SAID
+}
+
 /// Forget a machine's conversations, when it is deleted.
 pub(crate) fn forget(machine_id: &str) {
     conversations(|all| all.remove(machine_id));
@@ -155,10 +166,12 @@ fn is_running(machine_id: &str, id: u64) -> bool {
 
 /// Every event of the machine's run `id`, or none once it is forgotten.
 fn events_of(machine_id: &str, id: u64) -> Vec<Value> {
+    // Read outside the lock: every run on the node waits for it.
     runs::with_run(machine_id, id, |run| {
         let (offset, text, _) = run.stdout_from(0);
-        prompts::events(text, offset, !run.is_running()).0
+        (offset, text.to_string(), !run.is_running())
     })
+    .map(|(offset, text, ended)| prompts::events(&text, offset, ended).0)
     .unwrap_or_default()
 }
 
@@ -593,6 +606,16 @@ pub(crate) async fn message(
                 "a message is starting a turn of this conversation; send this one when it has",
             ));
         }
+        if !has_room(&conversation.messages, &req.prompt) {
+            return Err(api_error(
+                StatusCode::CONFLICT,
+                format!(
+                    "this conversation has been sent {} KiB of messages, the most one keeps; \
+                     start another with \"from\"",
+                    MAX_SAID / 1024
+                ),
+            ));
+        }
         let running = running_turn(&machine_id, conversation);
         if let (Some(turn), Some(open)) = (running, conversation.open.as_mut()) {
             if open.turn == turn && !open.closing {
@@ -992,6 +1015,27 @@ mod tests {
 
     fn event(value: Value) -> Value {
         json!({ "offset": 0, "event": value })
+    }
+
+    #[test]
+    fn what_is_said_to_a_conversation_is_bounded() {
+        let message = |prompt: String| Message {
+            prompt,
+            turn: 1,
+            steered: true,
+            sent_ms: 0,
+        };
+        assert!(has_room(&[], &"x".repeat(prompts::MAX_PROMPT)));
+        let mut said = Vec::new();
+        while has_room(&said, "y") {
+            said.push(message("x".repeat(prompts::MAX_PROMPT)));
+            assert!(said.len() <= MAX_SAID / prompts::MAX_PROMPT + 1);
+        }
+        // Nor are messages with nothing in them free.
+        let empty: Vec<Message> = (0..MAX_SAID / 256)
+            .map(|_| message(String::new()))
+            .collect();
+        assert!(!has_room(&empty, ""));
     }
 
     #[test]

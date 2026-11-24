@@ -188,6 +188,7 @@ impl hv2_agent::VmHost for ApiVmHost {
         if self.vms.read().await.contains_key(&spec.name) {
             return Err(format!("VM already exists: {}", spec.name));
         }
+        hv2_agent::check_memory_gb(spec.memory_gb)?;
         if let Some(source) = &spec.boot {
             source.load().map_err(|e| e.to_string())?;
         }
@@ -701,6 +702,17 @@ async fn create_vm(
             )
         })?;
     }
+
+    hv2_agent::check_memory_gb(req.memory_gb).map_err(|error| {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error,
+                code: "INVALID_MEMORY".to_string(),
+                request_id: None,
+            }),
+        )
+    })?;
 
     // Build the VM
     let mut builder = AgentVM::builder()
