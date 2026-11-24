@@ -2669,6 +2669,7 @@ dependencies = [
  "hv2-jobs",
  "hv2-net",
  "hv2-sandbox",
+ "hv2-shield",
  "hv2-tls",
  "hyper",
  "hyper-util",
@@ -3135,6 +3136,7 @@ dependencies = [
  "hv2-core",
  "hv2-guest-agent",
  "hv2-net",
+ "hv2-shield",
  "hv2-tls",
  "ic-drbg",
  "ic-rsa",
@@ -3155,6 +3157,21 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+]
+
+[[package]]
+name = "hv2-shield"
+version = "1.2.0"
+dependencies = [
+ "hv2-sandbox",
+ "ic-core",
+ "ic-drbg",
+ "ic-hash",
+ "ic-mldsa",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "zeroize",
 ]
 
 [[package]]

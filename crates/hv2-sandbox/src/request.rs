@@ -258,6 +258,7 @@ impl Request {
             no_new_privileges: self.no_new_privileges,
             isolate_ui: self.isolate_ui,
             best_effort: self.best_effort,
+            syscall_shield: None,
         };
         (command, spec)
     }

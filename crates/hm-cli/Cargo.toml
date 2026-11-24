@@ -31,6 +31,7 @@ hv2-core = { path = "../hv2-core", version = "1.2.0" }
 hv2-tls = { path = "../hv2-tls", version = "1.2.0" }
 hv2-agent = { path = "../hv2-agent", version = "1.2.0" }
 hv2-sandbox = { path = "../hv2-sandbox", version = "1.2.0" }
+hv2-shield = { path = "../hv2-shield", version = "1.2.0" }
 hv2-jobs = { path = "../hv2-jobs", version = "1.2.0" }
 # The proxy a sandboxed process is kept to under `--allow-host`, and the
 # egress policy it asks.

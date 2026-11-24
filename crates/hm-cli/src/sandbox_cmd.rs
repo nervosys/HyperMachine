@@ -217,6 +217,7 @@ pub fn spec_of(args: &RunArgs) -> Result<SandboxSpec> {
         no_new_privileges: args.no_new_privileges,
         isolate_ui: args.isolate_ui,
         best_effort: !args.strict,
+        syscall_shield: None,
     })
 }
 

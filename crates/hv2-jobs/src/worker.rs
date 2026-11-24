@@ -106,6 +106,7 @@ pub fn sandbox_spec(spec: &JobSpec) -> std::result::Result<SandboxSpec, String> 
         no_new_privileges: s.no_new_privileges,
         isolate_ui: false,
         best_effort: !s.strict,
+        syscall_shield: None,
     })
 }
 

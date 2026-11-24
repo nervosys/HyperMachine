@@ -1264,6 +1264,19 @@ fn network_and_exposure_operations_are_described_for_both_components() {
             "POST",
             "/networks/{name}/disconnect",
         ),
+        ("node_list_shields", "GET", "/shields"),
+        ("node_load_shield", "POST", "/shields"),
+        ("node_propose_shield", "POST", "/shields/proposals"),
+        (
+            "node_withdraw_shield_proposal",
+            "DELETE",
+            "/shields/proposals/{digest}",
+        ),
+        ("node_apply_shield_directive", "POST", "/shields/directives"),
+        ("node_reload_shield_keyring", "POST", "/shields/keyring"),
+        ("node_list_shield_hits", "GET", "/shields/hits"),
+        ("node_list_shield_events", "GET", "/shields/events"),
+        ("node_attest_shields", "POST", "/shields/attestation"),
     ];
     let check = |id: &str, component: &str, method: &str, path: &str| {
         let op = onto

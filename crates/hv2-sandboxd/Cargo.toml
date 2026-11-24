@@ -20,6 +20,7 @@ hv2-tls = { path = "../hv2-tls", version = "1.2.0" }
 hv2-agent = { path = "../hv2-agent", version = "1.2.0" }
 hv2-api = { path = "../hv2-api", version = "1.2.0" }
 hv2-net = { path = "../hv2-net", version = "1.2.0" }
+hv2-shield = { path = "../hv2-shield", version = "1.2.0" }
 hv2-cluster = { path = "../hv2-cluster", version = "1.2.0" }
 hv2-guest-agent = { path = "../hv2-guest-agent", version = "1.2.0" }
 

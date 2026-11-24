@@ -292,6 +292,44 @@ const NAMES_PER_ADDRESS: usize = 256;
 /// which every sandbox on the node shares.
 const DNS_IN_FLIGHT: usize = 64;
 
+/// Rules laid over a gateway's policy by someone other than its owner: a
+/// node's shields, which an operator adds and takes away while guests run.
+/// Asked after the policy allows, on every DNS question and connection, so a
+/// refusal here holds whatever the policy says.
+pub trait ConnectionShield: Send + Sync {
+    /// Why `attempt` is refused, or `None` to let it through.
+    fn refuses(&self, attempt: &Attempt<'_>) -> Option<String>;
+
+    /// Whether connections are to be read for the name they send (TLS SNI,
+    /// HTTP Host) before anything of theirs is relayed. Reading costs a
+    /// protocol where the server speaks first a short wait, so a shield with
+    /// no rule about names says no.
+    fn wants_names(&self) -> bool {
+        true
+    }
+}
+
+/// What a guest is trying to reach, as a [`ConnectionShield`] is asked it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Attempt<'a> {
+    pub kind: AttemptKind,
+    /// `None` for a DNS question.
+    pub address: Option<IpAddr>,
+    /// 0 for a DNS question.
+    pub port: u16,
+    /// The name asked in DNS, or sent as TLS SNI or an HTTP Host. A
+    /// connection that has sent none yet is asked about with none.
+    pub name: Option<&'a str>,
+}
+
+/// Which way a guest is reaching out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttemptKind {
+    Tcp,
+    Udp,
+    Dns,
+}
+
 struct Shared {
     config: GatewayConfig,
     policy: RwLock<NetworkPolicy>,
@@ -312,6 +350,8 @@ struct Shared {
     stats: Mutex<GatewayStats>,
     /// Bounds the DNS lookups in flight; see [`DNS_IN_FLIGHT`].
     dns_in_flight: Arc<tokio::sync::Semaphore>,
+    /// See [`GatewayHandle::set_shield`].
+    shield: RwLock<Option<Arc<dyn ConnectionShield>>>,
 }
 
 #[derive(Clone)]
@@ -361,6 +401,25 @@ impl Shared {
         });
     }
 
+    /// Why a shield refuses this, if one does.
+    fn shielded(
+        &self,
+        kind: AttemptKind,
+        address: Option<IpAddr>,
+        port: u16,
+        name: Option<&str>,
+    ) -> Option<String> {
+        let shield = self.shield.read().clone()?;
+        shield
+            .refuses(&Attempt {
+                kind,
+                address,
+                port,
+                name,
+            })
+            .map(|why| format!("shield: {why}"))
+    }
+
     fn names_for(&self, address: IpAddr) -> Vec<String> {
         self.resolved
             .lock()
@@ -394,6 +453,14 @@ impl GatewayHandle {
     /// connection and query after this is decided by the new one.
     pub fn set_policy(&self, policy: NetworkPolicy) {
         *self.0.policy.write() = policy.with_host_addresses(&self.0.host_addresses);
+    }
+
+    /// Lay `shield` over the policy, or take it away with `None`. It is
+    /// asked on every DNS question and connection from then on, so what it
+    /// refuses can change while the guest runs; connections already open
+    /// are left open.
+    pub fn set_shield(&self, shield: Option<Arc<dyn ConnectionShield>>) {
+        *self.0.shield.write() = shield;
     }
 
     /// Tunnel every allowed connection through `proxy` from now on, or stop
@@ -596,6 +663,7 @@ impl GatewayBuilder {
             log: Mutex::new(DecisionLog::default()),
             stats: Mutex::new(GatewayStats::default()),
             dns_in_flight: Arc::new(tokio::sync::Semaphore::new(DNS_IN_FLIGHT)),
+            shield: RwLock::new(None),
         });
 
         let (to_stack, frames_in) = mpsc::unbounded_channel();
@@ -1010,6 +1078,16 @@ impl Stack {
                     let Some(private) = self.shared.private_network.clone() else {
                         continue;
                     };
+                    if let Some(why) = self.shared.shielded(
+                        AttemptKind::Udp,
+                        Some(destination.ip()),
+                        destination.port(),
+                        None,
+                    ) {
+                        self.shared
+                            .record("udp", destination, None, Verdict::Deny, why);
+                        continue;
+                    }
                     let (to_peer, input) = mpsc::channel(private_udp::QUEUE_DEPTH);
                     let (output, from_peer) = mpsc::channel(private_udp::QUEUE_DEPTH);
                     let shared = self.shared.clone();
@@ -1169,6 +1247,17 @@ impl Stack {
                 return;
             }
         };
+        // By address alone: a name the guest has yet to send is asked about
+        // once it is sent. The names this gateway's DNS gave the address are
+        // not used, since an address serves other names besides.
+        if let Some(why) =
+            self.shared
+                .shielded(AttemptKind::Tcp, Some(address), destination.port(), None)
+        {
+            self.shared
+                .record("tcp", destination, None, Verdict::Deny, why);
+            return;
+        }
 
         let mut socket = tcp::Socket::new(
             tcp::SocketBuffer::new(vec![0; TCP_RX_BUFFER]),
@@ -1411,6 +1500,10 @@ async fn resolve_query(shared: &Shared, query: &dns::Query, dns_addr: SocketAddr
     let name = query.name.clone();
     if query.qtype != dns::TYPE_A && query.qtype != dns::TYPE_AAAA {
         return dns::answer(query, dns::Rcode::NotImp, &[], 0);
+    }
+    if let Some(why) = shared.shielded(AttemptKind::Dns, None, 0, Some(&name)) {
+        shared.record("dns", dns_addr, Some(name), Verdict::Deny, why);
+        return dns::answer(query, dns::Rcode::Refused, &[], 0);
     }
     if let Some(private) = shared
         .private_network
@@ -1749,6 +1842,9 @@ async fn connection(
     // Set when the address was allowed only by name and the client sent
     // nothing at first: its first bytes are still read for a name.
     let mut late_name_check = false;
+    // Whether that late name must also be one the policy allows, as it must
+    // on an address opened only by name; otherwise only shields ask.
+    let mut late_policy_check = false;
     let refuse = |name: Option<String>, reason: String| {
         shared.record("tcp", destination, name, Verdict::Deny, reason);
         let _ = events.send(Event::Abort(id));
@@ -1790,8 +1886,14 @@ async fn connection(
             };
             let _ = events.send(Event::Accept(id));
 
+            let names_shielded = shared
+                .shield
+                .read()
+                .as_ref()
+                .is_some_and(|shield| shield.wants_names());
             // Only look inside when the answer could change something.
             let look = via_names.is_some()
+                || names_shielded
                 || shared.policy.read().has_transforms()
                 || shared.secrets.read().is_some()
                 || shared.host_credentials.read().is_some();
@@ -1829,6 +1931,24 @@ async fn connection(
                         ),
                     );
                     return;
+                }
+                late_name_check = prefix.is_empty();
+                late_policy_check = true;
+            } else if names_shielded {
+                // As above, for a shield's rules about names: what starts
+                // naming must finish, and what has sent nothing yet is
+                // read when it does.
+                if sniffed == Sniffed::Incomplete && !prefix.is_empty() {
+                    (prefix, sniffed) =
+                        read_name_from(&mut guest, prefix, config.name_timeout).await;
+                    if sniffed == Sniffed::Incomplete {
+                        refuse(
+                            None,
+                            "shield: the client's first bytes never finished naming anything"
+                                .to_string(),
+                        );
+                        return;
+                    }
                 }
                 late_name_check = prefix.is_empty();
             }
@@ -1874,6 +1994,19 @@ async fn connection(
             (upstream, prefix, sniffed, Some(name), reason.to_string())
         }
     };
+    // The name sent, now that there is one. The upstream connection is open
+    // by now, but nothing of the guest's has gone down it.
+    if let Some(sent) = named(&sniffed) {
+        if let Some(why) = shared.shielded(
+            AttemptKind::Tcp,
+            Some(destination.ip()),
+            destination.port(),
+            Some(sent),
+        ) {
+            refuse(Some(sent.to_string()), why);
+            return;
+        }
+    }
 
     // Header injection, for a TLS connection to a name with a rule.
     if let (Sniffed::Tls(Some(sni)), Some(_)) = (&sniffed, &name) {
@@ -1994,7 +2127,7 @@ async fn connection(
 
     shared.record("tcp", destination, name, Verdict::Allow, reason);
     if late_name_check {
-        match relay_naming_late(&shared, destination, guest, upstream).await {
+        match relay_naming_late(&shared, destination, guest, upstream, late_policy_check).await {
             Ok(()) => {}
             Err(LateStop::Refused(name, reason)) => refuse(name, reason),
             Err(LateStop::Io(_)) => {
@@ -2066,6 +2199,7 @@ async fn relay_naming_late(
     destination: SocketAddr,
     guest: GuestStream,
     upstream: Box<dyn Upstream>,
+    policy_check: bool,
 ) -> Result<(), LateStop> {
     let (mut guest_reader, mut guest_writer) = tokio::io::split(guest);
     let (mut upstream_reader, mut upstream_writer) = tokio::io::split(upstream);
@@ -2087,8 +2221,20 @@ async fn relay_naming_late(
                     "the client's first bytes never finished naming anything".to_string(),
                 ));
             }
-            check_name_opened(shared, destination, &sniffed)
-                .map_err(|(sent, why)| LateStop::Refused(sent, why))?;
+            if policy_check {
+                check_name_opened(shared, destination, &sniffed)
+                    .map_err(|(sent, why)| LateStop::Refused(sent, why))?;
+            }
+            if let Some(sent) = named(&sniffed) {
+                if let Some(why) = shared.shielded(
+                    AttemptKind::Tcp,
+                    Some(destination.ip()),
+                    destination.port(),
+                    Some(sent),
+                ) {
+                    return Err(LateStop::Refused(Some(sent.to_string()), why));
+                }
+            }
             upstream_writer.write_all(&prefix).await?;
             tokio::io::copy(&mut guest_reader, &mut upstream_writer).await?;
         }

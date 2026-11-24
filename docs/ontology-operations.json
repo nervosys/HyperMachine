@@ -2234,6 +2234,60 @@
     },
     {
       "component": "hv2-sandboxd",
+      "id": "node_list_shields",
+      "method": "GET",
+      "path": "/shields"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_load_shield",
+      "method": "POST",
+      "path": "/shields"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_attest_shields",
+      "method": "POST",
+      "path": "/shields/attestation"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_apply_shield_directive",
+      "method": "POST",
+      "path": "/shields/directives"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_shield_events",
+      "method": "GET",
+      "path": "/shields/events"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_list_shield_hits",
+      "method": "GET",
+      "path": "/shields/hits"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_reload_shield_keyring",
+      "method": "POST",
+      "path": "/shields/keyring"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_propose_shield",
+      "method": "POST",
+      "path": "/shields/proposals"
+    },
+    {
+      "component": "hv2-sandboxd",
+      "id": "node_withdraw_shield_proposal",
+      "method": "DELETE",
+      "path": "/shields/proposals/{digest}"
+    },
+    {
+      "component": "hv2-sandboxd",
       "id": "node_list_snapshots",
       "method": "GET",
       "path": "/snapshots"

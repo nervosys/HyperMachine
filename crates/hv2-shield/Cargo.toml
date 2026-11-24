@@ -1,0 +1,30 @@
+[package]
+name = "hv2-shield"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Shields: signed, approved, expiring and measured protections applied to running sandboxes"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+ic-mldsa = "0.2.3"
+ic-hash = "0.2.3"
+ic-core = "0.2.3"
+ic-drbg = "0.2.3"
+zeroize = "1.9.0"
+hv2-sandbox = { path = "../hv2-sandbox", version = "1.2.0", optional = true }
+
+[features]
+# The syscall gate for hv2-sandbox's process sandboxes.
+sandbox = ["dep:hv2-sandbox"]
+
+[lints]
+workspace = true

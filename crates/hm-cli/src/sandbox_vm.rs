@@ -1752,6 +1752,20 @@ fn pick_disk(listed: &Value, given: &str) -> Result<String> {
 }
 
 /// Execute the operation. API errors fail; guest errors preserve their exit code.
+/// A client for `endpoint` with the credentials `hm sandbox vm` would use:
+/// HV2_API_KEY when it is set, else the session `login` kept.
+pub(crate) fn api_for(endpoint: &str, timeout: u64, ca: Option<&std::path::Path>) -> Result<Api> {
+    let key = std::env::var("HV2_API_KEY")
+        .ok()
+        .filter(|key| !key.is_empty());
+    let session = if key.is_some() {
+        None
+    } else {
+        login::stored_token(endpoint)
+    };
+    Api::with_credentials(endpoint, timeout, key, session, ca)
+}
+
 pub async fn run(args: VmArgs) -> Result<i32> {
     let endpoint = args
         .endpoint

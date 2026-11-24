@@ -1781,3 +1781,122 @@ fn decision_log_sequence_is_increasing_and_gap_free_within_each_part() {
     assert_eq!(snap.dropped, 5000 - 512);
     assert_eq!(log.head.len() + log.tail.len(), 512);
 }
+
+/// A shield refusing one address and one name, which counts what it is asked.
+struct TestShield {
+    address: IpAddr,
+    name: &'static str,
+    asked: Mutex<Vec<String>>,
+}
+
+impl ConnectionShield for TestShield {
+    fn refuses(&self, attempt: &Attempt<'_>) -> Option<String> {
+        self.asked.lock().push(format!(
+            "{:?} {:?} {} {:?}",
+            attempt.kind, attempt.address, attempt.port, attempt.name
+        ));
+        if attempt.address == Some(self.address) {
+            return Some("address".into());
+        }
+        if attempt.name == Some(self.name) {
+            return Some("name".into());
+        }
+        None
+    }
+}
+
+#[tokio::test]
+async fn a_shield_refuses_what_the_policy_allows_and_can_be_taken_away() {
+    let echo = echo_server().await;
+    let gw = gateway(
+        NetworkPolicy::new(Verdict::Allow),
+        &[(EXAMPLE, 80, echo), (OTHER, 22, echo)],
+    );
+    let handle = gw.handle();
+    let shield = Arc::new(TestShield {
+        address: IpAddr::V4(OTHER),
+        name: "example.com",
+        asked: Mutex::new(Vec::new()),
+    });
+    let mut guest = Guest::new();
+    assert_eq!(
+        guest.exchange(&gw, OTHER, 22, b"a").await.as_deref(),
+        Some(&b"echo:a"[..])
+    );
+
+    handle.set_shield(Some(shield.clone()));
+    // By address, at the SYN.
+    assert_eq!(guest.exchange(&gw, OTHER, 22, b"b").await, None);
+    // By name, in DNS.
+    let (rcode, addresses) = guest.lookup(&gw, "example.com").await;
+    assert_eq!(rcode, 5);
+    assert!(addresses.is_empty());
+    // By name, sent as an HTTP Host to an address the shield does not name.
+    let request = b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n";
+    assert_eq!(guest.exchange(&gw, EXAMPLE, 80, request).await, None);
+    // Other names at that address still go.
+    let request = b"GET / HTTP/1.1\r\nHost: other.example\r\n\r\n";
+    assert!(guest.exchange(&gw, EXAMPLE, 80, request).await.is_some());
+    let refusals: Vec<String> = handle
+        .decisions()
+        .into_iter()
+        .filter(|d| d.verdict == Verdict::Deny)
+        .map(|d| d.reason)
+        .collect();
+    assert_eq!(
+        refusals,
+        ["shield: address", "shield: name", "shield: name"]
+    );
+
+    handle.set_shield(None);
+    assert_eq!(
+        guest.exchange(&gw, OTHER, 22, b"c").await.as_deref(),
+        Some(&b"echo:c"[..])
+    );
+    let (rcode, _) = guest.lookup(&gw, "example.com").await;
+    assert_eq!(rcode, 0);
+}
+
+struct NoNames;
+
+impl ConnectionShield for NoNames {
+    fn refuses(&self, attempt: &Attempt<'_>) -> Option<String> {
+        attempt.name.map(|_| "a name was read".to_string())
+    }
+
+    fn wants_names(&self) -> bool {
+        false
+    }
+}
+
+#[tokio::test]
+async fn a_shielded_name_sent_late_is_reset() {
+    let echo = echo_server().await;
+    let gw = gateway(NetworkPolicy::new(Verdict::Allow), &[(EXAMPLE, 80, echo)]);
+    gw.handle().set_shield(Some(Arc::new(TestShield {
+        address: IpAddr::V4(OTHER),
+        name: "example.com",
+        asked: Mutex::new(Vec::new()),
+    })));
+    let mut guest = Guest::new();
+    // Allowed by address, and nothing sent at first: the name comes later.
+    let late = Duration::from_millis(800);
+    let refused = b"GET / HTTP/1.1\r\nHost: example.com\r\n\r\n";
+    assert_eq!(
+        guest
+            .exchange_in_parts(&gw, EXAMPLE, 80, &[(late, &refused[..])])
+            .await,
+        None
+    );
+    let allowed = b"GET / HTTP/1.1\r\nHost: other.example\r\n\r\n";
+    assert!(guest
+        .exchange_in_parts(&gw, EXAMPLE, 80, &[(late, &allowed[..])])
+        .await
+        .is_some());
+    // And a shield that wants no names leaves the connection unread.
+    gw.handle().set_shield(Some(Arc::new(NoNames)));
+    assert!(guest
+        .exchange_in_parts(&gw, EXAMPLE, 80, &[(late, &refused[..])])
+        .await
+        .is_some());
+}

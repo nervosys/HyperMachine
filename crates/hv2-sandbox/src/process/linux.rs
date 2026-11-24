@@ -81,6 +81,8 @@ use crate::{
 use super::driver;
 
 mod relay;
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+pub(super) mod syscall_shield;
 
 /// Distinguishes the scratch directories this process creates — cgroups for a
 /// run, and the throwaway roots the filesystem probe pivots into — from each
@@ -218,6 +220,21 @@ pub(super) fn probe() -> Controls {
                 .without(Control::Memory, reason.clone())
                 .without(Control::ProcessCount, reason);
         }
+    }
+
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    {
+        controls = match syscall_shield::probe() {
+            Ok(()) => controls.with(Control::SyscallShield),
+            Err(why) => controls.without(Control::SyscallShield, why),
+        };
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    {
+        controls = controls.without(
+            Control::SyscallShield,
+            "syscall shields list call numbers for x86-64 and arm64 only",
+        );
     }
 
     controls
@@ -1191,6 +1208,38 @@ pub(super) fn run(
         None
     };
 
+    // The supervisor runs before the spawn: `exec` itself may be trapped,
+    // and `spawn` does not return until it is done.
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    let shield = match &spec.syscall_shield {
+        Some(shield) => {
+            let filter =
+                syscall_shield::Filter::new(&shield.syscalls).map_err(SandboxError::InvalidSpec)?;
+            let (ours, theirs) =
+                syscall_shield::channel().map_err(|e| SandboxError::ConfinementFailed {
+                    control: Control::SyscallShield,
+                    source: e,
+                })?;
+            let supervisor =
+                syscall_shield::Supervisor::start(ours, std::sync::Arc::clone(&shield.gate))
+                    .map_err(|e| SandboxError::ConfinementFailed {
+                        control: Control::SyscallShield,
+                        source: e,
+                    })?;
+            Some((filter, theirs, supervisor))
+        }
+        None => None,
+    };
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    let (shield_filter, shield_socket, supervisor) = match shield {
+        Some((filter, socket, supervisor)) => (
+            Some((filter, std::os::fd::AsRawFd::as_raw_fd(&socket))),
+            Some(socket),
+            Some(supervisor),
+        ),
+        None => (None, None, None),
+    };
+
     // Everything the child needs, built here: the code between fork and exec
     // must not allocate.
     let procs_file = cgroup
@@ -1295,6 +1344,8 @@ pub(super) fn run(
         },
         filesystem,
         doorway,
+        #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+        syscall_shield: shield_filter,
     };
 
     let mut builder = Command::new(&command.program);
@@ -1326,6 +1377,10 @@ pub(super) fn run(
         source: e,
     })?;
     let pid = child.id() as libc::pid_t;
+    // The child has its own copy, or has sent its listener down it; with
+    // ours closed, a child that never sent one is seen to have gone.
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    drop(shield_socket);
 
     let output =
         driver::wait_with_deadline(child, command.stdin.as_deref(), spec.wall_clock, io, || {
@@ -1339,6 +1394,11 @@ pub(super) fn run(
             }
         });
 
+    // Nothing is left to trap calls from.
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    if let Some(supervisor) = supervisor {
+        supervisor.finish();
+    }
     drop(cgroup);
     // The workload is gone; so is its way out, and the root that was made
     // for it.
@@ -1376,6 +1436,10 @@ struct Confinement {
     /// The one port a proxied workload reaches, to be put in its network
     /// namespace.
     doorway: Option<relay::Doorway>,
+    /// The seccomp filter to install last, and the socket its listener is
+    /// sent to the parent on.
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    syscall_shield: Option<(syscall_shield::Filter, std::os::fd::RawFd)>,
 }
 
 /// Everything the child does between `fork` and `exec`.
@@ -1508,6 +1572,18 @@ fn confine(plan: &Confinement) -> std::io::Result<()> {
     // Become a process group leader so the deadline can kill the whole group.
     // SAFETY: setpgid on self with group 0 has no preconditions.
     unsafe { libc::setpgid(0, 0) };
+
+    // 9. Last, so that nothing above is trapped: the filter, whose listener
+    //    goes to the parent. The kernel refuses a filter from a process that
+    //    could gain privileges, so no-new-privileges comes with it.
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+    if let Some((filter, socket)) = plan.syscall_shield.as_ref() {
+        // SAFETY: prctl with this option takes no pointers.
+        if unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        syscall_shield::install(filter, *socket)?;
+    }
 
     Ok(())
 }

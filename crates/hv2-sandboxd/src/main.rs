@@ -163,6 +163,7 @@ mod processes;
 mod reboot;
 #[cfg(target_os = "linux")]
 mod seed;
+mod shields;
 mod sized;
 // Volumes are served with openat2 and O_PATH, which only Linux has; see
 // volumes_unsupported.rs for what other hosts answer.
@@ -271,6 +272,8 @@ struct Options {
     egress_default: Verdict,
     /// Accept an `egressProxy` on a private or internal address.
     allow_private_egress_proxy: bool,
+    /// `--shield-dir`, `--shield-min-monitor`, `--shield-two-keys`.
+    shields: shields::ShieldOptions,
     /// Refuse a template-build upload whose name is not the SHA-256 of its
     /// bytes. Off by default: the E2B SDK names one by its own digest of the
     /// file list, not of the tar.
@@ -438,6 +441,7 @@ fn parse_options() -> Result<Options, String> {
         egress_upstream_ca: None,
         egress_default: Verdict::Deny,
         allow_private_egress_proxy: false,
+        shields: shields::ShieldOptions::default(),
         verify_upload_hash: false,
         tenant_reserved: Vec::new(),
         capacity: 16,
@@ -718,6 +722,13 @@ fn parse_options() -> Result<Options, String> {
                     value(&mut i)?.parse().map_err(|e| format!("{e}"))?,
                 ));
             }
+            "--shield-dir" => opts.shields.dir = Some(value(&mut i)?.into()),
+            "--shield-min-monitor" => {
+                opts.shields.policy.min_monitor_secs = value(&mut i)?
+                    .parse()
+                    .map_err(|e| format!("--shield-min-monitor: {e}"))?;
+            }
+            "--shield-two-keys" => opts.shields.policy.distinct_enforcer = true,
             "--egress-default" => {
                 opts.egress_default = match value(&mut i)?.as_str() {
                     "deny" => Verdict::Deny,
@@ -728,7 +739,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--bind ADDR] [--allow-unauthenticated] [--proxy-open] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
-                     [--capacity N] [--guest-transport mmio|pci] [--cold-start-concurrency N] [--no-template | --require-template] [--prefault] [--sized-templates N] [--sized-template-disk-gb N] [--template-size CPUSxMB ...] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
+                     [--capacity N] [--guest-transport mmio|pci] [--cold-start-concurrency N] [--no-template | --require-template] [--prefault] [--sized-templates N] [--sized-template-disk-gb N] [--template-size CPUSxMB ...] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--shield-dir DIR [--shield-min-monitor SECS] [--shield-two-keys]] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
@@ -1100,6 +1111,8 @@ struct AppState {
     /// question and every connection, so a `connect` or `disconnect` takes
     /// effect at once rather than needing the gateway rebuilt.
     local_networks: Arc<local_network::Registry>,
+    /// Shields laid over every sandbox's network: see shields.rs.
+    shields: shields::NodeShields,
 }
 
 /// What `/metrics` reports beyond live gauges.
@@ -5144,6 +5157,12 @@ async fn start_network(
         .build()
         .map_err(|e| format!("starting the gateway: {e}"))?;
     let handle = gateway.handle();
+    // Asked on every question and connection, so a shield loaded later
+    // covers this sandbox without anything being rebuilt.
+    handle.set_shield(Some(Arc::new(shields::GatewayShield {
+        live: Arc::clone(&state.shields.live),
+        sandbox: sandbox_id.to_string(),
+    })));
     if let Some(scopes) = &state.secret_scopes {
         handle
             .set_secret_store(scopes.get(sandbox_id))
@@ -7004,7 +7023,15 @@ async fn main() -> std::process::ExitCode {
     };
     let events =
         hv2_cluster::events::Dispatcher::new(Arc::clone(&event_store), opts.allow_private_webhooks);
+    let node_shields = match shields::NodeShields::open(&opts.shields) {
+        Ok(node_shields) => node_shields,
+        Err(e) => {
+            eprintln!("hv2-sandboxd: shields: {e}");
+            return std::process::ExitCode::FAILURE;
+        }
+    };
     let state = Arc::new(AppState {
+        shields: node_shields,
         events,
         checkpoints: parking_lot::Mutex::new(HashMap::new()),
         authority,
@@ -7188,6 +7215,19 @@ async fn main() -> std::process::ExitCode {
         "HTTP/2"
     };
 
+    // A shield is out of force the moment it expires; this measures that it
+    // went, whether or not anything asked.
+    {
+        let state = Arc::clone(&state);
+        tokio::spawn(async move {
+            let mut ticker = tokio::time::interval(Duration::from_secs(5));
+            loop {
+                ticker.tick().await;
+                state.shields.tick();
+            }
+        });
+    }
+
     // The proxy asks the node, not the bare map, so that a request for a
     // paused sandbox can resume it.
     let routes: Arc<dyn sandbox_proxy::SandboxRoutes> = Arc::new(ResumingRoutes {
@@ -7225,6 +7265,7 @@ async fn main() -> std::process::ExitCode {
         )
         .route("/networks/{name}/connect", post(networks::connect))
         .route("/networks/{name}/disconnect", post(networks::disconnect))
+        .merge(shields::router())
         .route("/templates", get(list_templates).post(build_template_route))
         .route("/pool", get(pool_route))
         .route("/sandboxes/{sandboxID}/pause", post(pause_route))

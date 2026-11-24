@@ -117,6 +117,12 @@ impl MicroVmSandbox {
                 "a guest has no path to the host's loopback; what a networked VM may reach \
                  is the egress gateway's to decide",
             )
+            // The guest's calls are trapped by the guest's kernel, and nothing
+            // of the host's answers them: the guest agent would have to.
+            .without(
+                Control::SyscallShield,
+                "a guest's system calls are made to its own kernel; a syscall shield would be                  the guest agent's to apply, and it does not yet",
+            )
             // Both are the guest agent's, which kills a program that overruns.
             .with(Control::CpuTime)
             .with(Control::WallClock);
@@ -376,6 +382,13 @@ mod tests {
                 assert!(
                     !controls.enforces(control),
                     "a guest shares no host path, so there is nothing to grant, confine or close"
+                );
+                continue;
+            }
+            if control == Control::SyscallShield {
+                assert!(
+                    !controls.enforces(control),
+                    "the guest agent applies none yet"
                 );
                 continue;
             }

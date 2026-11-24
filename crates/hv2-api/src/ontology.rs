@@ -26,6 +26,7 @@ mod machine_operations;
 mod network_capabilities;
 mod network_operations;
 mod platform_operations;
+mod shield_operations;
 mod spec;
 mod telemetry_operations;
 mod template_operations;
@@ -1677,6 +1678,7 @@ impl HyperMachineOntology {
         .chain(Self::build_checkpoint_capabilities(true))
         .chain(Self::build_network_capabilities(false))
         .chain(Self::build_network_capabilities(true))
+        .chain(Self::build_shield_capabilities())
         .chain(Self::build_api_capabilities())
         .chain(Self::build_template_capabilities(false))
         .chain(Self::build_template_capabilities(true))
@@ -2243,6 +2245,7 @@ impl HyperMachineOntology {
         .chain(Self::build_checkpoint_node_operations())
         .chain(Self::build_network_control_plane_operations())
         .chain(Self::build_network_node_operations())
+        .chain(Self::build_shield_node_operations())
         .chain(Self::build_api_privileged_operations())
         .chain(Self::build_api_runtime_operations())
         .chain(Self::build_api_event_operations())
@@ -2272,6 +2275,7 @@ impl HyperMachineOntology {
             || on(Self::build_machine_node_operations())
             || on(Self::build_checkpoint_node_operations())
             || on(Self::build_network_node_operations())
+            || on(Self::build_shield_node_operations())
             || on(Self::template_operations(true))
             || on(Self::volume_operations(true))
             || on(Self::platform_operations(true))
@@ -4715,6 +4719,7 @@ impl HyperMachineOntology {
                     "node_sandbox_telemetry",
                     "node_sandbox_events",
                     "node_local_networks",
+                    "node_shields",
                     "node_template_catalogue",
                     "node_template_builds",
                     "node_team_template_sharing",
@@ -4734,6 +4739,7 @@ impl HyperMachineOntology {
                         .chain(Self::build_machine_node_operations())
                         .chain(Self::build_checkpoint_node_operations())
                         .chain(Self::build_network_node_operations())
+                        .chain(Self::build_shield_node_operations())
                         .chain(Self::template_operations(true))
                         .chain(Self::volume_operations(true))
                         .chain(Self::platform_operations(true))

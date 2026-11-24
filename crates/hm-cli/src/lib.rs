@@ -16,5 +16,6 @@ pub mod jobs_vm_dispatch;
 pub mod mcp_server;
 pub mod sandbox_cmd;
 pub mod sandbox_vm;
+pub mod shield_cmd;
 pub mod t1_manager;
 pub mod vm_manager;

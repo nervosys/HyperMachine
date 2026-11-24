@@ -66,7 +66,11 @@ pub(super) fn probe() -> Controls {
             Control::NoNewPrivileges,
             unsupported("a no-new-privileges bit"),
         )
-        .without(Control::UiIsolation, unsupported("UI isolation"));
+        .without(Control::UiIsolation, unsupported("UI isolation"))
+        .without(
+            Control::SyscallShield,
+            "syscall shields are a Linux seccomp mechanism".to_string(),
+        );
 
     // The four a sandbox profile provides, where there is one to apply.
     let profiled = [

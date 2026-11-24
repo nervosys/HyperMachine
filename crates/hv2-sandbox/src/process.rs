@@ -183,10 +183,45 @@ impl Sandbox for ProcessSandbox {
         // its own probe reported unavailable, which turns best-effort from
         // "run with what we have" into "fail anyway, later and less clearly".
         let effective = spec.without_controls(&unenforced);
+        if let Some(shield) = &effective.syscall_shield {
+            let trappable = trappable_syscalls();
+            if shield.syscalls.is_empty() {
+                return Err(SandboxError::InvalidSpec(
+                    "a syscall shield traps at least one call".to_string(),
+                ));
+            }
+            if let Some(name) = shield
+                .syscalls
+                .iter()
+                .find(|name| !trappable.contains(&name.as_str()))
+            {
+                return Err(SandboxError::InvalidSpec(format!(
+                    "{name:?} is not a call a syscall shield can trap on this host"
+                )));
+            }
+        }
 
         let mut output = run_confined(command, &effective, io)?;
         output.unenforced = unenforced;
         Ok(output)
+    }
+}
+
+/// The calls a syscall shield may trap on this host.
+pub(crate) fn trappable_syscalls() -> Vec<&'static str> {
+    #[cfg(all(
+        target_os = "linux",
+        any(target_arch = "x86_64", target_arch = "aarch64")
+    ))]
+    {
+        linux::syscall_shield::trappable().collect()
+    }
+    #[cfg(not(all(
+        target_os = "linux",
+        any(target_arch = "x86_64", target_arch = "aarch64")
+    )))]
+    {
+        Vec::new()
     }
 }
 

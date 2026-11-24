@@ -110,6 +110,9 @@ enum Commands {
         command: SandboxCommands,
     },
 
+    /// Signed, approved, expiring rules laid over running sandboxes
+    Shield(hm_cli::shield_cmd::ShieldArgs),
+
     /// Generate shell completions
     Completions {
         /// Shell to generate completions for
@@ -351,6 +354,10 @@ async fn main() -> Result<()> {
                 trusted_proxy,
             )
             .await?;
+        }
+        Commands::Shield(args) => {
+            let code = hm_cli::shield_cmd::run(args).await?;
+            std::process::exit(code);
         }
         Commands::Jobs { store, command } => {
             let code = hm_cli::jobs_cmd::run(&store, command).await?;

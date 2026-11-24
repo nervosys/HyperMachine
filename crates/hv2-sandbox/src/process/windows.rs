@@ -106,6 +106,10 @@ pub(super) fn probe() -> Controls {
             "an AppContainer cannot be kept to one port without an administrator: with no \
              network it is refused loopback too, and with one it has all of it; use the \
              process sandbox on Linux or macOS",
+        )
+        .without(
+            Control::SyscallShield,
+            "syscall shields are a Linux seccomp mechanism",
         );
 
     // Try to create and configure a job. If that fails, this host enforces

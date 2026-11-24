@@ -121,11 +121,18 @@ pub enum Control {
     /// of its own in which connections to the port are handed to the host;
     /// on macOS the sandbox profile allows that one address.
     NetworkProxy,
+    /// Chosen system calls wait on the caller while the workload runs, so
+    /// rules refusing them can be added and removed without a restart: see
+    /// [`SyscallShield`].
+    ///
+    /// Linux only: a seccomp filter returning `SECCOMP_RET_USER_NOTIF` for the
+    /// calls named, answered by a thread in the caller (Linux 5.5 or later).
+    SyscallShield,
 }
 
 impl Control {
     /// Every control, for a backend that wants to describe a full set.
-    pub const ALL: [Control; 12] = [
+    pub const ALL: [Control; 13] = [
         Control::Memory,
         Control::ProcessCount,
         Control::CpuTime,
@@ -138,6 +145,7 @@ impl Control {
         Control::PathDenial,
         Control::UiIsolation,
         Control::NetworkProxy,
+        Control::SyscallShield,
     ];
 }
 
@@ -156,6 +164,7 @@ impl fmt::Display for Control {
             Self::PathDenial => "path denial",
             Self::UiIsolation => "UI isolation",
             Self::NetworkProxy => "network through a proxy",
+            Self::SyscallShield => "syscall shield",
         };
         f.write_str(name)
     }
@@ -345,6 +354,68 @@ pub struct SandboxSpec {
     /// that has not thought about it must not silently get less confinement
     /// than it asked for.
     pub best_effort: bool,
+    /// System calls trapped to the caller while the workload runs. Requires
+    /// [`Control::SyscallShield`].
+    pub syscall_shield: Option<SyscallShield>,
+}
+
+/// A trapped system call, as the caller's [`SyscallGate`] sees it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TrappedCall<'a> {
+    /// Its name, one of those the shield trapped.
+    pub syscall: &'a str,
+    /// Its arguments, as registers. What they point to is not read: it could
+    /// change between being read and the call.
+    pub args: [u64; 6],
+    /// The calling process, as the caller's PID namespace numbers it.
+    pub pid: u32,
+}
+
+/// What happens to a trapped call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GateVerdict {
+    /// It runs.
+    Allow,
+    /// It fails with this errno, 1 to 4095, without running.
+    Deny { errno: i32 },
+    /// The calling process is killed, without the call running.
+    Kill,
+}
+
+/// The caller's answer to trapped calls. Asked once for each, while the call
+/// waits, from a thread of the caller's: it should answer quickly, and it may
+/// answer differently from one moment to the next, which is how a rule is
+/// added to or taken from a running workload.
+pub trait SyscallGate: Send + Sync {
+    fn decide(&self, call: &TrappedCall<'_>) -> GateVerdict;
+}
+
+/// System calls to trap, and who decides them. See [`Control::SyscallShield`].
+///
+/// Which calls are trapped is fixed when the workload starts; what is done
+/// with them is the gate's, and can change. A call that is not trapped never
+/// leaves the kernel, and a rule about it cannot be added later: trap what
+/// shields may need. [`trappable_syscalls`] lists what may be named.
+#[derive(Clone)]
+pub struct SyscallShield {
+    pub syscalls: Vec<String>,
+    pub gate: Arc<dyn SyscallGate>,
+}
+
+impl fmt::Debug for SyscallShield {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SyscallShield")
+            .field("syscalls", &self.syscalls)
+            .finish_non_exhaustive()
+    }
+}
+
+/// The system calls a [`SyscallShield`] may trap on this host: rarely made,
+/// so trapping them costs a workload little, and each one a way in that
+/// advisories have named. Empty where [`Control::SyscallShield`] does not
+/// exist.
+pub fn trappable_syscalls() -> Vec<&'static str> {
+    process::trappable_syscalls()
 }
 
 impl SandboxSpec {
@@ -378,6 +449,7 @@ impl SandboxSpec {
             // that Linux refused outright would not be used.
             isolate_ui: false,
             best_effort: false,
+            syscall_shield: None,
         }
     }
 
@@ -425,6 +497,9 @@ impl SandboxSpec {
         if self.isolate_ui {
             wanted.push(Control::UiIsolation);
         }
+        if self.syscall_shield.is_some() {
+            wanted.push(Control::SyscallShield);
+        }
         wanted.sort();
         wanted
     }
@@ -471,6 +546,7 @@ impl SandboxSpec {
                         spec.network = NetworkPolicy::Host;
                     }
                 }
+                Control::SyscallShield => spec.syscall_shield = None,
             }
         }
         spec
