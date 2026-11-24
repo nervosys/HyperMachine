@@ -84,6 +84,41 @@ it.
 The trapped set is fixed when the workload starts. Which calls are refused is
 not fixed.
 
+### System calls, in VM sandboxes (`--shield-guests`)
+
+A VM sandbox's guest makes its calls to its own kernel. On a node run with
+`--shield-guests`, the node sends the syscall rules in force for each sandbox
+and machine to its guest agent (`hv2-guest-agentd`), as soon as the guest
+answers, at once when a shield changes, and every 5 seconds. From the first
+list on, the agent installs the same seccomp user-notify filter on every
+program it starts (`exec`, `start`, and so every command an SDK runs) and
+answers trapped calls from those rules. The node collects what they matched
+into `GET /shields/hits` on the same 5-second sweep, checking each report
+against its own registry: a hit for a shield not in force for that sandbox is
+counted as `lost`, and a guest cannot report a monitored shield as refusing.
+`GET /shields` lists each guest under `syscallGuests` as `applied`,
+`unsupported` (with the reason) or `unreachable`.
+
+It is off by default because every trapped call in a guest then costs a round
+trip to the agent, whatever the rules say. Its limits:
+
+- The filter is installed as root without no-new-privileges, so `sudo` and
+  setuid programs keep working; the agent must be root.
+- Only programs the agent starts are trapped, with their children. A program
+  started before the first list arrived, or by anything else in the guest
+  (init, a daemon it launched itself), is not.
+- Root in the guest can kill the agent. Its trapped calls then fail with
+  `ENOSYS` until it is restarted, and programs started after that are not
+  trapped. A guest shield stops an unprivileged process; it is not a barrier
+  against guest root.
+- `io_uring_enter`, `splice`, `tee` and `vmsplice` are trapped only in
+  programs started while a rule names them.
+- In a guest, `HV2_SHIELDS=off` in the agent's environment turns it off, and
+  `HV2_SHIELD_SKIP=a,b` leaves more calls untrapped. Both are the guest
+  image's to set.
+- An agent from before this release does not know the operation; its sandbox
+  is listed as `unsupported`, and it still starts.
+
 ### Network, in VM sandboxes
 
 Every sandbox's gateway (`hv2-net`) consults a `ConnectionShield` after its
@@ -107,7 +142,7 @@ node's registry live.
 ### The node
 
 ```
-hv2-sandboxd --network --shield-dir /var/lib/hv2/shields [--shield-min-monitor 3600] [--shield-two-keys]
+hv2-sandboxd --network --shield-dir /var/lib/hv2/shields [--shield-min-monitor 3600] [--shield-two-keys] [--shield-guests]
 ```
 
 The shield directory holds three files:
@@ -175,7 +210,7 @@ by a CLI.
 | | Shirudo | HyperMachine shields |
 | --- | --- | --- |
 | Signature | ML-DSA-87 | ML-DSA-87 (IronCrypto) |
-| Kernel | patched bpf-next, systemd 256 | any Linux ≥ 5.5 (seccomp user-notify); none for network |
+| Kernel | patched bpf-next, systemd 256 | any Linux ≥ 5.5 (seccomp user-notify), host or guest; none for network |
 | What it can refuse | any kernel function an eBPF program can hook | trapped syscalls (with argument tests) and network destinations |
 | Monitor before enforce | no | yes, with a minimum period |
 | Approval | no | signed directives; optional second key |
@@ -203,8 +238,9 @@ by a CLI.
 - **Only the trappable set can be shielded live.** A process sandbox traps
   that set from the start.
 - **In a VM sandbox, the guest's system calls go to its own kernel.** The host
-  does not trap them, and the guest agent does not apply syscall shields yet.
-  A VM sandbox's network is shielded.
+  cannot trap them. With `--shield-guests` the guest agent traps them in the
+  programs it starts (see below); it is a weaker guarantee than a process
+  sandbox's. A VM sandbox's network is always shielded.
 - **A connection refused by the name it sends has already been dialled**,
   though none of the guest's bytes have gone up it.
 - **A name rule refuses DNS questions and the names that connections send.**

@@ -51,6 +51,8 @@ struct HitLog {
     head: Vec<Hit>,
     tail: VecDeque<Hit>,
     recorded: u64,
+    /// Matches an external enforcer (a guest agent) saw and could not keep.
+    lost: u64,
     tally: BTreeMap<String, Tally>,
 }
 
@@ -61,6 +63,9 @@ pub struct HitSnapshot {
     pub hits: Vec<Hit>,
     pub recorded: u64,
     pub dropped: u64,
+    /// Matches a guest agent reported it lost, to a full ring or to a
+    /// refused report, before they reached this log. Not in `recorded`.
+    pub lost: u64,
     /// By shield digest.
     pub tally: BTreeMap<String, Tally>,
 }
@@ -225,6 +230,55 @@ impl Live {
         }
     }
 
+    /// Record a match that an enforcer outside this process saw: a guest
+    /// agent applying this node's rules. `what` is how the call reads, as in
+    /// [`Hit::what`]. The shield is named by `digest`, and its name taken from
+    /// the registry: the reporter is not trusted to name anything.
+    ///
+    /// Returns whether it was recorded. It is not when no shield in force
+    /// here, for `sandbox`, has that digest: the report is counted in
+    /// [`HitSnapshot::lost`] instead. A report of a refusal by a shield this
+    /// node has in monitor mode is recorded as monitored: the node's own mode
+    /// decides, not the reporter.
+    pub fn record_external(
+        &self,
+        sandbox: &str,
+        digest: &str,
+        what: &str,
+        enforced: bool,
+        at: u64,
+    ) -> bool {
+        /// What a hit's text may be, so a guest cannot fill the log.
+        const WHAT_LIMIT: usize = 256;
+        let shield = {
+            let registry = self.registry();
+            let found = registry
+                .in_force(sandbox, at)
+                .find(|(entry, _)| entry.digest == digest)
+                .map(|(entry, mode)| {
+                    (
+                        entry.spec().name.clone(),
+                        entry.digest.clone(),
+                        enforced && mode == Mode::Enforce,
+                    )
+                });
+            found
+        };
+        let Some((name, digest, enforced)) = shield else {
+            self.record_lost(1);
+            return false;
+        };
+        let what: String = what.chars().take(WHAT_LIMIT).collect();
+        self.record(sandbox, &what, vec![(name, digest, enforced)], at);
+        true
+    }
+
+    /// Count matches an external enforcer could not report.
+    pub fn record_lost(&self, count: u64) {
+        let mut log = self.hits.lock().unwrap_or_else(|e| e.into_inner());
+        log.lost = log.lost.saturating_add(count);
+    }
+
     /// The hits, and the tally by shield.
     pub fn hits(&self) -> HitSnapshot {
         let log = self.hits.lock().unwrap_or_else(|e| e.into_inner());
@@ -232,6 +286,7 @@ impl Live {
         HitSnapshot {
             dropped: log.recorded - hits.len() as u64,
             recorded: log.recorded,
+            lost: log.lost,
             hits,
             tally: log.tally.clone(),
         }
@@ -365,6 +420,39 @@ mod tests {
         assert_eq!(hits.dropped, 10);
         assert_eq!(hits.hits[0].seq, 1);
         assert_eq!(hits.hits.last().unwrap().seq, hits.recorded);
+    }
+
+    #[test]
+    fn a_guests_hits_join_the_log_under_the_registrys_names_and_unknown_ones_are_lost() {
+        let (live, digest) = live_with(
+            r#"{"name":"no-ptrace","syscalls":[{"syscall":"ptrace","action":{"kind":"errno","errno":1}}],"scope":{"kind":"sandboxes","ids":["sb"]},"expiresAt":10000}"#,
+        );
+        assert!(live.record_external("sb", &digest, "ptrace(0x0)", false, 5));
+        // Claimed as a refusal while the node has it monitored: monitored.
+        assert!(live.record_external("sb", &digest, "ptrace(0x1)", true, 5));
+        live.update(|r, _| r.set_mode(&digest, Mode::Enforce, "op", 5))
+            .unwrap();
+        assert!(live.record_external("sb", &digest, &"x".repeat(10_000), true, 6));
+        // Expired: no longer in force, so not placed.
+        assert!(!live.record_external("sb", &digest, "ptrace(0x0)", true, 10_000));
+        // Another sandbox's, a digest nobody loaded: refused and counted.
+        assert!(!live.record_external("other", &digest, "ptrace(0x0)", true, 7));
+        assert!(!live.record_external("sb", &"0".repeat(64), "ptrace(0x0)", true, 7));
+        live.record_lost(10);
+        let hits = live.hits();
+        assert_eq!(hits.recorded, 3);
+        assert_eq!(hits.lost, 13);
+        assert_eq!(hits.hits[0].shield, "no-ptrace", "the registry's name");
+        assert_eq!(hits.hits[0].sandbox, "sb");
+        assert!(!hits.hits[0].enforced && !hits.hits[1].enforced && hits.hits[2].enforced);
+        assert_eq!(hits.hits[2].what.chars().count(), 256);
+        assert_eq!(
+            hits.tally[&digest],
+            Tally {
+                monitored: 2,
+                refused: 1
+            }
+        );
     }
 
     #[test]

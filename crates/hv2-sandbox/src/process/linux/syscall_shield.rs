@@ -102,7 +102,7 @@ pub(crate) const TRAPPABLE: &[(&str, libc::c_long)] = &[
 ];
 
 /// The names of the calls a shield may trap on this host.
-pub(crate) fn trappable() -> impl Iterator<Item = &'static str> {
+pub fn trappable() -> impl Iterator<Item = &'static str> {
     TRAPPABLE.iter().map(|(name, _)| *name)
 }
 
@@ -153,7 +153,7 @@ fn jump(code: u16, k: u32, jt: u8, jf: u8) -> libc::sock_filter {
 }
 
 /// The filter program, built before the fork: the child must not allocate.
-pub(crate) struct Filter {
+pub struct Filter {
     program: Vec<libc::sock_filter>,
 }
 
@@ -163,7 +163,7 @@ impl Filter {
     /// # Errors
     ///
     /// If a name is not one [`TRAPPABLE`] lists, or none is given.
-    pub(crate) fn new(names: &[String]) -> Result<Self, String> {
+    pub fn new(names: &[String]) -> Result<Self, String> {
         if names.is_empty() {
             return Err("a syscall shield traps at least one call".into());
         }
@@ -209,8 +209,11 @@ impl Filter {
 /// In the child, between fork and exec: install the filter and pass its
 /// listener to the parent over `socket`. Allocates nothing.
 ///
-/// `PR_SET_NO_NEW_PRIVS` must already be set; the filter is refused without it.
-pub(crate) fn install(filter: &Filter, socket: RawFd) -> io::Result<()> {
+/// `PR_SET_NO_NEW_PRIVS` must already be set, or the caller must hold
+/// `CAP_SYS_ADMIN` (in its user namespace); the filter is refused otherwise.
+/// A caller that sets NNP makes every later `exec` of a setuid binary ignore
+/// the set-id bit, which a root process that will `sudo` cannot accept.
+pub fn install(filter: &Filter, socket: RawFd) -> io::Result<()> {
     let program = libc::sock_fprog {
         len: filter.program.len() as libc::c_ushort,
         filter: filter.program.as_ptr().cast_mut(),
@@ -337,34 +340,51 @@ fn readable(fd: RawFd, millis: i32) -> Option<bool> {
 }
 
 /// The thread that answers trapped calls for one run.
-pub(crate) struct Supervisor {
+pub struct Supervisor {
     stop: Arc<AtomicBool>,
+    /// Set by `detach`: the thread outlives this handle and ends when the
+    /// kernel says no process holds the filter any more.
+    detached: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
 
 impl Supervisor {
     /// Start answering for whatever child sends its listener down `socket`.
-    pub(crate) fn start(socket: OwnedFd, gate: Arc<dyn SyscallGate>) -> io::Result<Self> {
+    pub fn start(socket: OwnedFd, gate: Arc<dyn SyscallGate>) -> io::Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
+        let detached = Arc::new(AtomicBool::new(false));
         let thread = std::thread::Builder::new()
             .name("syscall-shield".into())
             .spawn({
                 let stop = stop.clone();
+                let detached = detached.clone();
                 move || {
                     if let Some(listener) = receive_fd(&socket, &stop) {
                         drop(socket);
-                        serve(&listener, gate.as_ref(), &stop);
+                        serve(&listener, gate.as_ref(), &stop, &detached);
                     }
                 }
             })?;
         Ok(Self {
             stop,
+            detached,
             thread: Some(thread),
         })
     }
 
+    /// Let the supervisor run on its own: it answers until every process the
+    /// filter applies to (the child and whatever it started) has exited, then
+    /// ends. For a caller that cannot say when that is -- a child may leave a
+    /// daemon behind -- and must not stop answering while one is alive: a
+    /// trapped call with no listener fails with ENOSYS.
+    pub fn detach(mut self) {
+        self.detached.store(true, Ordering::Release);
+        // Dropping the JoinHandle detaches the thread.
+        self.thread.take();
+    }
+
     /// Stop, once the workload is gone.
-    pub(crate) fn finish(mut self) {
+    pub fn finish(mut self) {
         self.stop.store(true, Ordering::Release);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
@@ -374,6 +394,9 @@ impl Supervisor {
 
 impl Drop for Supervisor {
     fn drop(&mut self) {
+        if self.detached.load(Ordering::Acquire) {
+            return;
+        }
         self.stop.store(true, Ordering::Release);
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
@@ -381,10 +404,18 @@ impl Drop for Supervisor {
     }
 }
 
-fn serve(listener: &OwnedFd, gate: &dyn SyscallGate, stop: &AtomicBool) {
+fn serve(listener: &OwnedFd, gate: &dyn SyscallGate, stop: &AtomicBool, detached: &AtomicBool) {
     let fd = listener.as_raw_fd();
     loop {
-        match readable(fd, 100) {
+        // A detached supervisor has no stop flag to look at: wait for a
+        // notification or for the last filtered process to exit (POLLHUP),
+        // rather than waking ten times a second for as long as it lives.
+        let wait = if detached.load(Ordering::Acquire) {
+            -1
+        } else {
+            100
+        };
+        match readable(fd, wait) {
             // Every process the filter applied to has exited.
             None => return,
             Some(false) => {
@@ -442,7 +473,7 @@ fn serve(listener: &OwnedFd, gate: &dyn SyscallGate, stop: &AtomicBool) {
 }
 
 /// A socket pair for the listener: the parent's end, and the child's.
-pub(crate) fn channel() -> io::Result<(OwnedFd, OwnedFd)> {
+pub fn channel() -> io::Result<(OwnedFd, OwnedFd)> {
     let mut fds = [0; 2];
     // SAFETY: two ints for the kernel to fill.
     if unsafe {
@@ -462,7 +493,14 @@ pub(crate) fn channel() -> io::Result<(OwnedFd, OwnedFd)> {
 
 /// Whether this host can trap calls to a supervisor and let them continue:
 /// a listener (Linux 5.0) and `SECCOMP_USER_NOTIF_FLAG_CONTINUE` (5.5).
-pub(crate) fn probe() -> Result<(), String> {
+pub fn probe() -> Result<(), String> {
+    probe_with(true)
+}
+
+/// As [`probe`], but says whether the probe child sets
+/// `PR_SET_NO_NEW_PRIVS` first. With `false` it checks what a root caller
+/// that must not set it can do: install the filter on `CAP_SYS_ADMIN` alone.
+pub fn probe_with(no_new_privs: bool) -> Result<(), String> {
     let release = kernel_release().ok_or("the kernel's release could not be read")?;
     if release < (5, 5) {
         return Err(format!(
@@ -478,7 +516,8 @@ pub(crate) fn probe() -> Result<(), String> {
         -1 => Err(format!("fork: {}", io::Error::last_os_error())),
         0 => {
             // SAFETY: prctl takes no pointers here.
-            let ok = unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } == 0
+            let ok = (!no_new_privs
+                || unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } == 0)
                 && install(&filter, theirs.as_raw_fd()).is_ok();
             // SAFETY: leave the child without running the parent's destructors.
             unsafe { libc::_exit(if ok { 0 } else { 1 }) }
@@ -687,5 +726,61 @@ mod tests {
         }
         assert!(trappable().any(|n| n == "ptrace"));
         assert!(!trappable().any(|n| n == "read"));
+    }
+
+    /// A detached supervisor is not stopped by its handle going away: the
+    /// handle is gone before the child even starts, and the child's trapped
+    /// calls are still answered (a stopped one would leave them to fail with
+    /// ENOSYS). The way the guest agent uses the engine: its own `Command`,
+    /// its own `pre_exec`.
+    #[test]
+    fn a_detached_supervisor_answers_after_its_handle_is_gone() {
+        use std::os::unix::process::CommandExt;
+        if let Err(why) = probe() {
+            eprintln!("skipping: {why}");
+            return;
+        }
+        let gate = Arc::new(Changing {
+            seen: Mutex::new(Vec::new()),
+            refuse: 6,
+        });
+        let filter = Filter::new(&["personality".to_string()]).unwrap();
+        let (ours, theirs) = channel().unwrap();
+        Supervisor::start(ours, gate.clone()).unwrap().detach();
+        let fd = theirs.as_raw_fd();
+        let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+        command
+            .args([
+                "--exact",
+                "process::linux::syscall_shield::tests::shield_child",
+                "--nocapture",
+                "--test-threads=1",
+                "-q",
+            ])
+            .env(CHILD, "1");
+        // SAFETY: prctl and `install` only, between fork and exec; the filter
+        // was built before the fork.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                install(&filter, fd)
+            });
+        }
+        let output = command.output().unwrap();
+        drop(theirs);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let lines: Vec<&str> = stdout
+            .lines()
+            .filter(|l| l.starts_with("personality "))
+            .collect();
+        assert_eq!(
+            lines,
+            ["personality false 1"; 6],
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(gate.seen.lock().unwrap().len() >= 6);
     }
 }

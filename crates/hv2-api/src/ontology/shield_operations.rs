@@ -119,7 +119,12 @@ impl HyperMachineOntology {
                      `policy.minMonitorSecs` (--shield-min-monitor: how long a shield must \
                      have been monitored before it may be enforced) and \
                      `policy.distinctEnforcer` (--shield-two-keys: the key that enforces a \
-                     shield must differ from the one that signed it). Read-only, safe for \
+                     shield must differ from the one that signed it), and `syscallGuests` \
+                     (empty unless the node runs with --shield-guests; then, by sandbox or \
+                     machine id, whether its guest agent took the syscall rules: \
+                     `applied`, `unsupported` with the guest's reason, such as an agent \
+                     older than the operation or a kernel without seccomp user-notify, or \
+                     `unreachable`). Read-only, safe for \
                      an agent. Not a promise about the guests: see the warnings on \
                      `load_shield`. The control plane does not route `/shields`, and a \
                      request carrying a team header is 403.",
@@ -135,6 +140,7 @@ impl HyperMachineOntology {
                         "policy": { "type": "object", "properties": {
                             "minMonitorSecs": { "type": "integer" },
                             "distinctEnforcer": { "type": "boolean" } } },
+                        "syscallGuests": { "type": "object", "description": "by sandbox or machine id: {\"status\": \"applied\"|\"unsupported\"|\"unreachable\", \"reason\"?}; empty without --shield-guests" },
                         "shields": { "type": "array", "items": entry_schema() } } })),
                 ))
                 .answers(team_refused())
@@ -163,10 +169,16 @@ impl HyperMachineOntology {
                      propose (`propose_shield`) and leave loading to an operator, who signs \
                      offline with `hm shield sign`. Warnings that hold for every loaded \
                      shield: a shield refuses only trappable system calls (a fixed set of \
-                     about 56 rarely made calls) and network destinations; a system-call \
-                     rule does nothing to a microVM sandbox, whose guest calls go to its own \
-                     kernel and which the host does not trap, so only the NETWORK rules of a \
-                     shield reach this node's sandboxes; a name rule refuses DNS questions \
+                     about 56 rarely made calls) and network destinations; with --shield-guests the node also sends the syscall rules to each \
+                     guest's agent, which traps them in the programs IT starts (exec, \
+                     start, commands) and their children; a program started before the \
+                     first push, or not by the agent (init, a daemon the guest launched \
+                     itself), is not trapped, a guest's root can kill the agent and so \
+                     end its trapping, and four hot calls (io_uring_enter, splice, tee, \
+                     vmsplice) are trapped only in programs started while a rule names \
+                     them; without the flag a system-call rule does nothing to a \
+                     microVM sandbox, whose guest calls go to its own kernel; \
+                     a name rule refuses DNS questions \
                      and the names that connections send, and does NOT block an address the \
                      name resolves to (an address serves other names too; a connection \
                      by address alone needs a CIDR rule); a connection refused by the name \
@@ -230,7 +242,8 @@ impl HyperMachineOntology {
                  of a rule having to match; write a CIDR rule as well as a name rule when \
                  an address must be blocked, because a name rule does not block the \
                  addresses the name resolves to. A syscall rule can name only a trappable \
-                 call and does not reach a microVM sandbox's guest. At most 256 proposals \
+                 call, and reaches a microVM sandbox's guest only on a node run with \
+                 --shield-guests, through its agent. At most 256 proposals \
                  wait at once (409). `proposedBy` is free text the caller chooses, cut to \
                  128 characters, and it is NOT checked against any identity: do not treat it \
                  as who proposed, and never as approval. Anyone holding the cluster token \
@@ -548,8 +561,10 @@ impl HyperMachineOntology {
              `apply_shield_directive`, `reload_shield_keyring`, `attest_shields`) are the \
              operator's and need a key in the node's keyring or its keyring file. The \
              cluster token alone does not put a shield in force, and a request made for a \
-             team is refused (403). Limits: network rules only reach microVM sandboxes \
-             (a guest's system calls are its own kernel's), a name rule does not block the \
+             team is refused (403). Limits: in microVM sandboxes system-call rules \
+             reach only the programs the guest agent starts, and only with \
+             --shield-guests (a guest's root can end that by killing the agent), a name \
+             rule does not block the \
              addresses a name resolves to, the node's attestation key is a file and not a \
              TPM, hits are not persisted, and the measured log is never compacted. See \
              docs/SHIELDS.md and crates/hv2-sandboxd/src/shields.rs",

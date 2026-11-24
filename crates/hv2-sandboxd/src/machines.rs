@@ -96,6 +96,17 @@ fn live<T>(f: impl FnOnce(&mut HashMap<String, Live>) -> T) -> T {
     f(guard.get_or_insert_with(HashMap::new))
 }
 
+/// The running machines whose guests run the agent, by id: what the shield
+/// sweep talks to.
+pub(crate) fn agent_vms() -> Vec<(String, Arc<AgentVM>)> {
+    live(|l| {
+        l.iter()
+            .filter(|(_, m)| m.agent)
+            .map(|(id, m)| (id.clone(), Arc::clone(&m.vm)))
+            .collect()
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum RestartPolicy {
@@ -695,6 +706,8 @@ async fn boot(state: &Arc<AppState>, machine: &Stored) -> Result<(), String> {
         let _ = vm.stop().await;
         return Err(format!("the guest never answered: {e}; {report}"));
     }
+    // A machine is shielded as a sandbox is: before anything is run in it.
+    super::guest_shields::push_now(state, &machine.id, &vm).await;
     let network = match (spec, nic) {
         (Some(spec), Some(device)) => {
             // The guest is configured at every boot, by a script that is safe

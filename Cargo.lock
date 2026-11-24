@@ -3026,6 +3026,7 @@ dependencies = [
 name = "hv2-guest-agent"
 version = "1.2.0"
 dependencies = [
+ "hv2-sandbox",
  "libc",
  "serde",
  "serde_json",

@@ -59,6 +59,18 @@ pub fn is_unsupported_op(error: &AgentError) -> bool {
     matches!(error, AgentError::Script(message) if message.starts_with(UNSUPPORTED_OP_PREFIX))
 }
 
+/// What a guest agent's refusal of [`Operation::SetSyscallShields`] begins
+/// with when the guest cannot trap system calls at all (not root, kernel too
+/// old, seccomp user-notify refused): the sandbox is then not syscall-shielded
+/// whatever the rules say. Matches `agentd`'s `shield::UNAVAILABLE`.
+pub const SYSCALL_SHIELDS_UNAVAILABLE: &str = "syscall shields unavailable:";
+
+/// Whether `error` is a guest agent saying it cannot shield system calls.
+#[must_use]
+pub fn is_syscall_shields_unavailable(error: &AgentError) -> bool {
+    matches!(error, AgentError::Script(m) if m.starts_with(SYSCALL_SHIELDS_UNAVAILABLE))
+}
+
 /// How much request one batch carries at most, in bytes of JSON: half the
 /// frame limit, so framing never pushes a batch over it.
 pub const BATCH_REQUEST_BYTES: usize = MAX_FRAME_BYTES / 2;
@@ -1154,6 +1166,49 @@ impl GuestAgent {
         }
     }
 
+    /// Replace the syscall shields the guest agent applies; see
+    /// [`Operation::SetSyscallShields`]. The list is a state, not a delta.
+    ///
+    /// # Errors
+    ///
+    /// A transport failure; [`is_unsupported_op`] for an agent from before
+    /// the operation existed; the guest's refusal otherwise, which for a guest
+    /// that cannot trap calls begins [`SYSCALL_SHIELDS_UNAVAILABLE`] (see
+    /// [`is_syscall_shields_unavailable`]).
+    pub fn set_syscall_shields(
+        &mut self,
+        rules: Vec<hv2_guest_agent::GuestSyscallRule>,
+        timeout: Duration,
+    ) -> Result<()> {
+        let op = Operation::SetSyscallShields { rules };
+        match self.request_fs_op("set_syscall_shields", op, timeout)? {
+            OpResult::Acknowledged => Ok(()),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a syscall-shield update with {other:?}"
+            ))),
+        }
+    }
+
+    /// Take the matches the guest agent has recorded since the last read, and
+    /// how many it lost to a full ring; see [`Operation::SyscallShieldHits`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::set_syscall_shields`].
+    pub fn syscall_shield_hits(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<(Vec<hv2_guest_agent::GuestHit>, u64)> {
+        match self.request_fs_op("syscall_shield_hits", Operation::SyscallShieldHits, timeout)? {
+            OpResult::SyscallShieldHits { hits, dropped } => Ok((hits, dropped)),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a syscall-shield read with {other:?}"
+            ))),
+        }
+    }
+
     /// Mount a block device in the guest; see [`Operation::MountBlock`].
     /// `Ok(true)` once mounted, `Ok(false)` if `expect_sectors` was set and
     /// the device never reported that size.
@@ -1486,6 +1541,44 @@ mod tests {
         fn open(&self) -> bool {
             self.open
         }
+    }
+
+    #[test]
+    fn an_old_agent_reads_as_unsupported_for_the_syscall_shield_operations_too() {
+        let t = Duration::from_secs(1);
+        let new = || GuestAgent::new(Box::new(HangsUpOnUnknown { open: true }));
+        assert!(is_unsupported_op(
+            &new().set_syscall_shields(Vec::new(), t).unwrap_err()
+        ));
+        assert!(is_unsupported_op(
+            &new().syscall_shield_hits(t).unwrap_err()
+        ));
+    }
+
+    #[test]
+    fn a_guest_that_cannot_shield_says_so_and_a_hit_read_drains() {
+        let t = Duration::from_secs(1);
+        let mut agent = GuestAgent::new(FakeGuest::new(|request| {
+            let result = match request.op {
+                Operation::SetSyscallShields { .. } => OpResult::Failed {
+                    message: format!("{SYSCALL_SHIELDS_UNAVAILABLE} the agent is not root"),
+                },
+                Operation::SyscallShieldHits => OpResult::SyscallShieldHits {
+                    hits: Vec::new(),
+                    dropped: 3,
+                },
+                _ => return None,
+            };
+            Some(Response {
+                id: request.id,
+                version: request.version,
+                result,
+            })
+        }));
+        let error = agent.set_syscall_shields(Vec::new(), t).unwrap_err();
+        assert!(is_syscall_shields_unavailable(&error));
+        assert!(!is_unsupported_op(&error));
+        assert_eq!(agent.syscall_shield_hits(t).unwrap(), (Vec::new(), 3));
     }
 
     #[test]

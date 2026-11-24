@@ -20,6 +20,10 @@ serde_json = { workspace = true }
 # lets the host link it without pulling in a Linux dependency.
 [target.'cfg(target_os = "linux")'.dependencies]
 libc = "0.2"
+# The seccomp user-notify engine, for syscall shields on the programs the
+# agent starts (src/bin/agentd/shield.rs). Binary-only: the library half
+# does not use it.
+hv2-sandbox = { path = "../hv2-sandbox", version = "1.2.0" }
 
 [[bin]]
 name = "hv2-guest-agentd"

@@ -19,6 +19,11 @@ fn refused() -> Response {
 
 pub(crate) async fn supervise(_state: Arc<AppState>) {}
 
+/// No machines run here, so the shield sweep has none to talk to.
+pub(crate) fn agent_vms() -> Vec<(String, Arc<hv2_agent::AgentVM>)> {
+    Vec::new()
+}
+
 pub(crate) async fn create() -> Response {
     refused()
 }

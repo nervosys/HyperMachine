@@ -25,6 +25,10 @@
 //! console, and it is worth being explicit about: do not start this in a guest
 //! whose host you do not trust with the account it runs as.
 
+#[cfg(target_os = "linux")]
+#[path = "agentd/shield.rs"]
+mod shield;
+
 fn main() {
     #[cfg(target_os = "linux")]
     {
@@ -1064,6 +1068,8 @@ mod linux {
                 length,
             } => read_file(&path, offset, length),
             Operation::Stats => OpResult::Stats(stats()),
+            Operation::SetSyscallShields { rules } => super::shield::set_rules(rules),
+            Operation::SyscallShieldHits => super::shield::drain_hits(),
             Operation::ListDir { path, limit } => list_dir(&path, limit),
             Operation::Stat { path, follow } => stat_path(&path, follow),
             Operation::MakeDir {
@@ -1950,6 +1956,12 @@ mod linux {
         let mut command = Command::new(program);
         command.args(args);
         default_signals(&mut command);
+        // Installed while the child is still the agent's own user (root), and
+        // before the closure below drops to the account: see shield.rs.
+        let shielded = match super::shield::attach(&mut command) {
+            Ok(shielded) => shielded,
+            Err(message) => return OpResult::Failed { message },
+        };
         // Added to the agent's own environment rather than replacing it:
         // `env_clear` would leave the program without a `PATH`, and the first
         // thing most of them do is look something up in it. The template's
@@ -2045,7 +2057,12 @@ mod linux {
                 .stderr(Stdio::piped());
         }
 
-        let mut child = match command.spawn() {
+        let spawned = command.spawn();
+        // The child has exec'd or failed: this end of its listener channel is
+        // no longer needed, and holding it would keep the supervisor from
+        // seeing a child that never sent a listener.
+        drop(shielded);
+        let mut child = match spawned {
             Ok(child) => child,
             Err(e) => {
                 return OpResult::Failed {
@@ -2317,6 +2334,10 @@ mod linux {
     ) -> OpResult {
         let mut command = Command::new(program);
         default_signals(&mut command);
+        let shielded = match super::shield::attach(&mut command) {
+            Ok(shielded) => shielded,
+            Err(message) => return OpResult::Failed { message },
+        };
         command
             .args(args)
             .stdin(Stdio::piped())
@@ -2360,7 +2381,9 @@ mod linux {
             }
         }
 
-        let mut child = match command.spawn() {
+        let spawned = command.spawn();
+        drop(shielded);
+        let mut child = match spawned {
             Ok(child) => child,
             Err(e) => {
                 return OpResult::Failed {

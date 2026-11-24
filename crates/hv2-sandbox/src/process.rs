@@ -25,7 +25,7 @@ use crate::{
 };
 
 #[cfg(target_os = "linux")]
-mod linux;
+pub(crate) mod linux;
 
 #[cfg(windows)]
 mod windows;

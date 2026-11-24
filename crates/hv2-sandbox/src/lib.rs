@@ -61,6 +61,29 @@ use std::time::Duration;
 pub mod process;
 pub mod request;
 
+/// The seccomp user-notify engine behind [`Control::SyscallShield`], for a
+/// caller that starts its own processes and so cannot go through
+/// [`ProcessSandbox`]: the in-guest agent is one.
+///
+/// The contract is the engine's own: build a [`seccomp_notify::Filter`] before
+/// `fork`; in the child, call [`seccomp_notify::install`] with the child's end
+/// of a [`seccomp_notify::channel`] (the caller decides about
+/// no-new-privileges: `install` needs it set, or `CAP_SYS_ADMIN`); in the
+/// parent, start a [`seccomp_notify::Supervisor`] on the other end BEFORE the
+/// spawn, because the child's own calls may be trapped and `spawn` does not
+/// return until `exec`. Only calls in [`seccomp_notify::trappable`] can be
+/// named. Pointer arguments are never read.
+#[cfg(all(
+    target_os = "linux",
+    any(target_arch = "x86_64", target_arch = "aarch64")
+))]
+pub mod seccomp_notify {
+    pub use crate::process::linux::syscall_shield::{
+        channel, install, probe, probe_with, trappable, Filter, Supervisor,
+    };
+    pub use crate::{GateVerdict, SyscallGate, TrappedCall};
+}
+
 pub use process::ProcessSandbox;
 
 /// One thing a sandbox can enforce.

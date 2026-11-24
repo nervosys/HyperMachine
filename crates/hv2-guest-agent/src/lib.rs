@@ -33,6 +33,12 @@
 //! that it has none.
 
 pub mod datagram;
+pub mod syscall_shield;
+
+pub use syscall_shield::{
+    GuestArgMatch, GuestArgOp, GuestHit, GuestSyscallAction, GuestSyscallRule, HIT_RING,
+    MAX_SYSCALL_RULES,
+};
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -433,6 +439,28 @@ pub enum Operation {
     /// Answered with [`OpResult::Batch`]. An agent from before this
     /// operation existed drops the connection instead of answering.
     Batch { ops: Vec<Operation> },
+
+    /// Replace the syscall shields the agent applies to the programs it
+    /// starts from now on (and, for calls already trapped, to the ones
+    /// running): see [`syscall_shield`]. The list is a state: the previous
+    /// one is dropped. An empty list lifts every rule.
+    ///
+    /// Answered with [`OpResult::Acknowledged`], or [`OpResult::Failed`]
+    /// whose message begins `syscall shields unavailable:` when this guest
+    /// cannot trap calls (the agent is not root, the kernel is older than
+    /// 5.5, seccomp user-notify is refused): nothing is applied then, and
+    /// the host should say the sandbox is not syscall-shielded. A list that
+    /// does not validate is refused whole with [`OpResult::Failed`] and the
+    /// previous list stays. An agent from before this operation existed
+    /// drops the connection instead of answering.
+    SetSyscallShields { rules: Vec<GuestSyscallRule> },
+
+    /// Take the matches the agent has recorded since the last read.
+    ///
+    /// Answered with [`OpResult::SyscallShieldHits`]. Draining: a hit is
+    /// returned once. An agent from before this operation existed drops the
+    /// connection instead of answering.
+    SyscallShieldHits,
 }
 
 /// The filesystems [`Operation::MountBlock`] may mount, on the wire as
@@ -773,6 +801,14 @@ pub enum OpResult {
     /// order; shorter than the batch when the agent stopped at
     /// [`MAX_BATCH_REPLY_BYTES`].
     Batch { results: Vec<OpResult> },
+    /// Answer to [`Operation::SyscallShieldHits`].
+    SyscallShieldHits {
+        /// Oldest first, at most [`HIT_RING`].
+        hits: Vec<GuestHit>,
+        /// Matches lost because the agent's ring was full since the last
+        /// read. They are not in `hits`.
+        dropped: u64,
+    },
     /// The request could not be carried out at all.
     Failed { message: String },
 }

@@ -82,7 +82,7 @@ use super::driver;
 
 mod relay;
 #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-pub(super) mod syscall_shield;
+pub(crate) mod syscall_shield;
 
 /// Distinguishes the scratch directories this process creates — cgroups for a
 /// run, and the throwaway roots the filesystem probe pivots into — from each

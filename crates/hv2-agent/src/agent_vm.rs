@@ -934,6 +934,40 @@ impl AgentVM {
         .await
     }
 
+    /// Replace the syscall shields the guest's agent applies to the programs
+    /// it starts; see [`hv2_guest_agent::Operation::SetSyscallShields`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir_in_guest`]; [`crate::is_syscall_shields_unavailable`]
+    /// when the guest cannot trap calls.
+    pub async fn set_syscall_shields_in_guest(
+        &self,
+        rules: Vec<hv2_guest_agent::GuestSyscallRule>,
+        timeout: Duration,
+    ) -> Result<()> {
+        self.fs_op("set_syscall_shields", timeout, move |a| {
+            a.set_syscall_shields(rules, timeout)
+        })
+        .await
+    }
+
+    /// Take the guest agent's recorded syscall-shield matches; see
+    /// [`hv2_guest_agent::Operation::SyscallShieldHits`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::set_syscall_shields_in_guest`].
+    pub async fn syscall_shield_hits_in_guest(
+        &self,
+        timeout: Duration,
+    ) -> Result<(Vec<hv2_guest_agent::GuestHit>, u64)> {
+        self.fs_op("syscall_shield_hits", timeout, move |a| {
+            a.syscall_shield_hits(timeout)
+        })
+        .await
+    }
+
     /// Mount a block device in the guest with no shell; see
     /// [`hv2_guest_agent::Operation::MountBlock`]. `Ok(false)` means
     /// `expect_sectors` was set and the device never reported that size.

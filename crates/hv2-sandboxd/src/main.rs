@@ -145,6 +145,7 @@ mod env_vars;
 mod forwards;
 mod git_repos;
 mod guest_setup;
+mod guest_shields;
 mod history;
 mod identity;
 mod idle;
@@ -272,7 +273,8 @@ struct Options {
     egress_default: Verdict,
     /// Accept an `egressProxy` on a private or internal address.
     allow_private_egress_proxy: bool,
-    /// `--shield-dir`, `--shield-min-monitor`, `--shield-two-keys`.
+    /// `--shield-dir`, `--shield-min-monitor`, `--shield-two-keys`,
+    /// `--shield-guests`.
     shields: shields::ShieldOptions,
     /// Refuse a template-build upload whose name is not the SHA-256 of its
     /// bytes. Off by default: the E2B SDK names one by its own digest of the
@@ -729,6 +731,7 @@ fn parse_options() -> Result<Options, String> {
                     .map_err(|e| format!("--shield-min-monitor: {e}"))?;
             }
             "--shield-two-keys" => opts.shields.policy.distinct_enforcer = true,
+            "--shield-guests" => opts.shields.guests = true,
             "--egress-default" => {
                 opts.egress_default = match value(&mut i)?.as_str() {
                     "deny" => Verdict::Deny,
@@ -739,7 +742,7 @@ fn parse_options() -> Result<Options, String> {
             "--help" | "-h" => {
                 println!(
                     "usage: hv2-sandboxd [--port N] [--proxy-port N] [--bind ADDR] [--allow-unauthenticated] [--proxy-open] [--memory-gb N | --memory-mb N] [--cpu-cores N] \
-                     [--capacity N] [--guest-transport mmio|pci] [--cold-start-concurrency N] [--no-template | --require-template] [--prefault] [--sized-templates N] [--sized-template-disk-gb N] [--template-size CPUSxMB ...] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--shield-dir DIR [--shield-min-monitor SECS] [--shield-two-keys]] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
+                     [--capacity N] [--guest-transport mmio|pci] [--cold-start-concurrency N] [--no-template | --require-template] [--prefault] [--sized-templates N] [--sized-template-disk-gb N] [--template-size CPUSxMB ...] [--no-net-offload] [--template NAME=INITRAMFS ...] [--guest-kit DIR] [--snapshot-store DIR] [--shield-dir DIR [--shield-min-monitor SECS] [--shield-two-keys] [--shield-guests]] [--mtls-ca F --mtls-cert F --mtls-key F] [--identity-issuer URL] [--trust-domain D] [--identity-key PKCS8-DER] [--evict-idle-after SECS] [--idle-pause-after SECS] \
                      [--network [--egress-default deny|allow] [--allow-private-egress-proxy] \
                      [--tenant-reserved-cidr CIDR]...] \
                      [--tls-cert F --tls-key F] \
@@ -2620,6 +2623,9 @@ async fn register(
     state
         .routes
         .insert(&sandbox_id, ENVD_PORT, running.process_addr);
+    // Shielded before it is announced. Never fails the create: an agent that
+    // cannot take the rules is listed under `syscallGuests`, not refused.
+    guest_shields::push_now(state, &sandbox_id, &running.vm).await;
     let count = {
         let mut sandboxes = state.sandboxes.lock();
         // Reload also attaches stores under this registry lock. Refresh after
@@ -7222,8 +7228,12 @@ async fn main() -> std::process::ExitCode {
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(Duration::from_secs(5));
             loop {
-                ticker.tick().await;
+                tokio::select! {
+                    _ = ticker.tick() => {}
+                    () = state.shields.guests.nudged() => {}
+                }
                 state.shields.tick();
+                guest_shields::sweep(&state).await;
             }
         });
     }

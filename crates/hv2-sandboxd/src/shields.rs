@@ -4,8 +4,12 @@
 //!
 //! A sandbox here is a microVM, so what a shield refuses here is network:
 //! every sandbox's gateway asks [`GatewayShield`] on each DNS question and
-//! connection. Its system calls are made to its own kernel, which a shield
-//! does not reach; the process sandboxes elsewhere take syscall rules.
+//! connection. Its system calls are made to its own kernel, which the node
+//! cannot trap; the guest agent can, for the programs it starts, and
+//! [`crate::guest_shields`] pushes the syscall rules in force to it and reads
+//! back what it matched. A guest whose agent cannot do that (an old template,
+//! a kernel without seccomp user-notify) is listed as such under
+//! `syscallGuests` in `GET /shields`.
 //!
 //! # Who may do what
 //!
@@ -56,6 +60,9 @@ pub(crate) struct NodeShields {
     dir: Option<PathBuf>,
     /// One save at a time, so an older registry never overwrites a newer.
     saving: parking_lot::Mutex<()>,
+    /// What each guest has been given of the syscall rules, and a way to
+    /// wake the sweep that gives it.
+    pub(crate) guests: crate::guest_shields::GuestShields,
 }
 
 /// What `--shield-*` options set.
@@ -63,6 +70,8 @@ pub(crate) struct NodeShields {
 pub(crate) struct ShieldOptions {
     pub(crate) dir: Option<PathBuf>,
     pub(crate) policy: Policy,
+    /// `--shield-guests`: send syscall rules to guest agents too.
+    pub(crate) guests: bool,
 }
 
 impl NodeShields {
@@ -81,6 +90,7 @@ impl NodeShields {
                 key: SigningKey::generate().map_err(|e| format!("shield key: {e}"))?,
                 dir: None,
                 saving: parking_lot::Mutex::new(()),
+                guests: crate::guest_shields::GuestShields::new(options.guests),
             });
         };
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -108,6 +118,7 @@ impl NodeShields {
             key,
             dir: Some(dir),
             saving: parking_lot::Mutex::new(()),
+            guests: crate::guest_shields::GuestShields::new(options.guests),
         };
         if !events.is_empty() {
             shields.save()?;
@@ -259,6 +270,9 @@ fn refused(e: hv2_shield::ShieldError) -> Response {
 
 /// After a change: save, and answer with the event.
 fn changed(node: &NodeShields, event: Option<Event>) -> Response {
+    // In force in memory whether or not it could be saved: the guests are
+    // told either way.
+    node.guests.nudge();
     if let Err(e) = node.save() {
         // In force in memory, and not on disk: say so rather than pretend.
         tracing::error!("shields: saving: {e}");
@@ -288,6 +302,7 @@ pub(crate) async fn list(State(state): State<Arc<AppState>>) -> Response {
             "distinctEnforcer": policy.distinct_enforcer,
         },
         "shields": entries,
+        "syscallGuests": node.guests.status(),
     }))
     .into_response()
 }
@@ -398,6 +413,8 @@ pub(crate) async fn reload_keyring(State(state): State<Arc<AppState>>) -> Respon
     };
     let signers = keyring.signers().count();
     let events = node.live.set_keyring(keyring, now_secs());
+    // A retired shield must leave the guests too.
+    node.guests.nudge();
     if let Err(e) = node.save() {
         return api_error(StatusCode::INTERNAL_SERVER_ERROR, e);
     }
@@ -457,6 +474,7 @@ mod tests {
         ShieldOptions {
             dir: Some(dir.to_path_buf()),
             policy: Policy::default(),
+            guests: false,
         }
     }
 
