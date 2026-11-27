@@ -912,7 +912,7 @@ impl GuestAgent {
     /// Read all of `path` in the guest, up to `limit` bytes.
     ///
     /// Each answer has `timeout`, and the whole file `timeout` and the time
-    /// `limit` bytes take at [`SLOWEST_READ`]: a guest that answers every
+    /// `limit` bytes take at `SLOWEST_READ`: a guest that answers every
     /// request, a byte at a time, does not hold the caller for days.
     ///
     /// # Errors

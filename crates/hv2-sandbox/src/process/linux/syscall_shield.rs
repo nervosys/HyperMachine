@@ -162,7 +162,7 @@ impl Filter {
     ///
     /// # Errors
     ///
-    /// If a name is not one [`TRAPPABLE`] lists, or none is given.
+    /// If a name is not one `TRAPPABLE` lists, or none is given.
     pub fn new(names: &[String]) -> Result<Self, String> {
         if names.is_empty() {
             return Err("a syscall shield traps at least one call".into());
