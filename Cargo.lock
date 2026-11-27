@@ -2658,7 +2658,7 @@ version = "1.2.0"
 dependencies = [
  "anyhow",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chrono",
  "clap",
  "clap_complete",
@@ -2913,7 +2913,7 @@ version = "1.2.0"
 dependencies = [
  "async-trait",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "chrono",
  "form_urlencoded",
  "hmac",
@@ -3067,7 +3067,7 @@ version = "1.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "http-body-util",
  "hv2-core",
@@ -3203,7 +3203,7 @@ dependencies = [
 name = "hv2-urltrace"
 version = "1.2.0"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "rustls",
  "serde",
  "serde_json",
