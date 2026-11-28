@@ -39,14 +39,35 @@
 //! to guests, on a timeout, instead of a request path that fans out to every
 //! VM and can hang on a paused one. A hit therefore shows at most ~5 s late.
 //! The agent holds 1024 between reads and says how many it lost.
+//!
+//! # Hook rules
+//!
+//! A shield's `hooks` rules go the same way, by their own operation
+//! (`SetHookShields`) and with their own record of what each guest was last
+//! given (`pushed_hooks`), under the same `--shield-guests` flag. Three
+//! differences:
+//!
+//! - A hook rule covers every process in the guest, not only the programs the
+//!   agent starts, and is in force as soon as the guest has it.
+//! - An empty list is never sent to a guest that was not sent a list before:
+//!   it would change nothing, and an agent that predates hook shields would
+//!   be marked unsupported for nothing. It is sent to lift rules.
+//! - The agent reports counts, not calls: a hit read back says "N matches of
+//!   this hook", and enters the log as one entry that adds N to the shield's
+//!   tally.
 
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
 
-use hv2_agent::{is_syscall_shields_unavailable, is_unsupported_op, AgentVM};
-use hv2_guest_agent::{GuestArgMatch, GuestArgOp, GuestHit, GuestSyscallAction, GuestSyscallRule};
+use hv2_agent::{
+    is_hook_shields_unavailable, is_syscall_shields_unavailable, is_unsupported_op, AgentVM,
+};
+use hv2_guest_agent::{
+    GuestArgMatch, GuestArgOp, GuestHit, GuestHookHit, GuestHookRule, GuestSyscallAction,
+    GuestSyscallRule,
+};
 use hv2_shield::registry::Mode;
 use hv2_shield::spec::{ArgOp, SyscallAction};
 use hv2_shield::{now_secs, Live, Registry};
@@ -87,6 +108,8 @@ pub(crate) struct GuestShields {
     /// `--shield-guests`.
     enabled: bool,
     pushed: parking_lot::Mutex<HashMap<String, Pushed>>,
+    /// The same, for hook rules.
+    pushed_hooks: parking_lot::Mutex<HashMap<String, Pushed>>,
     nudge: tokio::sync::Notify,
 }
 
@@ -109,18 +132,27 @@ impl GuestShields {
     }
 
     /// For `GET /shields`: each pushed-to sandbox and what became of it.
+    ///
+    /// Each entry is the syscall push's status, plus `"hooks"` with the hook
+    /// push's when hook rules were pushed to that sandbox. A sandbox that was
+    /// only ever pushed hook rules has just `"hooks"`.
     pub(crate) fn status(&self) -> Value {
+        let describe = |status: &Status| match status {
+            Status::Applied => json!({ "status": "applied" }),
+            Status::Unsupported(why) => json!({ "status": "unsupported", "reason": why }),
+            Status::Unreachable => json!({ "status": "unreachable" }),
+        };
         let pushed = self.pushed.lock();
+        let pushed_hooks = self.pushed_hooks.lock();
         let mut out = serde_json::Map::new();
         for (id, p) in pushed.iter() {
-            out.insert(
-                id.clone(),
-                match &p.status {
-                    Status::Applied => json!({ "status": "applied" }),
-                    Status::Unsupported(why) => json!({ "status": "unsupported", "reason": why }),
-                    Status::Unreachable => json!({ "status": "unreachable" }),
-                },
-            );
+            out.insert(id.clone(), describe(&p.status));
+        }
+        for (id, p) in pushed_hooks.iter() {
+            let entry = out.entry(id.clone()).or_insert_with(|| json!({}));
+            if let Some(entry) = entry.as_object_mut() {
+                entry.insert("hooks".into(), describe(&p.status));
+            }
         }
         Value::Object(out)
     }
@@ -174,7 +206,38 @@ pub(crate) fn translate(registry: &Registry, sandbox: &str, now: u64) -> Vec<Gue
         .collect()
 }
 
+/// The hook rules of the shields in force for `sandbox`, as the guest agent
+/// takes them: every `hooks` rule of every shield, shield by shield in the
+/// order the registry yields them, a shield's rules in the order it wrote
+/// them. A hook rule decides by the first enforcing shield in this order, as
+/// the agent's `attribute` and the engine's merge both do.
+pub(crate) fn translate_hooks(registry: &Registry, sandbox: &str, now: u64) -> Vec<GuestHookRule> {
+    registry
+        .in_force(sandbox, now)
+        .flat_map(|(entry, mode)| {
+            entry.spec().hooks.iter().map(move |rule| GuestHookRule {
+                shield: entry.spec().name.clone(),
+                digest: entry.digest.clone(),
+                hook: rule.hook.clone(),
+                errno: rule.errno,
+                enforce: mode == Mode::Enforce,
+                // The agent's own backstop, on the guest's clock: the registry's
+                // expiry, as for syscall rules.
+                expires_at: entry.expires_at,
+            })
+        })
+        .collect()
+}
+
 fn fingerprint(rules: &[GuestSyscallRule]) -> u64 {
+    fingerprint_of(rules)
+}
+
+fn fingerprint_hooks(rules: &[GuestHookRule]) -> u64 {
+    fingerprint_of(rules)
+}
+
+fn fingerprint_of<T: serde::Serialize>(rules: &[T]) -> u64 {
     if rules.is_empty() {
         return 0;
     }
@@ -203,11 +266,75 @@ pub(crate) async fn push_now(state: &AppState, id: &str, vm: &Arc<AgentVM>) {
     if !state.shields.guests.enabled {
         return;
     }
-    let rules = {
+    let (rules, hook_rules) = {
         let registry = state.shields.live.registry();
-        translate(&registry, id, now_secs())
+        let now = now_secs();
+        (
+            translate(&registry, id, now),
+            translate_hooks(&registry, id, now),
+        )
     };
     sync_one(&state.shields.guests, id, vm, rules).await;
+    sync_hooks(&state.shields.guests, id, vm, hook_rules).await;
+}
+
+/// Give a sandbox's guest the hook rules in force for it, unless it already
+/// has exactly them. As [`sync_one`], except that an empty list is sent only
+/// to a guest this VM was sent a list before, to lift it.
+async fn sync_hooks(guests: &GuestShields, id: &str, vm: &Arc<AgentVM>, rules: Vec<GuestHookRule>) {
+    let key = Arc::as_ptr(vm) as usize;
+    let list = fingerprint_hooks(&rules);
+    {
+        let mut pushed = guests.pushed_hooks.lock();
+        let prior = pushed
+            .get(id)
+            .filter(|p| p.vm == key)
+            .map(|p| (p.list, p.status.clone()));
+        match prior {
+            // Same VM, same list, and the agent either has it or cannot take
+            // any: nothing to say. Unreachable is retried.
+            Some((was, status)) if was == list && status != Status::Unreachable => return,
+            // It cannot take a list, so it has none to lift.
+            Some((_, Status::Unsupported(_))) if rules.is_empty() => {
+                if let Some(p) = pushed.get_mut(id) {
+                    p.list = 0;
+                }
+                return;
+            }
+            // Never sent a list: there is nothing for an empty one to lift.
+            None if rules.is_empty() => {
+                pushed.remove(id);
+                return;
+            }
+            _ => {}
+        }
+    }
+    let status = match vm.set_hook_shields_in_guest(rules, GUEST_TIMEOUT).await {
+        Ok(()) => Status::Applied,
+        Err(e) if is_unsupported_op(&e) => {
+            Status::Unsupported("the guest agent predates hook shields".into())
+        }
+        Err(e) if is_hook_shields_unavailable(&e) => Status::Unsupported(e.to_string()),
+        Err(e) => {
+            tracing::debug!("hook shields for {id}: guest not reached: {e}");
+            Status::Unreachable
+        }
+    };
+    let mut pushed = guests.pushed_hooks.lock();
+    let was = pushed.get(id).map(|p| p.status.clone());
+    if let Status::Unsupported(why) = &status {
+        if was.as_ref() != Some(&status) {
+            tracing::warn!("sandbox {id} is not hook-shielded: {why}");
+        }
+    }
+    pushed.insert(
+        id.to_string(),
+        Pushed {
+            vm: key,
+            list,
+            status,
+        },
+    );
 }
 
 async fn sync_one(
@@ -282,6 +409,12 @@ pub(crate) async fn sweep(state: &Arc<AppState>) {
         .pushed
         .lock()
         .retain(|id, _| live_ids.contains(id.as_str()));
+    state
+        .shields
+        .guests
+        .pushed_hooks
+        .lock()
+        .retain(|id, _| live_ids.contains(id.as_str()));
 
     for chunk in targets.chunks(CONCURRENCY) {
         let mut tasks = tokio::task::JoinSet::new();
@@ -289,12 +422,18 @@ pub(crate) async fn sweep(state: &Arc<AppState>) {
             let state = Arc::clone(state);
             let (id, vm) = (id.clone(), Arc::clone(vm));
             tasks.spawn(async move {
-                let rules = {
+                let (rules, hook_rules) = {
                     let registry = state.shields.live.registry();
-                    translate(&registry, &id, now_secs())
+                    let now = now_secs();
+                    (
+                        translate(&registry, &id, now),
+                        translate_hooks(&registry, &id, now),
+                    )
                 };
                 sync_one(&state.shields.guests, &id, &vm, rules).await;
+                sync_hooks(&state.shields.guests, &id, &vm, hook_rules).await;
                 read_hits(&state, &id, &vm).await;
+                read_hook_hits(&state, &id, &vm).await;
             });
         }
         while tasks.join_next().await.is_some() {}
@@ -328,7 +467,48 @@ async fn read_hits(state: &AppState, id: &str, vm: &Arc<AgentVM>) {
 /// registry by `Live::record_external`, and what it cannot place is counted.
 pub(crate) fn record(live: &Live, id: &str, hits: &[GuestHit], dropped: u64, now: u64) {
     for hit in hits {
-        live.record_external(id, &hit.digest, &what(hit), hit.enforced, now);
+        live.record_external(id, &hit.digest, &what(hit), hit.enforced, now, 1);
+    }
+    if dropped > 0 {
+        live.record_lost(dropped);
+    }
+}
+
+/// Take a guest's counted hook matches into the node's log, if it has been
+/// given hook rules at all.
+async fn read_hook_hits(state: &AppState, id: &str, vm: &Arc<AgentVM>) {
+    let applied = state
+        .shields
+        .guests
+        .pushed_hooks
+        .lock()
+        .get(id)
+        .is_some_and(|p| p.status == Status::Applied);
+    if !applied {
+        return;
+    }
+    let (hits, dropped) = match vm.hook_shield_hits_in_guest(GUEST_TIMEOUT).await {
+        Ok(read) => read,
+        Err(e) => {
+            tracing::debug!("hook shield hits for {id}: guest not reached: {e}");
+            return;
+        }
+    };
+    record_hooks(&state.shields.live, id, &hits, dropped, now_secs());
+}
+
+/// As [`record`], for hook hits. A hit stands for `count` matches the guest's
+/// kernel counted: one entry in the log, `count` on the shield's tally.
+pub(crate) fn record_hooks(live: &Live, id: &str, hits: &[GuestHookHit], dropped: u64, now: u64) {
+    for hit in hits {
+        live.record_external(
+            id,
+            &hit.digest,
+            &format!("hook {}", hit.hook),
+            hit.enforced,
+            now,
+            hit.count,
+        );
     }
     if dropped > 0 {
         live.record_lost(dropped);
@@ -347,7 +527,14 @@ mod tests {
         {"syscall":"ptrace","action":{"kind":"kill"}}],
         "scope":{"kind":"sandboxes","ids":["sb"]},"expiresAt":4102444800}"#;
 
-    fn live() -> (Live, String) {
+    const HOOKS_A: &str = r#"{"name":"no-mount","hooks":[
+        {"hook":"sb_mount","errno":1},{"hook":"socket_create","errno":13}],
+        "scope":{"kind":"sandboxes","ids":["sb"]},"expiresAt":4102444800}"#;
+    const HOOKS_B: &str = r#"{"name":"no-sockets","hooks":[{"hook":"socket_create","errno":99}],
+        "scope":{"kind":"sandboxes","ids":["sb"]},"expiresAt":4102444800}"#;
+
+    /// A node with each of `specs` loaded, in monitor mode, and their digests.
+    fn live_with(specs: &[&str]) -> (Live, Vec<String>) {
         let key = SigningKey::generate().unwrap();
         let mut keyring = Keyring::default();
         keyring.trust(key.public_key().clone());
@@ -358,11 +545,19 @@ mod tests {
             }),
             keyring,
         );
-        let signed = SignedShield::sign(SPEC, &key).unwrap();
-        live.update(|r, k| r.load(&signed, k, &signed.signer, 1))
-            .unwrap();
-        let digest = hv2_shield::to_hex(&signed.digest());
-        (live, digest)
+        let mut digests = Vec::new();
+        for spec in specs {
+            let signed = SignedShield::sign(spec, &key).unwrap();
+            live.update(|r, k| r.load(&signed, k, &signed.signer, 1))
+                .unwrap();
+            digests.push(hv2_shield::to_hex(&signed.digest()));
+        }
+        (live, digests)
+    }
+
+    fn live() -> (Live, String) {
+        let (live, mut digests) = live_with(&[SPEC]);
+        (live, digests.remove(0))
     }
 
     #[test]
@@ -460,6 +655,158 @@ mod tests {
         assert_eq!(
             hits.hits[0].what,
             "unshare(0x10000000, 0x0, 0x0, 0x0, 0x0, 0x0) [guest pid 77]"
+        );
+    }
+
+    #[test]
+    fn hook_rules_follow_the_registrys_order_with_each_shields_mode_and_expiry() {
+        let (live, digests) = live_with(&[SPEC, HOOKS_A, HOOKS_B]);
+        let (digest_a, digest_b) = (&digests[1], &digests[2]);
+        let rules = translate_hooks(&live.registry(), "sb", 2);
+        // The registry's own order, shield by shield; the syscall-only shield
+        // contributes nothing, and a shield's rules stay in the order written.
+        let mut expected: Vec<(String, &str)> = Vec::new();
+        for (entry, _) in live.registry().in_force("sb", 2) {
+            let hooks: &[&str] = if entry.digest == *digest_a {
+                &["sb_mount", "socket_create"]
+            } else if entry.digest == *digest_b {
+                &["socket_create"]
+            } else {
+                &[]
+            };
+            expected.extend(hooks.iter().map(|h| (entry.digest.clone(), *h)));
+        }
+        assert_eq!(expected.len(), 3);
+        assert_eq!(
+            rules
+                .iter()
+                .map(|r| (r.digest.clone(), r.hook.as_str()))
+                .collect::<Vec<_>>(),
+            expected
+        );
+        for rule in &rules {
+            let (name, errno) = match (rule.digest == *digest_a, rule.hook.as_str()) {
+                (true, "sb_mount") => ("no-mount", 1),
+                (true, _) => ("no-mount", 13),
+                (false, _) => ("no-sockets", 99),
+            };
+            assert_eq!((rule.shield.as_str(), rule.errno), (name, errno));
+            assert!(!rule.enforce, "loaded in monitor mode");
+            // The registry's expiry, capped at the lifetime limit from loading.
+            let capped = live.registry().get(&rule.digest).unwrap().expires_at;
+            assert!(capped < 4_102_444_800);
+            assert_eq!(rule.expires_at, capped);
+        }
+
+        live.update(|r, _| r.set_mode(digest_a, Mode::Enforce, "op", 3))
+            .unwrap();
+        for rule in translate_hooks(&live.registry(), "sb", 4) {
+            assert_eq!(rule.enforce, rule.digest == *digest_a, "{rule:?}");
+        }
+
+        // Out of scope, and expired: none.
+        assert!(translate_hooks(&live.registry(), "other", 4).is_empty());
+        assert!(translate_hooks(&live.registry(), "sb", 4_102_444_800).is_empty());
+        // A list of syscall rules alone is no hook rules.
+        let (syscalls_only, _) = self::live();
+        assert!(translate_hooks(&syscalls_only.registry(), "sb", 2).is_empty());
+    }
+
+    #[test]
+    fn a_hook_list_has_a_fingerprint_that_changes_with_it_and_is_zero_for_none() {
+        let (live, digests) = live_with(&[HOOKS_A]);
+        assert_eq!(fingerprint_hooks(&[]), 0);
+        let monitored = translate_hooks(&live.registry(), "sb", 2);
+        live.update(|r, _| r.set_mode(&digests[0], Mode::Enforce, "op", 3))
+            .unwrap();
+        let enforced = translate_hooks(&live.registry(), "sb", 4);
+        assert_ne!(fingerprint_hooks(&monitored), 0);
+        assert_ne!(fingerprint_hooks(&monitored), fingerprint_hooks(&enforced));
+    }
+
+    #[test]
+    fn guest_hook_hits_enter_the_log_with_their_count() {
+        let (live, digests) = live_with(&[HOOKS_A]);
+        let digest = &digests[0];
+        live.update(|r, _| r.set_mode(digest, Mode::Enforce, "op", 3))
+            .unwrap();
+        let hit = |digest: &str, enforced, count| GuestHookHit {
+            at: 0,
+            shield: "forged name".into(),
+            digest: digest.into(),
+            hook: "sb_mount".into(),
+            enforced,
+            count,
+        };
+        record_hooks(
+            &live,
+            "sb",
+            &[
+                hit(digest, true, 5),
+                hit(digest, false, 2),
+                hit(&"0".repeat(64), true, 3),
+            ],
+            4,
+            9,
+        );
+        let hits = live.hits();
+        assert_eq!(hits.recorded, 2, "one entry per hit, whatever its count");
+        assert_eq!(
+            hits.lost, 7,
+            "4 the guest dropped, 3 matches it could not place"
+        );
+        assert_eq!(hits.hits[0].shield, "no-mount", "the registry's name");
+        assert_eq!(hits.hits[0].at, 9, "the node's clock");
+        assert_eq!(hits.hits[0].what, "hook sb_mount");
+        assert!(hits.hits[0].enforced && !hits.hits[1].enforced);
+        assert_eq!(
+            hits.tally[digest],
+            hv2_shield::Tally {
+                monitored: 2,
+                refused: 5
+            }
+        );
+    }
+
+    #[test]
+    fn the_status_lists_hook_pushes_beside_syscall_ones_and_alone() {
+        let guests = GuestShields::new(true);
+        let pushed = |status| Pushed {
+            vm: 1,
+            list: 1,
+            status,
+        };
+        guests
+            .pushed
+            .lock()
+            .insert("both".into(), pushed(Status::Applied));
+        guests.pushed_hooks.lock().insert(
+            "both".into(),
+            pushed(Status::Unsupported(
+                "the guest agent predates hook shields".into(),
+            )),
+        );
+        guests
+            .pushed_hooks
+            .lock()
+            .insert("hooks-only".into(), pushed(Status::Unreachable));
+        guests
+            .pushed
+            .lock()
+            .insert("syscalls-only".into(), pushed(Status::Unreachable));
+        assert_eq!(
+            guests.status(),
+            json!({
+                "both": {
+                    "status": "applied",
+                    "hooks": {
+                        "status": "unsupported",
+                        "reason": "the guest agent predates hook shields"
+                    }
+                },
+                "hooks-only": { "hooks": { "status": "unreachable" } },
+                "syscalls-only": { "status": "unreachable" }
+            })
         );
     }
 }

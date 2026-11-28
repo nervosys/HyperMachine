@@ -58,6 +58,7 @@ fn shield_spec_schema() -> Value {
         "scope": { "type": "object", "description": "`{\"kind\":\"all\"}` (the default) or `{\"kind\":\"sandboxes\",\"ids\":[...]}`" },
         "syscalls": { "type": "array", "description": "rules on trappable system calls; at most 64 rules in all; argument index at most 5" },
         "network": { "type": "array", "description": "rules by `cidr`, `name` (`host` or `*.domain`), `ports` {from,to} and `protocol`; a rule with several fields matches only when all match" },
+        "hooks": { "type": "array", "description": "rules `{\"hook\": <name>, \"errno\": 1-4095}` refusing a kernel operation at a Linux security (BPF LSM) hook, whatever system call reaches it; the hook is one of hv2_shield_bpf::HOOKS (such as `socket_create`, `sb_mount`, `bpf`, `userns_create`); at most 64; enforced only where a kernel runs BPF LSM: see docs/SHIELDS.md" },
         "expiresAt": { "type": "integer", "description": "unix seconds; must be in the future" } } })
 }
 
@@ -235,9 +236,14 @@ impl HyperMachineOntology {
                  re-serialising it changes the digest) and an optional `proposedBy`. The \
                  JSON is checked strictly: `name` (`[a-z0-9][a-z0-9-]*`, at most 63), \
                  optional `description` and `advisory`, `scope` (`{\"kind\":\"all\"}` or \
-                 `{\"kind\":\"sandboxes\",\"ids\":[...]}`), `syscalls`, `network` and \
-                 `expiresAt` (unix seconds, in the future); an unknown field, an argument \
-                 index above 5 or more than 64 rules is 400. Network rules match by CIDR, \
+                 `{\"kind\":\"sandboxes\",\"ids\":[...]}`), `syscalls`, `network`, \
+                 `hooks` and `expiresAt` (unix seconds, in the future); an unknown field, an \
+                 argument index above 5, a hook not in the list, or more than 64 rules of a \
+                 kind is 400. A hook rule refuses a kernel operation at a Linux security \
+                 hook for every process in scope, with no argument tests, and is enforced \
+                 only by a kernel running BPF LSM: in a microVM sandbox's guest, on a node \
+                 run with --shield-guests and a guest kernel built with it, and never by the \
+                 stock guest kernel. Network rules match by CIDR, \
                  by name (`host` or `*.domain`), by port range and by protocol, all fields \
                  of a rule having to match; write a CIDR rule as well as a name rule when \
                  an address must be blocked, because a name rule does not block the \

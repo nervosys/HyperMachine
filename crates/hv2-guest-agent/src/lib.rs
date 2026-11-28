@@ -33,8 +33,10 @@
 //! that it has none.
 
 pub mod datagram;
+pub mod hook_shield;
 pub mod syscall_shield;
 
+pub use hook_shield::{GuestHookHit, GuestHookRule, HOOK_HIT_LIMIT, MAX_HOOK_RULES};
 pub use syscall_shield::{
     GuestArgMatch, GuestArgOp, GuestHit, GuestSyscallAction, GuestSyscallRule, HIT_RING,
     MAX_SYSCALL_RULES,
@@ -461,6 +463,34 @@ pub enum Operation {
     /// returned once. An agent from before this operation existed drops the
     /// connection instead of answering.
     SyscallShieldHits,
+
+    /// Replace the hook shields the agent applies: kernel operations refused
+    /// at a Linux BPF-LSM hook, in every process in the guest except the agent
+    /// itself, including ones the agent did not start; see [`hook_shield`].
+    /// The list is a state: the previous one is dropped. An empty list lifts
+    /// every rule (sent to an agent that has none, it does nothing).
+    ///
+    /// Answered with [`OpResult::Acknowledged`], or [`OpResult::Failed`]
+    /// whose message begins `hook shields unavailable:` when this guest
+    /// cannot load the programs (no `bpf` in the kernel's active LSMs, no
+    /// BTF, the agent is not root): nothing is applied then, and the host
+    /// should say the sandbox is not hook-shielded. A list that does not
+    /// validate, or names a hook the agent does not offer, is refused whole
+    /// with [`OpResult::Failed`] and the previous list stays. An agent from
+    /// before this operation existed drops the connection instead of
+    /// answering.
+    ///
+    /// A new operation rather than a field of [`Operation::SetSyscallShields`]:
+    /// `Operation` does not deny unknown fields, so an older agent would
+    /// ignore the field and acknowledge a list it never applied.
+    SetHookShields { rules: Vec<GuestHookRule> },
+
+    /// Take the hook matches the agent has counted since the last read.
+    ///
+    /// Answered with [`OpResult::HookShieldHits`]. Draining: a hit is
+    /// returned once. An agent from before this operation existed drops the
+    /// connection instead of answering.
+    HookShieldHits,
 }
 
 /// The filesystems [`Operation::MountBlock`] may mount, on the wire as
@@ -807,6 +837,15 @@ pub enum OpResult {
         hits: Vec<GuestHit>,
         /// Matches lost because the agent's ring was full since the last
         /// read. They are not in `hits`.
+        dropped: u64,
+    },
+    /// Answer to [`Operation::HookShieldHits`].
+    HookShieldHits {
+        /// Oldest first, at most [`HOOK_HIT_LIMIT`]. Each stands for `count`
+        /// matches.
+        hits: Vec<GuestHookHit>,
+        /// Hits lost because the agent's list was full since the last read.
+        /// They are not in `hits`.
         dropped: u64,
     },
     /// The request could not be carried out at all.

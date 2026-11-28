@@ -3027,6 +3027,7 @@ name = "hv2-guest-agent"
 version = "1.2.0"
 dependencies = [
  "hv2-sandbox",
+ "hv2-shield-bpf",
  "libc",
  "serde",
  "serde_json",
@@ -3165,6 +3166,7 @@ name = "hv2-shield"
 version = "1.2.0"
 dependencies = [
  "hv2-sandbox",
+ "hv2-shield-bpf",
  "ic-core",
  "ic-drbg",
  "ic-hash",
@@ -3173,6 +3175,13 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "zeroize",
+]
+
+[[package]]
+name = "hv2-shield-bpf"
+version = "1.2.0"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

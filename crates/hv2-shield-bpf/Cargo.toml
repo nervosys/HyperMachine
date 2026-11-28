@@ -1,0 +1,18 @@
+[package]
+name = "hv2-shield-bpf"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "A small BPF LSM engine: hand-assembled programs that let a shield refuse kernel operations for a cgroup, live"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
+[lints]
+workspace = true

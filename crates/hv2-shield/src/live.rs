@@ -143,7 +143,7 @@ impl Live {
                 "{syscall}({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
                 args[0], args[1], args[2], args[3], args[4], args[5]
             );
-            self.record(sandbox, &what, hits, now);
+            self.record(sandbox, &what, hits, 1, now);
         }
         verdict
     }
@@ -195,19 +195,29 @@ impl Live {
                 what.push(' ');
                 what.push_str(name);
             }
-            self.record(sandbox, &what, hits, now);
+            self.record(sandbox, &what, hits, 1, now);
         }
         refused
     }
 
-    fn record(&self, sandbox: &str, what: &str, hits: Vec<(String, String, bool)>, now: u64) {
+    /// One log entry per shield in `hits`, and `count` added to each one's
+    /// tally: a call is one match, a guest's report of a hook may stand for
+    /// many the kernel counted.
+    fn record(
+        &self,
+        sandbox: &str,
+        what: &str,
+        hits: Vec<(String, String, bool)>,
+        count: u64,
+        now: u64,
+    ) {
         let mut log = self.hits.lock().unwrap_or_else(|e| e.into_inner());
         for (shield, digest, enforced) in hits {
             let tally = log.tally.entry(digest.clone()).or_default();
             if enforced {
-                tally.refused = tally.refused.saturating_add(1);
+                tally.refused = tally.refused.saturating_add(count);
             } else {
-                tally.monitored = tally.monitored.saturating_add(1);
+                tally.monitored = tally.monitored.saturating_add(count);
             }
             log.recorded += 1;
             let hit = Hit {
@@ -235,11 +245,15 @@ impl Live {
     /// [`Hit::what`]. The shield is named by `digest`, and its name taken from
     /// the registry: the reporter is not trusted to name anything.
     ///
+    /// `count` is how many matches the report stands for (1 for a call; a
+    /// guest reports the matches the kernel counted for a hook as one hit).
+    /// The shield's tally grows by `count`; the log keeps one entry.
+    ///
     /// Returns whether it was recorded. It is not when no shield in force
-    /// here, for `sandbox`, has that digest: the report is counted in
-    /// [`HitSnapshot::lost`] instead. A report of a refusal by a shield this
-    /// node has in monitor mode is recorded as monitored: the node's own mode
-    /// decides, not the reporter.
+    /// here, for `sandbox`, has that digest: the `count` matches are counted
+    /// in [`HitSnapshot::lost`] instead. A report of a refusal by a shield
+    /// this node has in monitor mode is recorded as monitored: the node's own
+    /// mode decides, not the reporter.
     pub fn record_external(
         &self,
         sandbox: &str,
@@ -247,6 +261,7 @@ impl Live {
         what: &str,
         enforced: bool,
         at: u64,
+        count: u64,
     ) -> bool {
         /// What a hit's text may be, so a guest cannot fill the log.
         const WHAT_LIMIT: usize = 256;
@@ -265,11 +280,17 @@ impl Live {
             found
         };
         let Some((name, digest, enforced)) = shield else {
-            self.record_lost(1);
+            self.record_lost(count.max(1));
             return false;
         };
         let what: String = what.chars().take(WHAT_LIMIT).collect();
-        self.record(sandbox, &what, vec![(name, digest, enforced)], at);
+        self.record(
+            sandbox,
+            &what,
+            vec![(name, digest, enforced)],
+            count.max(1),
+            at,
+        );
         true
     }
 
@@ -427,17 +448,17 @@ mod tests {
         let (live, digest) = live_with(
             r#"{"name":"no-ptrace","syscalls":[{"syscall":"ptrace","action":{"kind":"errno","errno":1}}],"scope":{"kind":"sandboxes","ids":["sb"]},"expiresAt":10000}"#,
         );
-        assert!(live.record_external("sb", &digest, "ptrace(0x0)", false, 5));
+        assert!(live.record_external("sb", &digest, "ptrace(0x0)", false, 5, 1));
         // Claimed as a refusal while the node has it monitored: monitored.
-        assert!(live.record_external("sb", &digest, "ptrace(0x1)", true, 5));
+        assert!(live.record_external("sb", &digest, "ptrace(0x1)", true, 5, 1));
         live.update(|r, _| r.set_mode(&digest, Mode::Enforce, "op", 5))
             .unwrap();
-        assert!(live.record_external("sb", &digest, &"x".repeat(10_000), true, 6));
+        assert!(live.record_external("sb", &digest, &"x".repeat(10_000), true, 6, 1));
         // Expired: no longer in force, so not placed.
-        assert!(!live.record_external("sb", &digest, "ptrace(0x0)", true, 10_000));
+        assert!(!live.record_external("sb", &digest, "ptrace(0x0)", true, 10_000, 1));
         // Another sandbox's, a digest nobody loaded: refused and counted.
-        assert!(!live.record_external("other", &digest, "ptrace(0x0)", true, 7));
-        assert!(!live.record_external("sb", &"0".repeat(64), "ptrace(0x0)", true, 7));
+        assert!(!live.record_external("other", &digest, "ptrace(0x0)", true, 7, 1));
+        assert!(!live.record_external("sb", &"0".repeat(64), "ptrace(0x0)", true, 7, 1));
         live.record_lost(10);
         let hits = live.hits();
         assert_eq!(hits.recorded, 3);
@@ -453,6 +474,22 @@ mod tests {
                 refused: 1
             }
         );
+
+        // A report that stands for 5 kernel-counted matches: one log entry,
+        // 5 on the tally. One naming an unknown digest loses all 5.
+        assert!(live.record_external("sb", &digest, "hook sb_mount", true, 8, 5));
+        let hits = live.hits();
+        assert_eq!(hits.recorded, 4, "one entry");
+        assert_eq!(hits.hits[3].what, "hook sb_mount");
+        assert_eq!(
+            hits.tally[&digest],
+            Tally {
+                monitored: 2,
+                refused: 6
+            }
+        );
+        assert!(!live.record_external("sb", &"0".repeat(64), "hook sb_mount", true, 8, 5));
+        assert_eq!(live.hits().lost, 18);
     }
 
     #[test]

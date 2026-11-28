@@ -24,6 +24,9 @@ libc = "0.2"
 # agent starts (src/bin/agentd/shield.rs). Binary-only: the library half
 # does not use it.
 hv2-sandbox = { path = "../hv2-sandbox", version = "1.2.0" }
+# The BPF LSM engine, for hook shields over the whole guest
+# (src/bin/agentd/hooks.rs). Binary-only, as above.
+hv2-shield-bpf = { path = "../hv2-shield-bpf", version = "1.2.0" }
 
 [[bin]]
 name = "hv2-guest-agentd"

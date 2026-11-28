@@ -1,9 +1,10 @@
-//! The syscall-shield operations on the wire: round trips, defaults that keep
-//! a newer peer readable, and what an agent that predates them does.
+//! The syscall-shield and hook-shield operations on the wire: round trips,
+//! defaults that keep a newer peer readable, and what an agent that predates
+//! them does.
 
 use hv2_guest_agent::{
-    decode, encode, GuestArgMatch, GuestArgOp, GuestHit, GuestSyscallAction, GuestSyscallRule,
-    OpResult, Operation, Request, Response, PROTOCOL_VERSION,
+    decode, encode, GuestArgMatch, GuestArgOp, GuestHit, GuestHookHit, GuestHookRule,
+    GuestSyscallAction, GuestSyscallRule, OpResult, Operation, Request, Response, PROTOCOL_VERSION,
 };
 use serde::Deserialize;
 
@@ -134,6 +135,10 @@ fn an_old_agent_cannot_parse_the_new_operations_so_it_hangs_up_without_answering
             rules: vec![rule()],
         },
         Operation::SyscallShieldHits,
+        Operation::SetHookShields {
+            rules: vec![hook_rule()],
+        },
+        Operation::HookShieldHits,
     ] {
         let bytes = encode(&Request {
             id: 1,
@@ -152,4 +157,85 @@ fn an_old_agent_cannot_parse_the_new_operations_so_it_hangs_up_without_answering
     })
     .unwrap();
     assert!(decode::<OldRequest>(&bytes).unwrap().is_some());
+}
+
+fn hook_rule() -> GuestHookRule {
+    GuestHookRule {
+        shield: "no-mount".into(),
+        digest: "cd".repeat(32),
+        hook: "sb_mount".into(),
+        errno: 1,
+        enforce: true,
+        expires_at: 4_102_444_800,
+    }
+}
+
+#[test]
+fn set_hook_shields_round_trips_with_the_names_the_host_and_agent_agree_on() {
+    let request = Request {
+        id: 11,
+        version: PROTOCOL_VERSION,
+        op: Operation::SetHookShields {
+            rules: vec![
+                hook_rule(),
+                GuestHookRule {
+                    enforce: false,
+                    expires_at: 0,
+                    ..hook_rule()
+                },
+            ],
+        },
+    };
+    let bytes = encode(&request).unwrap();
+    let (back, used) = decode::<Request>(&bytes).unwrap().unwrap();
+    assert_eq!(used, bytes.len());
+    assert_eq!(back, request);
+
+    let json: serde_json::Value = serde_json::to_value(&request.op).unwrap();
+    assert_eq!(json["kind"], "set_hook_shields");
+    assert_eq!(json["rules"][0]["hook"], "sb_mount");
+    assert_eq!(json["rules"][0]["errno"], 1);
+    assert!(
+        json["rules"][1].get("expires_at").is_none(),
+        "0 is not sent"
+    );
+
+    assert_eq!(
+        serde_json::to_value(&Operation::HookShieldHits).unwrap(),
+        serde_json::json!({"kind": "hook_shield_hits"})
+    );
+}
+
+#[test]
+fn the_hook_hits_answer_round_trips() {
+    let response = Response {
+        id: 11,
+        version: PROTOCOL_VERSION,
+        result: OpResult::HookShieldHits {
+            hits: vec![GuestHookHit {
+                at: 1_800_000_000,
+                shield: "s".into(),
+                digest: "d".into(),
+                hook: "sb_mount".into(),
+                enforced: true,
+                count: u64::MAX,
+            }],
+            dropped: 17,
+        },
+    };
+    let bytes = encode(&response).unwrap();
+    let (back, _) = decode::<Response>(&bytes).unwrap().unwrap();
+    assert_eq!(back, response, "u64::MAX survives: no float in the path");
+}
+
+#[test]
+fn a_hook_rule_sent_by_a_host_that_knows_fewer_fields_still_reads() {
+    // No `enforce`, no `expires_at`.
+    let json = r#"{"kind":"set_hook_shields","rules":[
+        {"shield":"s","digest":"d","hook":"sb_mount","errno":1}]}"#;
+    let Operation::SetHookShields { rules } = serde_json::from_str(json).unwrap() else {
+        panic!("not the operation");
+    };
+    assert!(!rules[0].enforce, "absent means monitored, never enforced");
+    assert_eq!(rules[0].expires_at, 0);
 }

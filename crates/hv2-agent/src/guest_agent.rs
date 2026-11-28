@@ -71,6 +71,19 @@ pub fn is_syscall_shields_unavailable(error: &AgentError) -> bool {
     matches!(error, AgentError::Script(m) if m.starts_with(SYSCALL_SHIELDS_UNAVAILABLE))
 }
 
+/// What a guest agent's refusal of [`Operation::SetHookShields`] begins with
+/// when the guest cannot load hook programs at all (no `bpf` in the kernel's
+/// active LSMs, no BTF, the agent is not root): the sandbox is then not
+/// hook-shielded whatever the rules say. Matches `agentd`'s
+/// `hooks::UNAVAILABLE`.
+pub const HOOK_SHIELDS_UNAVAILABLE: &str = "hook shields unavailable:";
+
+/// Whether `error` is a guest agent saying it cannot shield kernel hooks.
+#[must_use]
+pub fn is_hook_shields_unavailable(error: &AgentError) -> bool {
+    matches!(error, AgentError::Script(m) if m.starts_with(HOOK_SHIELDS_UNAVAILABLE))
+}
+
 /// How much request one batch carries at most, in bytes of JSON: half the
 /// frame limit, so framing never pushes a batch over it.
 pub const BATCH_REQUEST_BYTES: usize = MAX_FRAME_BYTES / 2;
@@ -1209,6 +1222,49 @@ impl GuestAgent {
         }
     }
 
+    /// Replace the hook shields the guest agent applies; see
+    /// [`Operation::SetHookShields`]. The list is a state, not a delta.
+    ///
+    /// # Errors
+    ///
+    /// A transport failure; [`is_unsupported_op`] for an agent from before
+    /// the operation existed; the guest's refusal otherwise, which for a guest
+    /// that cannot load hook programs begins [`HOOK_SHIELDS_UNAVAILABLE`] (see
+    /// [`is_hook_shields_unavailable`]).
+    pub fn set_hook_shields(
+        &mut self,
+        rules: Vec<hv2_guest_agent::GuestHookRule>,
+        timeout: Duration,
+    ) -> Result<()> {
+        let op = Operation::SetHookShields { rules };
+        match self.request_fs_op("set_hook_shields", op, timeout)? {
+            OpResult::Acknowledged => Ok(()),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a hook-shield update with {other:?}"
+            ))),
+        }
+    }
+
+    /// Take the matches the guest agent has counted since the last read, and
+    /// how many hits it lost to a full list; see [`Operation::HookShieldHits`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::set_hook_shields`].
+    pub fn hook_shield_hits(
+        &mut self,
+        timeout: Duration,
+    ) -> Result<(Vec<hv2_guest_agent::GuestHookHit>, u64)> {
+        match self.request_fs_op("hook_shield_hits", Operation::HookShieldHits, timeout)? {
+            OpResult::HookShieldHits { hits, dropped } => Ok((hits, dropped)),
+            OpResult::Failed { message } => Err(AgentError::Script(message)),
+            other => Err(AgentError::Script(format!(
+                "the guest answered a hook-shield read with {other:?}"
+            ))),
+        }
+    }
+
     /// Mount a block device in the guest; see [`Operation::MountBlock`].
     /// `Ok(true)` once mounted, `Ok(false)` if `expect_sectors` was set and
     /// the device never reported that size.
@@ -1579,6 +1635,43 @@ mod tests {
         assert!(is_syscall_shields_unavailable(&error));
         assert!(!is_unsupported_op(&error));
         assert_eq!(agent.syscall_shield_hits(t).unwrap(), (Vec::new(), 3));
+    }
+
+    #[test]
+    fn an_old_agent_reads_as_unsupported_for_the_hook_shield_operations_too() {
+        let t = Duration::from_secs(1);
+        let new = || GuestAgent::new(Box::new(HangsUpOnUnknown { open: true }));
+        assert!(is_unsupported_op(
+            &new().set_hook_shields(Vec::new(), t).unwrap_err()
+        ));
+        assert!(is_unsupported_op(&new().hook_shield_hits(t).unwrap_err()));
+    }
+
+    #[test]
+    fn a_guest_that_cannot_shield_hooks_says_so_and_a_hit_read_drains() {
+        let t = Duration::from_secs(1);
+        let mut agent = GuestAgent::new(FakeGuest::new(|request| {
+            let result = match request.op {
+                Operation::SetHookShields { .. } => OpResult::Failed {
+                    message: format!("{HOOK_SHIELDS_UNAVAILABLE} no bpf in the active LSMs"),
+                },
+                Operation::HookShieldHits => OpResult::HookShieldHits {
+                    hits: Vec::new(),
+                    dropped: 3,
+                },
+                _ => return None,
+            };
+            Some(Response {
+                id: request.id,
+                version: request.version,
+                result,
+            })
+        }));
+        let error = agent.set_hook_shields(Vec::new(), t).unwrap_err();
+        assert!(is_hook_shields_unavailable(&error));
+        assert!(!is_unsupported_op(&error));
+        assert!(!is_syscall_shields_unavailable(&error));
+        assert_eq!(agent.hook_shield_hits(t).unwrap(), (Vec::new(), 3));
     }
 
     #[test]

@@ -41,6 +41,7 @@ The crate is `hv2-shield`. A node's shields are served by `hv2-sandboxd` under
     { "name": "*.c2.example" },
     { "cidr": "203.0.113.0/24", "ports": { "from": 443, "to": 443 }, "protocol": "tcp" }
   ],
+  "hooks": [{ "hook": "sb_mount", "errno": 1 }],
   "expiresAt": 1798761600
 }
 ```
@@ -53,6 +54,10 @@ The crate is `hv2-shield`. A node's shields are served by `hv2-sandboxd` under
 - A network rule matches by CIDR, by name (`host` or `*.domain`), by port
   range and by protocol. A rule with several fields matches only when all of
   them match.
+- A hook rule names a Linux security (LSM) hook, one of
+  `hv2_shield_bpf::HOOKS` such as `sb_mount` or `socket_create`, and an
+  `errno` (1 to 4095). It refuses that kernel operation whichever system call
+  leads to it, and tests no arguments. See "Kernel hooks" below.
 - The JSON is checked strictly. An unknown field, a bad name, an argument
   index above 5, or more than 64 rules is refused. The digest that names a
   shield is the SHA-256 of these exact bytes, which are also what is signed.
@@ -137,6 +142,61 @@ connections are not read. `hv2-sandboxd` installs the shield on every
 sandbox's and machine's gateway when it starts, and the gateway asks the
 node's registry live.
 
+### Kernel hooks (eBPF, `hooks` rules)
+
+A `hooks` rule refuses a kernel operation at a Linux security (LSM) hook, such
+as `socket_create`, `sb_mount` or `ptrace_traceme`, whichever system call
+leads there. It is a BPF LSM program, and the engine is `hv2-shield-bpf`:
+
+- The programs are assembled by hand in that crate, one per hook, with no BPF
+  compiler or libbpf. `hv2_shield_bpf::HOOKS` lists the hooks a shield may
+  name. Each returns `int`, and none needs its arguments read, so a hook rule
+  tests nothing but the hook. Its action is an `errno` (1 to 4095). A hook
+  cannot kill.
+- A program is attached only while some rule names its hook, and detached when
+  the last one is removed. A node with no hook rules loads nothing.
+- Hook rules are enforced only in VM guests, with `--shield-guests`, for now.
+  The engine can scope a rule to one cgroup, but nothing on a node yet applies
+  hook rules to the host's own process sandboxes. In a guest the agent sets the rules for the whole guest, and the agent's own process is
+  the one thing never judged, so it can keep talking to the host under a rule
+  on `socket_create`. Unlike a guest's syscall rules, a hook rule therefore
+  covers processes the agent did not start (init, a console shell, a daemon
+  already running), and it is in force as soon as the guest has it.
+- The kernel counts; nothing records each call. A hook may be asked
+  millions of times a second. The engine keeps two counters per hook,
+  matches while monitored and refusals while enforced, and the node reads
+  them. A hit in `GET /shields/hits` for a hook is one entry for the matches
+  since the last read, and adds that many to the shield's tally. It does not
+  say which process or when. When several shields name one hook, the first
+  enforced one decides (its `errno` is returned) and the others record the
+  matches as not enforced.
+- The node pushes a guest's hook rules by their own operation, `SetHookShields`,
+  with their own status in `syscallGuests` (`"hooks": {"status": ...}` beside
+  the syscall status). An empty list is not sent to a guest that was never sent
+  one. The agent also drops a rule on its own at its expiry, on the guest's
+  clock, if the host has stopped talking.
+
+What it needs, and where it stops:
+
+- A kernel with `bpf` in its active LSM list (the `lsm=` boot parameter),
+  and BTF in `/sys/kernel/btf/vmlinux`, and a root caller. Without them the
+  rule is not applied, and the guest is listed as `unsupported` with the
+  reason. The stock guest kernel configuration
+  (`tools/guest-image/hv2-guest.defconfig`) has neither, so guests built from
+  it answer unsupported until the image enables both:
+  `tools/guest-image/build-kernel.sh --shields` appends `shields.fragment`,
+  which turns on both (building BTF needs `pahole` on the build host). That
+  kernel build has not yet been booted with a hook rule in force; the engine
+  is tested on a WSL2 kernel only. An agent from before
+  hook shields is also `unsupported`; its sandbox still starts.
+- A hook is coarse. The operation is refused for everything in scope, so a
+  rule on `sb_mount` or `socket_create` also refuses it to the guest's own
+  init and services.
+- Root in the guest can unload it by killing the agent: the programs are
+  attached by links the agent holds, and they go when it does. A hook shield
+  is not a barrier against guest root.
+- There are no per-argument tests, and no cgroup scope inside a guest.
+
 ## Operating it
 
 ### The node
@@ -210,8 +270,8 @@ by a CLI.
 | | Shirudo | HyperMachine shields |
 | --- | --- | --- |
 | Signature | ML-DSA-87 | ML-DSA-87 (IronCrypto) |
-| Kernel | patched bpf-next, systemd 256 | any Linux ≥ 5.5 (seccomp user-notify), host or guest; none for network |
-| What it can refuse | any kernel function an eBPF program can hook | trapped syscalls (with argument tests) and network destinations |
+| Kernel | patched bpf-next, systemd 256 | syscall and network rules: any Linux ≥ 5.5 (seccomp user-notify), host or guest, none for network. Hook rules: a kernel with `bpf` in its active LSMs and BTF; the stock guest kernel has neither |
+| What it can refuse | any kernel function an eBPF program can hook | trapped syscalls (with argument tests), network destinations, and a fixed list of LSM hooks (no argument tests, counted rather than recorded per call); not an arbitrary kernel function |
 | Monitor before enforce | no | yes, with a minimum period |
 | Approval | no | signed directives; optional second key |
 | Expiry | none ("any artifact ever signed loads at any time") | required, at most 30 days |
@@ -229,10 +289,11 @@ by a CLI.
   the host can sign anything. The attestation shows what the node says was in
   force, and that the log is consistent. It does not show that the host was
   honest. TPM quotes are not implemented.
-- **Shields can refuse only system calls and network destinations.** They
-  cannot patch an arbitrary code path the way an eBPF program on a kernel
-  function can. The planned stage 2 is an eBPF backend behind the same shield
-  API.
+- **Shields can refuse only system calls, network destinations and a fixed
+  list of LSM hooks.** They cannot patch an arbitrary code path the way an
+  eBPF program on any kernel function can. The hook rules are the first part
+  of the planned eBPF backend; they are counted, not recorded per call, and
+  test no arguments.
 - **Pointer arguments are never read.** What a pointer refers to can change
   between the read and the call. Rules test register values only.
 - **Only the trappable set can be shielded live.** A process sandbox traps

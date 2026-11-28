@@ -45,6 +45,10 @@ pub struct ShieldSpec {
     /// Connections refused.
     #[serde(default)]
     pub network: Vec<NetworkRule>,
+    /// Kernel operations refused at a Linux security hook, whatever system
+    /// call reaches them, by the eBPF backend (`hv2-shield-bpf`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hooks: Vec<HookRule>,
     /// Unix seconds after which the shield is no longer in force, and is not
     /// loaded. At most [`MAX_LIFETIME_SECS`] after it is loaded.
     pub expires_at: u64,
@@ -147,6 +151,19 @@ impl SyscallRule {
     pub fn matches(&self, args: &[u64; 6]) -> bool {
         self.args.iter().all(|test| test.holds(args))
     }
+}
+
+/// Refuse a kernel operation at a Linux security (LSM) hook, such as
+/// `socket_create` or `sb_mount`. The hook is asked whichever system call
+/// leads to it, by every process in scope, and from the moment the rule is in
+/// force: a hook rule needs nothing trapped in advance. It tests no arguments.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub struct HookRule {
+    /// One of `hv2_shield_bpf::HOOKS`.
+    pub hook: String,
+    /// The operation fails with this `errno`, 1 to 4095. A hook cannot kill.
+    pub errno: i32,
 }
 
 /// What happens to a refused call.
@@ -368,11 +385,25 @@ impl ShieldSpec {
                 return bad("a sandbox ID is 1 to 128 bytes".into());
             }
         }
-        if self.syscalls.is_empty() && self.network.is_empty() {
+        if self.syscalls.is_empty() && self.network.is_empty() && self.hooks.is_empty() {
             return bad("a shield has at least one rule".into());
         }
-        if self.syscalls.len() > MAX_RULES || self.network.len() > MAX_RULES {
+        if self.syscalls.len() > MAX_RULES
+            || self.network.len() > MAX_RULES
+            || self.hooks.len() > MAX_RULES
+        {
             return bad(format!("at most {MAX_RULES} rules of each kind"));
+        }
+        for rule in &self.hooks {
+            if !hv2_shield_bpf::HOOKS.contains(&rule.hook.as_str()) {
+                return bad(format!(
+                    "{:?} is not a hook a shield may name (see hv2_shield_bpf::HOOKS)",
+                    rule.hook
+                ));
+            }
+            if !(1..=4095).contains(&rule.errno) {
+                return bad("errno is 1 to 4095".into());
+            }
         }
         for rule in &self.syscalls {
             if rule.syscall.is_empty()
@@ -446,6 +477,11 @@ mod tests {
     fn a_shield_is_checked_before_anything_reads_it() {
         let good = r#"{"name":"cve-x","syscalls":[{"syscall":"ptrace","action":{"kind":"errno","errno":1}}],"expiresAt":10}"#;
         assert!(spec(good).is_ok());
+        // A shield of hook rules alone is a shield.
+        let hooks =
+            spec(r#"{"name":"no-mount","hooks":[{"hook":"sb_mount","errno":1}],"expiresAt":10}"#)
+                .unwrap();
+        assert_eq!(hooks.hooks[0].hook, "sb_mount");
         for bad in [
             // No rule.
             r#"{"name":"a","expiresAt":10}"#,
@@ -462,6 +498,10 @@ mod tests {
             // Network rules.
             r#"{"name":"a","network":[{"ports":{"from":1,"to":2}}],"expiresAt":10}"#,
             r#"{"name":"a","network":[{"cidr":"10.0.0.0/33"}],"expiresAt":10}"#,
+            r#"{"name":"a","hooks":[{"hook":"not_a_hook","errno":1}],"expiresAt":10}"#,
+            r#"{"name":"a","hooks":[{"hook":"socket_create","errno":0}],"expiresAt":10}"#,
+            r#"{"name":"a","hooks":[{"hook":"socket_create","errno":4096}],"expiresAt":10}"#,
+            r#"{"name":"a","hooks":[{"hook":"socket_create","errno":1,"kill":true}],"expiresAt":10}"#,
             r#"{"name":"a","network":[{"cidr":"10.0.0.0/"}],"expiresAt":10}"#,
             r#"{"name":"a","network":[{"name":"a..b"}],"expiresAt":10}"#,
             r#"{"name":"a","network":[{"cidr":"10.0.0.1","ports":{"from":2,"to":1}}],"expiresAt":10}"#,

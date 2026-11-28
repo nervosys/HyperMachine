@@ -15,6 +15,9 @@ description = "Shields: signed, approved, expiring and measured protections appl
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+# Only for the list of hooks a shield may name; the engine itself is used by
+# whatever enforces hook rules.
+hv2-shield-bpf = { path = "../hv2-shield-bpf", version = "1.2.0" }
 ic-mldsa = "0.2.3"
 ic-hash = "0.2.3"
 ic-core = "0.2.3"

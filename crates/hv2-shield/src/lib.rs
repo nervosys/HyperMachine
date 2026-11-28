@@ -39,7 +39,7 @@ pub use sign::{
     Action, Directive, Keyring, KeyringFile, PublicKey, SignedDirective, SignedShield, SigningKey,
 };
 pub use spec::{
-    ArgMatch, ArgOp, Connection, NetworkRule, PortRange, Protocol, Scope, ShieldSpec,
+    ArgMatch, ArgOp, Connection, HookRule, NetworkRule, PortRange, Protocol, Scope, ShieldSpec,
     SyscallAction, SyscallRule,
 };
 

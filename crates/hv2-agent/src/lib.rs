@@ -91,8 +91,9 @@ pub use events::{
 };
 pub use gpu_host::{GpuDescriptor, GpuHost, InMemoryGpuHost};
 pub use guest_agent::{
-    is_syscall_shields_unavailable, is_unsupported_op, GuestAgent, GuestChannel, GuestExec,
-    GuestOutput, VsockChannel, VsockStream, SYSCALL_SHIELDS_UNAVAILABLE, UNSUPPORTED_OP_PREFIX,
+    is_hook_shields_unavailable, is_syscall_shields_unavailable, is_unsupported_op, GuestAgent,
+    GuestChannel, GuestExec, GuestOutput, VsockChannel, VsockStream, HOOK_SHIELDS_UNAVAILABLE,
+    SYSCALL_SHIELDS_UNAVAILABLE, UNSUPPORTED_OP_PREFIX,
 };
 /// A terminal size, re-exported so callers need no direct guest-agent dependency.
 pub use hv2_guest_agent::PtySize;

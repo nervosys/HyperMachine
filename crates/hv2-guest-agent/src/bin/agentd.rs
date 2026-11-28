@@ -26,6 +26,9 @@
 //! whose host you do not trust with the account it runs as.
 
 #[cfg(target_os = "linux")]
+#[path = "agentd/hooks.rs"]
+mod hooks;
+#[cfg(target_os = "linux")]
 #[path = "agentd/shield.rs"]
 mod shield;
 
@@ -1070,6 +1073,8 @@ mod linux {
             Operation::Stats => OpResult::Stats(stats()),
             Operation::SetSyscallShields { rules } => super::shield::set_rules(rules),
             Operation::SyscallShieldHits => super::shield::drain_hits(),
+            Operation::SetHookShields { rules } => super::hooks::set_rules(rules),
+            Operation::HookShieldHits => super::hooks::drain_hits(),
             Operation::ListDir { path, limit } => list_dir(&path, limit),
             Operation::Stat { path, follow } => stat_path(&path, follow),
             Operation::MakeDir {

@@ -968,6 +968,40 @@ impl AgentVM {
         .await
     }
 
+    /// Replace the hook shields the guest's agent applies to the whole
+    /// guest; see [`hv2_guest_agent::Operation::SetHookShields`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::list_dir_in_guest`]; [`crate::is_hook_shields_unavailable`]
+    /// when the guest cannot load hook programs.
+    pub async fn set_hook_shields_in_guest(
+        &self,
+        rules: Vec<hv2_guest_agent::GuestHookRule>,
+        timeout: Duration,
+    ) -> Result<()> {
+        self.fs_op("set_hook_shields", timeout, move |a| {
+            a.set_hook_shields(rules, timeout)
+        })
+        .await
+    }
+
+    /// Take the guest agent's counted hook-shield matches; see
+    /// [`hv2_guest_agent::Operation::HookShieldHits`].
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::set_hook_shields_in_guest`].
+    pub async fn hook_shield_hits_in_guest(
+        &self,
+        timeout: Duration,
+    ) -> Result<(Vec<hv2_guest_agent::GuestHookHit>, u64)> {
+        self.fs_op("hook_shield_hits", timeout, move |a| {
+            a.hook_shield_hits(timeout)
+        })
+        .await
+    }
+
     /// Mount a block device in the guest with no shell; see
     /// [`hv2_guest_agent::Operation::MountBlock`]. `Ok(false)` means
     /// `expect_sectors` was set and the device never reported that size.
