@@ -178,17 +178,26 @@ leads there. It is a BPF LSM program, and the engine is `hv2-shield-bpf`:
 
 What it needs, and where it stops:
 
-- A kernel with `bpf` in its active LSM list (the `lsm=` boot parameter),
-  and BTF in `/sys/kernel/btf/vmlinux`, and a root caller. Without them the
-  rule is not applied, and the guest is listed as `unsupported` with the
-  reason. The stock guest kernel configuration
-  (`tools/guest-image/hv2-guest.defconfig`) has neither, so guests built from
-  it answer unsupported until the image enables both:
+- A kernel with `bpf` in its active LSM list (the `lsm=` boot parameter, or
+  `CONFIG_LSM`), securityfs (`CONFIG_SECURITYFS`, so the agent can read that
+  list: a program attached while `bpf` is not active would never run, so the
+  agent refuses rather than guess), BTF in `/sys/kernel/btf/vmlinux`, the
+  function tracer with direct calls (`CONFIG_FUNCTION_TRACER`,
+  `CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS`: on x86 a program attaches by
+  patching the no-op it leaves at each function's entry, and without it the
+  attach fails as busy), and a root caller. Without them the rule is not
+  applied, and the guest is listed as `unsupported` with the reason.
+- The stock guest kernel configuration (`tools/guest-image/hv2-guest.defconfig`)
+  has none of these, so guests built from it answer unsupported.
   `tools/guest-image/build-kernel.sh --shields` appends `shields.fragment`,
-  which turns on both (building BTF needs `pahole` on the build host). That
-  kernel build has not yet been booted with a hook rule in force; the engine
-  is tested on a WSL2 kernel only. An agent from before
-  hook shields is also `unsupported`; its sandbox still starts.
+  which turns them all on (building BTF needs `pahole` on the build host).
+  `tools/check-hook-shields-kvm.py` boots such a kernel on KVM and checks a
+  rule end to end: applied, a monitored `mount` counted, the enforced one
+  refused with `EPERM` while the agent still answers, and the mount allowed
+  again once the shield is removed; with `--expect unsupported`, the stock
+  kernel is listed unsupported and nothing is refused.
+- An agent from before hook shields is also `unsupported`; its sandbox still
+  starts.
 - A hook is coarse. The operation is refused for everything in scope, so a
   rule on `sb_mount` or `socket_create` also refuses it to the guest's own
   init and services.

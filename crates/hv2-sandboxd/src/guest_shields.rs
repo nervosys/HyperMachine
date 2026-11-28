@@ -62,7 +62,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use hv2_agent::{
-    is_hook_shields_unavailable, is_syscall_shields_unavailable, is_unsupported_op, AgentVM,
+    is_hook_shields_unavailable, is_syscall_shields_unavailable, is_unsupported_op, AgentError,
+    AgentVM,
 };
 use hv2_guest_agent::{
     GuestArgMatch, GuestArgOp, GuestHit, GuestHookHit, GuestHookRule, GuestSyscallAction,
@@ -314,7 +315,7 @@ async fn sync_hooks(guests: &GuestShields, id: &str, vm: &Arc<AgentVM>, rules: V
         Err(e) if is_unsupported_op(&e) => {
             Status::Unsupported("the guest agent predates hook shields".into())
         }
-        Err(e) if is_hook_shields_unavailable(&e) => Status::Unsupported(e.to_string()),
+        Err(e) if is_hook_shields_unavailable(&e) => Status::Unsupported(guest_reason(&e)),
         Err(e) => {
             tracing::debug!("hook shields for {id}: guest not reached: {e}");
             Status::Unreachable
@@ -362,7 +363,7 @@ async fn sync_one(
         Err(e) if is_unsupported_op(&e) => {
             Status::Unsupported("the guest agent predates syscall shields".into())
         }
-        Err(e) if is_syscall_shields_unavailable(&e) => Status::Unsupported(e.to_string()),
+        Err(e) if is_syscall_shields_unavailable(&e) => Status::Unsupported(guest_reason(&e)),
         Err(e) => {
             tracing::debug!("syscall shields for {id}: guest not reached: {e}");
             Status::Unreachable
@@ -512,6 +513,15 @@ pub(crate) fn record_hooks(live: &Live, id: &str, hits: &[GuestHookHit], dropped
     }
     if dropped > 0 {
         live.record_lost(dropped);
+    }
+}
+
+/// What a guest said when it could not apply rules, without the "Script
+/// error: " that wraps every failure an agent reports: it is not a script.
+fn guest_reason(error: &AgentError) -> String {
+    match error {
+        AgentError::Script(message) => message.clone(),
+        other => other.to_string(),
     }
 }
 
@@ -808,5 +818,17 @@ mod tests {
                 "syscalls-only": { "status": "unreachable" }
             })
         );
+    }
+
+    #[test]
+    fn a_guests_reason_is_its_own_words() {
+        let said = format!(
+            "{} cannot read /sys/kernel/security/lsm",
+            hv2_agent::HOOK_SHIELDS_UNAVAILABLE
+        );
+        let error = AgentError::Script(said.clone());
+        assert!(is_hook_shields_unavailable(&error));
+        assert_eq!(guest_reason(&error), said);
+        assert!(!guest_reason(&error).starts_with("Script error"));
     }
 }

@@ -197,6 +197,15 @@ fn link_create(prog: &OwnedFd) -> Result<OwnedFd, String> {
                 .map(fd_of)
                 .map_err(|e| describe("attaching the program", &e))
         }
+        // x86 attaches by patching the 5-byte no-op the function tracer puts
+        // at each function's entry; a kernel built without it has none, and
+        // the patch is refused as busy.
+        Err(e) if e.raw_os_error() == Some(libc::EBUSY) => Err(format!(
+            "{}; is the kernel built with CONFIG_FUNCTION_TRACER and \
+             CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS? A BPF LSM program attaches \
+             through the no-op the function tracer leaves at each function's entry",
+            describe("attaching the program", &e)
+        )),
         Err(e) => Err(describe("attaching the program", &e)),
     }
 }

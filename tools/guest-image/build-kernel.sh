@@ -11,9 +11,10 @@
 # passes nested virtualization through. --trace appends trace.fragment: ftrace,
 # tracepoints and perf_events, so `trace-cmd` or `perf` can see what the guest's
 # kernel (including its own KVM, with --kvm) is doing. --shields appends
-# shields.fragment: the bpf(2) system call, BPF LSM active at boot and the
+# shields.fragment: the bpf(2) system call, BPF LSM active at boot, securityfs,
+# the function tracer (BPF LSM programs attach through it on x86) and the
 # kernel's BTF, which hook shields need in a guest (docs/SHIELDS.md); BTF needs
-# pahole 1.16 or later at build time. Not yet built or booted by this project.
+# pahole 1.16 or later at build time. tools/check-hook-shields-kvm.py boots it.
 #
 # The defconfig is `make savedefconfig` of the configuration the sandbox
 # guest was first booted and verified with: virtio-mmio devices named on the
